@@ -13,6 +13,7 @@ import JobDetail from "./pages/JobDetail";
 import Technicians from "./pages/Technicians";
 import Customers from "./pages/Customers";
 import Units from "./pages/Units";
+import ScanUnit from "./pages/ScanUnit";
 import Inventory from "./pages/Inventory";
 import Reports from "./pages/Reports";
 import Settings from "./pages/Settings";
@@ -75,6 +76,7 @@ function AppRoutes() {
       <Route path="/technicians" element={<ProtectedRoute><Technicians /></ProtectedRoute>} />
       <Route path="/customers" element={<ProtectedRoute><Customers /></ProtectedRoute>} />
       <Route path="/units" element={<ProtectedRoute><Units /></ProtectedRoute>} />
+      <Route path="/units/scan" element={<ProtectedRoute><ScanUnit /></ProtectedRoute>} />
       <Route path="/inventory" element={<ProtectedRoute><Inventory /></ProtectedRoute>} />
       <Route path="/reports" element={<ProtectedRoute><Reports /></ProtectedRoute>} />
       <Route path="/settings" element={<ProtectedRoute><Settings /></ProtectedRoute>} />
