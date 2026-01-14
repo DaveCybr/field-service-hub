@@ -5,7 +5,9 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { AuthProvider, useAuth } from "@/hooks/useAuth";
 import { CustomerAuthProvider, useCustomerAuth } from "@/hooks/useCustomerAuth";
+import { useInitialSetup } from "@/hooks/useInitialSetup";
 import Auth from "./pages/Auth";
+import InitialSetup from "./pages/InitialSetup";
 import Dashboard from "./pages/Dashboard";
 import Jobs from "./pages/Jobs";
 import NewJob from "./pages/NewJob";
@@ -64,24 +66,82 @@ function CustomerProtectedRoute({ children }: { children: React.ReactNode }) {
   return <>{children}</>;
 }
 
+function SetupRoute({ children }: { children: React.ReactNode }) {
+  const { needsSetup, loading } = useInitialSetup();
+
+  if (loading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-background">
+        <div className="h-8 w-8 animate-spin rounded-full border-4 border-primary border-t-transparent" />
+      </div>
+    );
+  }
+
+  if (needsSetup) {
+    return <Navigate to="/setup" replace />;
+  }
+
+  return <>{children}</>;
+}
+
+function AuthRoute() {
+  const { needsSetup, loading } = useInitialSetup();
+
+  if (loading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-background">
+        <div className="h-8 w-8 animate-spin rounded-full border-4 border-primary border-t-transparent" />
+      </div>
+    );
+  }
+
+  if (needsSetup) {
+    return <Navigate to="/setup" replace />;
+  }
+
+  return <Auth />;
+}
+
+function SetupPage() {
+  const { needsSetup, loading } = useInitialSetup();
+
+  if (loading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-background">
+        <div className="h-8 w-8 animate-spin rounded-full border-4 border-primary border-t-transparent" />
+      </div>
+    );
+  }
+
+  // If setup is not needed, redirect to auth
+  if (!needsSetup) {
+    return <Navigate to="/auth" replace />;
+  }
+
+  return <InitialSetup />;
+}
+
 function AppRoutes() {
   return (
     <Routes>
+      {/* Initial Setup Route */}
+      <Route path="/setup" element={<SetupPage />} />
+      
       {/* Staff Routes */}
-      <Route path="/auth" element={<Auth />} />
-      <Route path="/" element={<Navigate to="/dashboard" replace />} />
-      <Route path="/dashboard" element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />
-      <Route path="/jobs" element={<ProtectedRoute><Jobs /></ProtectedRoute>} />
-      <Route path="/jobs/new" element={<ProtectedRoute><NewJob /></ProtectedRoute>} />
-      <Route path="/jobs/:id" element={<ProtectedRoute><JobDetail /></ProtectedRoute>} />
-      <Route path="/technicians" element={<ProtectedRoute><Technicians /></ProtectedRoute>} />
-      <Route path="/customers" element={<ProtectedRoute><Customers /></ProtectedRoute>} />
-      <Route path="/units" element={<ProtectedRoute><Units /></ProtectedRoute>} />
-      <Route path="/units/scan" element={<ProtectedRoute><ScanUnit /></ProtectedRoute>} />
-      <Route path="/inventory" element={<ProtectedRoute><Inventory /></ProtectedRoute>} />
-      <Route path="/reports" element={<ProtectedRoute><Reports /></ProtectedRoute>} />
-      <Route path="/users" element={<ProtectedRoute><UserManagement /></ProtectedRoute>} />
-      <Route path="/settings" element={<ProtectedRoute><Settings /></ProtectedRoute>} />
+      <Route path="/auth" element={<AuthRoute />} />
+      <Route path="/" element={<SetupRoute><Navigate to="/dashboard" replace /></SetupRoute>} />
+      <Route path="/dashboard" element={<SetupRoute><ProtectedRoute><Dashboard /></ProtectedRoute></SetupRoute>} />
+      <Route path="/jobs" element={<SetupRoute><ProtectedRoute><Jobs /></ProtectedRoute></SetupRoute>} />
+      <Route path="/jobs/new" element={<SetupRoute><ProtectedRoute><NewJob /></ProtectedRoute></SetupRoute>} />
+      <Route path="/jobs/:id" element={<SetupRoute><ProtectedRoute><JobDetail /></ProtectedRoute></SetupRoute>} />
+      <Route path="/technicians" element={<SetupRoute><ProtectedRoute><Technicians /></ProtectedRoute></SetupRoute>} />
+      <Route path="/customers" element={<SetupRoute><ProtectedRoute><Customers /></ProtectedRoute></SetupRoute>} />
+      <Route path="/units" element={<SetupRoute><ProtectedRoute><Units /></ProtectedRoute></SetupRoute>} />
+      <Route path="/units/scan" element={<SetupRoute><ProtectedRoute><ScanUnit /></ProtectedRoute></SetupRoute>} />
+      <Route path="/inventory" element={<SetupRoute><ProtectedRoute><Inventory /></ProtectedRoute></SetupRoute>} />
+      <Route path="/reports" element={<SetupRoute><ProtectedRoute><Reports /></ProtectedRoute></SetupRoute>} />
+      <Route path="/users" element={<SetupRoute><ProtectedRoute><UserManagement /></ProtectedRoute></SetupRoute>} />
+      <Route path="/settings" element={<SetupRoute><ProtectedRoute><Settings /></ProtectedRoute></SetupRoute>} />
       
       {/* Customer Portal Routes */}
       <Route path="/portal/login" element={<CustomerLogin />} />
