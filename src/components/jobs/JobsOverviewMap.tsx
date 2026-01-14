@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { MapContainer, TileLayer, Marker, Popup, useMap } from 'react-leaflet';
+import MarkerClusterGroup from 'react-leaflet-cluster';
 import { Link } from 'react-router-dom';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
@@ -36,6 +37,45 @@ const statusIcons: Record<string, L.Icon> = {
   completed: createStatusIcon('violet'),
   completed_paid: createStatusIcon('violet'),
   cancelled: createStatusIcon('red'),
+};
+
+// Custom cluster icon creator
+const createClusterCustomIcon = (cluster: any) => {
+  const count = cluster.getChildCount();
+  let size = 'small';
+  let className = 'bg-primary';
+  
+  if (count >= 10 && count < 30) {
+    size = 'medium';
+    className = 'bg-amber-500';
+  } else if (count >= 30) {
+    size = 'large';
+    className = 'bg-red-500';
+  }
+  
+  const sizeMap = {
+    small: 30,
+    medium: 40,
+    large: 50,
+  };
+  
+  return L.divIcon({
+    html: `<div class="cluster-icon ${className}" style="
+      width: ${sizeMap[size as keyof typeof sizeMap]}px;
+      height: ${sizeMap[size as keyof typeof sizeMap]}px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      border-radius: 50%;
+      color: white;
+      font-weight: bold;
+      font-size: ${size === 'small' ? '12px' : size === 'medium' ? '14px' : '16px'};
+      box-shadow: 0 2px 8px rgba(0,0,0,0.3);
+      border: 3px solid white;
+    ">${count}</div>`,
+    className: 'custom-marker-cluster',
+    iconSize: L.point(sizeMap[size as keyof typeof sizeMap], sizeMap[size as keyof typeof sizeMap], true),
+  });
 };
 
 interface JobLocation {
@@ -254,63 +294,73 @@ export function JobsOverviewMap({ className = "" }: JobsOverviewMapProps) {
               
               <FitAllMarkers jobs={jobs} />
               
-              {jobs.map((job) => (
-                <Marker 
-                  key={job.id} 
-                  position={[job.service_latitude, job.service_longitude]}
-                  icon={statusIcons[job.status] || statusIcons.pending_assignment}
-                >
-                  <Popup>
-                    <div className="text-sm min-w-[200px]">
-                      <div className="flex items-center justify-between gap-2 mb-2">
-                        <span className="font-mono text-xs">{job.job_number}</span>
-                        {getPriorityBadge(job.priority)}
-                      </div>
-                      
-                      <p className="font-semibold text-base mb-1">{job.title}</p>
-                      
-                      <div className="mb-2">
-                        {getStatusBadge(job.status)}
-                      </div>
-                      
-                      <div className="space-y-1 text-xs text-gray-600">
-                        <p className="flex items-center gap-1">
-                          <User className="h-3 w-3" />
-                          {job.customer_name}
-                        </p>
+              <MarkerClusterGroup
+                chunkedLoading
+                iconCreateFunction={createClusterCustomIcon}
+                maxClusterRadius={60}
+                spiderfyOnMaxZoom={true}
+                showCoverageOnHover={false}
+                zoomToBoundsOnClick={true}
+                disableClusteringAtZoom={16}
+              >
+                {jobs.map((job) => (
+                  <Marker 
+                    key={job.id} 
+                    position={[job.service_latitude, job.service_longitude]}
+                    icon={statusIcons[job.status] || statusIcons.pending_assignment}
+                  >
+                    <Popup>
+                      <div className="text-sm min-w-[200px]">
+                        <div className="flex items-center justify-between gap-2 mb-2">
+                          <span className="font-mono text-xs">{job.job_number}</span>
+                          {getPriorityBadge(job.priority)}
+                        </div>
                         
-                        {job.technician_name && (
+                        <p className="font-semibold text-base mb-1">{job.title}</p>
+                        
+                        <div className="mb-2">
+                          {getStatusBadge(job.status)}
+                        </div>
+                        
+                        <div className="space-y-1 text-xs text-gray-600">
                           <p className="flex items-center gap-1">
-                            <User className="h-3 w-3 text-blue-600" />
-                            <span className="text-blue-600">{job.technician_name}</span>
+                            <User className="h-3 w-3" />
+                            {job.customer_name}
                           </p>
-                        )}
+                          
+                          {job.technician_name && (
+                            <p className="flex items-center gap-1">
+                              <User className="h-3 w-3 text-blue-600" />
+                              <span className="text-blue-600">{job.technician_name}</span>
+                            </p>
+                          )}
+                          
+                          {job.scheduled_date && (
+                            <p className="flex items-center gap-1">
+                              <Clock className="h-3 w-3" />
+                              {format(new Date(job.scheduled_date), 'dd MMM yyyy')}
+                            </p>
+                          )}
+                          
+                          {job.service_address && (
+                            <p className="flex items-start gap-1 mt-1">
+                              <MapPin className="h-3 w-3 mt-0.5 flex-shrink-0" />
+                              <span className="line-clamp-2">{job.service_address}</span>
+                            </p>
+                          )}
+                        </div>
                         
-                        {job.scheduled_date && (
-                          <p className="flex items-center gap-1">
-                            <Clock className="h-3 w-3" />
-                            {format(new Date(job.scheduled_date), 'dd MMM yyyy')}
-                          </p>
-                        )}
-                        
-                        {job.service_address && (
-                          <p className="flex items-start gap-1 mt-1">
-                            <MapPin className="h-3 w-3 mt-0.5 flex-shrink-0" />
-                            <span className="line-clamp-2">{job.service_address}</span>
-                          </p>
-                        )}
+                        <Link to={`/jobs/${job.id}`}>
+                          <Button size="sm" className="w-full mt-3">
+                            <Eye className="h-3 w-3 mr-1" />
+                            Lihat Detail
+                          </Button>
+                        </Link>
                       </div>
-                      
-                      <Link to={`/jobs/${job.id}`}>
-                        <Button size="sm" className="w-full mt-3">
-                          <Eye className="h-3 w-3 mr-1" />
-                          Lihat Detail
-                        </Button>
-                      </Link>
-                    </div>
-                  </Popup>
-                </Marker>
-              ))}
+                    </Popup>
+                  </Marker>
+                ))}
+              </MarkerClusterGroup>
             </MapContainer>
           )}
         </div>
