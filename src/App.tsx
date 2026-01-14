@@ -10,6 +10,7 @@ import Jobs from "./pages/Jobs";
 import NewJob from "./pages/NewJob";
 import Technicians from "./pages/Technicians";
 import Customers from "./pages/Customers";
+import Units from "./pages/Units";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -42,6 +43,7 @@ function AppRoutes() {
       <Route path="/jobs/new" element={<ProtectedRoute><NewJob /></ProtectedRoute>} />
       <Route path="/technicians" element={<ProtectedRoute><Technicians /></ProtectedRoute>} />
       <Route path="/customers" element={<ProtectedRoute><Customers /></ProtectedRoute>} />
+      <Route path="/units" element={<ProtectedRoute><Units /></ProtectedRoute>} />
       <Route path="*" element={<NotFound />} />
     </Routes>
   );
