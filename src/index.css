@@ -189,6 +189,77 @@
   .input-focus-ring {
     @apply focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2;
   }
+  /* FullCalendar Customizations */
+  .fc-wrapper {
+    @apply rounded-lg;
+  }
+
+  .fc-wrapper .fc {
+    --fc-border-color: hsl(var(--border));
+    --fc-button-bg-color: hsl(var(--primary));
+    --fc-button-border-color: hsl(var(--primary));
+    --fc-button-hover-bg-color: hsl(var(--primary) / 0.9);
+    --fc-button-hover-border-color: hsl(var(--primary) / 0.9);
+    --fc-button-active-bg-color: hsl(var(--primary) / 0.8);
+    --fc-button-active-border-color: hsl(var(--primary) / 0.8);
+    --fc-today-bg-color: hsl(var(--primary) / 0.1);
+    --fc-page-bg-color: transparent;
+    --fc-neutral-bg-color: hsl(var(--muted));
+    --fc-event-border-color: transparent;
+  }
+
+  .fc-wrapper .fc-toolbar-title {
+    @apply text-lg font-semibold text-foreground;
+  }
+
+  .fc-wrapper .fc-button {
+    @apply text-sm font-medium rounded-md shadow-none;
+  }
+
+  .fc-wrapper .fc-button-primary:not(:disabled).fc-button-active,
+  .fc-wrapper .fc-button-primary:not(:disabled):active {
+    @apply bg-primary/80;
+  }
+
+  .fc-wrapper .fc-daygrid-day-number {
+    @apply text-sm text-muted-foreground p-2;
+  }
+
+  .fc-wrapper .fc-daygrid-day.fc-day-today .fc-daygrid-day-number {
+    @apply text-primary font-semibold;
+  }
+
+  .fc-wrapper .fc-col-header-cell-cushion {
+    @apply text-xs font-medium text-muted-foreground uppercase tracking-wide py-2;
+  }
+
+  .fc-wrapper .fc-event {
+    @apply rounded-md border-l-4 cursor-pointer shadow-sm;
+  }
+
+  .fc-wrapper .fc-event:hover {
+    @apply opacity-90;
+  }
+
+  .fc-wrapper .fc-daygrid-event {
+    @apply my-0.5;
+  }
+
+  .fc-wrapper .fc-more-link {
+    @apply text-xs text-primary font-medium;
+  }
+
+  .fc-wrapper .fc-popover {
+    @apply bg-popover border border-border rounded-lg shadow-lg;
+  }
+
+  .fc-wrapper .fc-popover-header {
+    @apply bg-muted text-foreground px-3 py-2 text-sm font-medium rounded-t-lg;
+  }
+
+  .fc-wrapper .fc-popover-body {
+    @apply p-2;
+  }
 }
 
 @layer utilities {
