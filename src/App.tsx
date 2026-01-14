@@ -20,6 +20,9 @@ import Inventory from "./pages/Inventory";
 import Reports from "./pages/Reports";
 import Settings from "./pages/Settings";
 import UserManagement from "./pages/UserManagement";
+import AuditLogs from "./pages/AuditLogs";
+import ForgotPassword from "./pages/ForgotPassword";
+import ResetPassword from "./pages/ResetPassword";
 import NotFound from "./pages/NotFound";
 // Customer Portal
 import CustomerLogin from "./pages/portal/CustomerLogin";
@@ -127,6 +130,10 @@ function AppRoutes() {
       {/* Initial Setup Route */}
       <Route path="/setup" element={<SetupPage />} />
       
+      {/* Password Reset Routes (public) */}
+      <Route path="/forgot-password" element={<ForgotPassword />} />
+      <Route path="/reset-password" element={<ResetPassword />} />
+      
       {/* Staff Routes */}
       <Route path="/auth" element={<AuthRoute />} />
       <Route path="/" element={<SetupRoute><Navigate to="/dashboard" replace /></SetupRoute>} />
@@ -141,6 +148,7 @@ function AppRoutes() {
       <Route path="/inventory" element={<SetupRoute><ProtectedRoute><Inventory /></ProtectedRoute></SetupRoute>} />
       <Route path="/reports" element={<SetupRoute><ProtectedRoute><Reports /></ProtectedRoute></SetupRoute>} />
       <Route path="/users" element={<SetupRoute><ProtectedRoute><UserManagement /></ProtectedRoute></SetupRoute>} />
+      <Route path="/audit-logs" element={<SetupRoute><ProtectedRoute><AuditLogs /></ProtectedRoute></SetupRoute>} />
       <Route path="/settings" element={<SetupRoute><ProtectedRoute><Settings /></ProtectedRoute></SetupRoute>} />
       
       {/* Customer Portal Routes */}
