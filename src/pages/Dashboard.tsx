@@ -3,6 +3,8 @@ import { Link } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
 import DashboardLayout from '@/components/layout/DashboardLayout';
+import CashierDashboard from '@/components/dashboard/CashierDashboard';
+import TechnicianDashboard from '@/components/dashboard/TechnicianDashboard';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -38,7 +40,7 @@ interface RecentJob {
 }
 
 export default function Dashboard() {
-  const { employee } = useAuth();
+  const { employee, userRole, isSuperadmin, isAdmin } = useAuth();
   const [stats, setStats] = useState<DashboardStats>({
     totalJobsToday: 0,
     pendingApprovals: 0,
@@ -50,9 +52,19 @@ export default function Dashboard() {
   const [recentJobs, setRecentJobs] = useState<RecentJob[]>([]);
   const [loading, setLoading] = useState(true);
 
+  // Check role for conditional rendering
+  const isCashier = userRole === 'cashier';
+  const isTechnician = userRole === 'technician';
+  const isManagerOrAbove = isSuperadmin || isAdmin || userRole === 'manager';
+
   useEffect(() => {
-    fetchDashboardData();
-  }, []);
+    // Only fetch admin dashboard data if user is manager or above
+    if (isManagerOrAbove) {
+      fetchDashboardData();
+    } else {
+      setLoading(false);
+    }
+  }, [isManagerOrAbove]);
 
   const fetchDashboardData = async () => {
     try {
@@ -193,6 +205,24 @@ export default function Dashboard() {
     },
   ];
 
+  // Render role-specific dashboard
+  if (isCashier) {
+    return (
+      <DashboardLayout>
+        <CashierDashboard />
+      </DashboardLayout>
+    );
+  }
+
+  if (isTechnician) {
+    return (
+      <DashboardLayout>
+        <TechnicianDashboard />
+      </DashboardLayout>
+    );
+  }
+
+  // Admin/Manager Dashboard
   return (
     <DashboardLayout>
       <div className="space-y-6 animate-fade-in">
