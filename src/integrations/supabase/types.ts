@@ -644,7 +644,12 @@ export type Database = {
     }
     Enums: {
       customer_category: "retail" | "project"
-      employee_role: "admin" | "manager" | "technician" | "cashier"
+      employee_role:
+        | "admin"
+        | "manager"
+        | "technician"
+        | "cashier"
+        | "superadmin"
       employee_status: "available" | "on_job" | "locked" | "off_duty"
       job_priority: "low" | "normal" | "high" | "urgent"
       job_status:
@@ -790,7 +795,13 @@ export const Constants = {
   public: {
     Enums: {
       customer_category: ["retail", "project"],
-      employee_role: ["admin", "manager", "technician", "cashier"],
+      employee_role: [
+        "admin",
+        "manager",
+        "technician",
+        "cashier",
+        "superadmin",
+      ],
       employee_status: ["available", "on_job", "locked", "off_duty"],
       job_priority: ["low", "normal", "high", "urgent"],
       job_status: [
