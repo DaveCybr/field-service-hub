@@ -30,6 +30,8 @@ import {
   CheckCircle,
   XCircle,
   RefreshCw,
+  CalendarDays,
+  List,
 } from 'lucide-react';
 import {
   DropdownMenu,
@@ -39,6 +41,7 @@ import {
 } from '@/components/ui/dropdown-menu';
 import { format } from 'date-fns';
 import { useToast } from '@/hooks/use-toast';
+import JobCalendar from '@/components/jobs/JobCalendar';
 
 interface Job {
   id: string;
@@ -59,6 +62,7 @@ export default function Jobs() {
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
   const [priorityFilter, setPriorityFilter] = useState('all');
+  const [viewMode, setViewMode] = useState<'list' | 'calendar'>('list');
   const { toast } = useToast();
 
   useEffect(() => {
@@ -197,12 +201,30 @@ export default function Jobs() {
               Manage and track all service jobs
             </p>
           </div>
-          <Button asChild>
-            <Link to="/jobs/new">
-              <Plus className="mr-2 h-4 w-4" />
-              New Job
-            </Link>
-          </Button>
+          <div className="flex items-center gap-2">
+            <div className="flex items-center border rounded-lg p-1">
+              <Button
+                variant={viewMode === 'list' ? 'secondary' : 'ghost'}
+                size="sm"
+                onClick={() => setViewMode('list')}
+              >
+                <List className="h-4 w-4" />
+              </Button>
+              <Button
+                variant={viewMode === 'calendar' ? 'secondary' : 'ghost'}
+                size="sm"
+                onClick={() => setViewMode('calendar')}
+              >
+                <CalendarDays className="h-4 w-4" />
+              </Button>
+            </div>
+            <Button asChild>
+              <Link to="/jobs/new">
+                <Plus className="mr-2 h-4 w-4" />
+                New Job
+              </Link>
+            </Button>
+          </div>
         </div>
 
         {/* Filters */}
@@ -253,109 +275,124 @@ export default function Jobs() {
           </CardContent>
         </Card>
 
-        {/* Jobs Table */}
-        <Card>
-          <CardContent className="p-0">
-            {loading ? (
-              <div className="flex items-center justify-center py-12">
-                <div className="h-8 w-8 animate-spin rounded-full border-4 border-primary border-t-transparent" />
-              </div>
-            ) : filteredJobs.length === 0 ? (
-              <div className="text-center py-12">
-                <h3 className="text-lg font-medium">No jobs found</h3>
-                <p className="mt-2 text-sm text-muted-foreground">
-                  {searchQuery || statusFilter !== 'all' || priorityFilter !== 'all'
-                    ? 'Try adjusting your filters'
-                    : 'Get started by creating a new service job'}
-                </p>
-              </div>
-            ) : (
-              <div className="overflow-x-auto">
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>Job #</TableHead>
-                      <TableHead>Title</TableHead>
-                      <TableHead>Customer</TableHead>
-                      <TableHead>Technician</TableHead>
-                      <TableHead>Priority</TableHead>
-                      <TableHead>Status</TableHead>
-                      <TableHead>Scheduled</TableHead>
-                      <TableHead className="text-right">Cost</TableHead>
-                      <TableHead className="w-[50px]"></TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {filteredJobs.map((job) => (
-                      <TableRow key={job.id} className="table-row-hover">
-                        <TableCell className="font-mono text-sm">
-                          {job.job_number}
-                        </TableCell>
-                        <TableCell>
-                          <Link 
-                            to={`/jobs/${job.id}`}
-                            className="font-medium hover:text-primary transition-colors"
-                          >
-                            {job.title}
-                          </Link>
-                        </TableCell>
-                        <TableCell>{job.customer_name}</TableCell>
-                        <TableCell>
-                          {job.technician_name || (
-                            <span className="text-muted-foreground italic">Unassigned</span>
-                          )}
-                        </TableCell>
-                        <TableCell>{getPriorityBadge(job.priority)}</TableCell>
-                        <TableCell>{getStatusBadge(job.status)}</TableCell>
-                        <TableCell>
-                          {job.scheduled_date
-                            ? format(new Date(job.scheduled_date), 'MMM d, yyyy')
-                            : '-'}
-                        </TableCell>
-                        <TableCell className="text-right">
-                          {formatCurrency(job.total_cost)}
-                        </TableCell>
-                        <TableCell>
-                          <DropdownMenu>
-                            <DropdownMenuTrigger asChild>
-                              <Button variant="ghost" size="icon">
-                                <MoreHorizontal className="h-4 w-4" />
-                              </Button>
-                            </DropdownMenuTrigger>
-                            <DropdownMenuContent align="end">
-                              <DropdownMenuItem asChild>
-                                <Link to={`/jobs/${job.id}`}>
-                                  <Eye className="mr-2 h-4 w-4" />
-                                  View Details
-                                </Link>
-                              </DropdownMenuItem>
-                              {job.status === 'pending_approval' && (
-                                <>
-                                  <DropdownMenuItem 
-                                    onClick={() => updateJobStatus(job.id, 'approved')}
-                                  >
-                                    <CheckCircle className="mr-2 h-4 w-4 text-emerald-600" />
-                                    Approve
-                                  </DropdownMenuItem>
-                                  <DropdownMenuItem 
-                                    onClick={() => updateJobStatus(job.id, 'cancelled')}
-                                  >
-                                    <XCircle className="mr-2 h-4 w-4 text-destructive" />
-                                    Reject
-                                  </DropdownMenuItem>
-                                </>
-                              )}
-                            </DropdownMenuContent>
-                          </DropdownMenu>
-                        </TableCell>
+        {/* Calendar View */}
+        {viewMode === 'calendar' ? (
+          <Card>
+            <CardContent className="p-4">
+              {loading ? (
+                <div className="flex items-center justify-center py-12">
+                  <div className="h-8 w-8 animate-spin rounded-full border-4 border-primary border-t-transparent" />
+                </div>
+              ) : (
+                <JobCalendar jobs={filteredJobs} onJobUpdated={fetchJobs} />
+              )}
+            </CardContent>
+          </Card>
+        ) : (
+          /* Jobs Table */
+          <Card>
+            <CardContent className="p-0">
+              {loading ? (
+                <div className="flex items-center justify-center py-12">
+                  <div className="h-8 w-8 animate-spin rounded-full border-4 border-primary border-t-transparent" />
+                </div>
+              ) : filteredJobs.length === 0 ? (
+                <div className="text-center py-12">
+                  <h3 className="text-lg font-medium">No jobs found</h3>
+                  <p className="mt-2 text-sm text-muted-foreground">
+                    {searchQuery || statusFilter !== 'all' || priorityFilter !== 'all'
+                      ? 'Try adjusting your filters'
+                      : 'Get started by creating a new service job'}
+                  </p>
+                </div>
+              ) : (
+                <div className="overflow-x-auto">
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Job #</TableHead>
+                        <TableHead>Title</TableHead>
+                        <TableHead>Customer</TableHead>
+                        <TableHead>Technician</TableHead>
+                        <TableHead>Priority</TableHead>
+                        <TableHead>Status</TableHead>
+                        <TableHead>Scheduled</TableHead>
+                        <TableHead className="text-right">Cost</TableHead>
+                        <TableHead className="w-[50px]"></TableHead>
                       </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-              </div>
-            )}
-          </CardContent>
-        </Card>
+                    </TableHeader>
+                    <TableBody>
+                      {filteredJobs.map((job) => (
+                        <TableRow key={job.id} className="table-row-hover">
+                          <TableCell className="font-mono text-sm">
+                            {job.job_number}
+                          </TableCell>
+                          <TableCell>
+                            <Link 
+                              to={`/jobs/${job.id}`}
+                              className="font-medium hover:text-primary transition-colors"
+                            >
+                              {job.title}
+                            </Link>
+                          </TableCell>
+                          <TableCell>{job.customer_name}</TableCell>
+                          <TableCell>
+                            {job.technician_name || (
+                              <span className="text-muted-foreground italic">Unassigned</span>
+                            )}
+                          </TableCell>
+                          <TableCell>{getPriorityBadge(job.priority)}</TableCell>
+                          <TableCell>{getStatusBadge(job.status)}</TableCell>
+                          <TableCell>
+                            {job.scheduled_date
+                              ? format(new Date(job.scheduled_date), 'MMM d, yyyy')
+                              : '-'}
+                          </TableCell>
+                          <TableCell className="text-right">
+                            {formatCurrency(job.total_cost)}
+                          </TableCell>
+                          <TableCell>
+                            <DropdownMenu>
+                              <DropdownMenuTrigger asChild>
+                                <Button variant="ghost" size="icon">
+                                  <MoreHorizontal className="h-4 w-4" />
+                                </Button>
+                              </DropdownMenuTrigger>
+                              <DropdownMenuContent align="end">
+                                <DropdownMenuItem asChild>
+                                  <Link to={`/jobs/${job.id}`}>
+                                    <Eye className="mr-2 h-4 w-4" />
+                                    View Details
+                                  </Link>
+                                </DropdownMenuItem>
+                                {job.status === 'pending_approval' && (
+                                  <>
+                                    <DropdownMenuItem 
+                                      onClick={() => updateJobStatus(job.id, 'approved')}
+                                    >
+                                      <CheckCircle className="mr-2 h-4 w-4 text-emerald-600" />
+                                      Approve
+                                    </DropdownMenuItem>
+                                    <DropdownMenuItem 
+                                      onClick={() => updateJobStatus(job.id, 'cancelled')}
+                                    >
+                                      <XCircle className="mr-2 h-4 w-4 text-destructive" />
+                                      Reject
+                                    </DropdownMenuItem>
+                                  </>
+                                )}
+                              </DropdownMenuContent>
+                            </DropdownMenu>
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        )}
       </div>
     </DashboardLayout>
   );
