@@ -343,16 +343,21 @@ export default function JobDetail() {
   };
 
   // GPS Check-in handler for technicians
-  const handleGPSCheckIn = async (latitude: number, longitude: number, isValid: boolean) => {
+  const handleGPSCheckIn = async (latitude: number, longitude: number, isValid: boolean, photos: string[]) => {
     if (!job) return;
     
     try {
-      const updates = {
+      const updates: Record<string, any> = {
         status: 'in_progress' as JobStatus,
         actual_checkin_at: new Date().toISOString(),
         checkin_gps_valid: isValid,
         gps_violation_detected: !isValid,
       };
+
+      // Add before photos if any were uploaded
+      if (photos.length > 0) {
+        updates.before_photos = photos;
+      }
 
       const { error } = await supabase
         .from('service_jobs')
@@ -371,13 +376,14 @@ export default function JobDetail() {
           checkin_gps_valid: isValid,
           checkin_latitude: latitude,
           checkin_longitude: longitude,
+          before_photos_count: photos.length,
         },
       });
 
       toast({
         title: isValid ? 'Checked In Successfully' : 'Checked In (GPS Warning)',
         description: isValid 
-          ? 'Your location has been verified. Job is now in progress.' 
+          ? `Your location has been verified. Job is now in progress.${photos.length > 0 ? ` ${photos.length} photo(s) saved.` : ''}` 
           : 'Job started, but GPS location does not match service address.',
         variant: isValid ? 'default' : 'destructive',
       });
@@ -394,7 +400,7 @@ export default function JobDetail() {
   };
 
   // GPS Check-out handler for technicians
-  const handleGPSCheckOut = async (latitude: number, longitude: number, isValid: boolean) => {
+  const handleGPSCheckOut = async (latitude: number, longitude: number, isValid: boolean, photos: string[]) => {
     if (!job) return;
     
     try {
@@ -406,13 +412,18 @@ export default function JobDetail() {
         durationMinutes = Math.round((checkoutTime.getTime() - checkinTime.getTime()) / 60000);
       }
 
-      const updates = {
+      const updates: Record<string, any> = {
         status: 'completed' as JobStatus,
         actual_checkout_at: checkoutTime.toISOString(),
         actual_duration_minutes: durationMinutes,
         checkout_gps_valid: isValid,
         gps_violation_detected: job.gps_violation_detected || !isValid,
       };
+
+      // Add after photos if any were uploaded
+      if (photos.length > 0) {
+        updates.after_photos = photos;
+      }
 
       const { error } = await supabase
         .from('service_jobs')
@@ -432,13 +443,14 @@ export default function JobDetail() {
           checkout_latitude: latitude,
           checkout_longitude: longitude,
           actual_duration_minutes: durationMinutes,
+          after_photos_count: photos.length,
         },
       });
 
       toast({
         title: isValid ? 'Job Completed' : 'Job Completed (GPS Warning)',
         description: isValid 
-          ? `Job completed successfully. Duration: ${durationMinutes} minutes.` 
+          ? `Job completed successfully. Duration: ${durationMinutes} minutes.${photos.length > 0 ? ` ${photos.length} photo(s) saved.` : ''}` 
           : `Job completed, but GPS location does not match service address.`,
         variant: isValid ? 'default' : 'destructive',
       });
@@ -867,6 +879,8 @@ export default function JobDetail() {
                 actualCheckoutAt={job.actual_checkout_at}
                 checkinGpsValid={job.checkin_gps_valid}
                 checkoutGpsValid={job.checkout_gps_valid}
+                beforePhotos={job.before_photos || []}
+                afterPhotos={job.after_photos || []}
                 onCheckIn={handleGPSCheckIn}
                 onCheckOut={handleGPSCheckOut}
                 disabled={updating}
@@ -885,6 +899,8 @@ export default function JobDetail() {
                 actualCheckoutAt={job.actual_checkout_at}
                 checkinGpsValid={job.checkin_gps_valid}
                 checkoutGpsValid={job.checkout_gps_valid}
+                beforePhotos={job.before_photos || []}
+                afterPhotos={job.after_photos || []}
                 onCheckIn={handleGPSCheckIn}
                 onCheckOut={handleGPSCheckOut}
                 disabled={true}
