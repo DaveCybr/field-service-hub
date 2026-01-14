@@ -1,10 +1,11 @@
-import { useEffect, useRef, useState } from 'react';
-import { MapContainer, TileLayer, Marker, Popup, useMap } from 'react-leaflet';
+import { useEffect, useState, useCallback } from 'react';
+import { MapContainer, TileLayer, Marker, Popup, useMap, Polyline } from 'react-leaflet';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { MapPin, Navigation, User } from 'lucide-react';
+import { Button } from '@/components/ui/button';
+import { MapPin, Navigation, User, Route, Clock, ExternalLink, Loader2 } from 'lucide-react';
 
 // Fix for default marker icons in Leaflet with webpack/vite
 delete (L.Icon.Default.prototype as any)._getIconUrl;
@@ -33,6 +34,12 @@ const technicianIcon = new L.Icon({
   shadowSize: [41, 41]
 });
 
+interface RouteInfo {
+  coordinates: [number, number][];
+  distance: number; // in meters
+  duration: number; // in seconds
+}
+
 interface LocationMapProps {
   serviceLatitude?: number | null;
   serviceLongitude?: number | null;
@@ -45,14 +52,22 @@ interface LocationMapProps {
 // Component to fit bounds when markers change
 function FitBounds({ 
   serviceLocation, 
-  technicianLocation 
+  technicianLocation,
+  routeCoordinates
 }: { 
   serviceLocation: [number, number] | null;
   technicianLocation: [number, number] | null;
+  routeCoordinates: [number, number][];
 }) {
   const map = useMap();
   
   useEffect(() => {
+    if (routeCoordinates.length > 0) {
+      const bounds = L.latLngBounds(routeCoordinates);
+      map.fitBounds(bounds, { padding: [50, 50] });
+      return;
+    }
+
     const bounds: [number, number][] = [];
     if (serviceLocation) bounds.push(serviceLocation);
     if (technicianLocation) bounds.push(technicianLocation);
@@ -64,7 +79,7 @@ function FitBounds({
         map.fitBounds(bounds, { padding: [50, 50] });
       }
     }
-  }, [map, serviceLocation, technicianLocation]);
+  }, [map, serviceLocation, technicianLocation, routeCoordinates]);
   
   return null;
 }
@@ -80,6 +95,9 @@ export function LocationMap({
   const [technicianLocation, setTechnicianLocation] = useState<[number, number] | null>(null);
   const [locationError, setLocationError] = useState<string | null>(null);
   const [distance, setDistance] = useState<number | null>(null);
+  const [routeInfo, setRouteInfo] = useState<RouteInfo | null>(null);
+  const [loadingRoute, setLoadingRoute] = useState(false);
+  const [routeError, setRouteError] = useState<string | null>(null);
 
   const serviceLocation: [number, number] | null = 
     serviceLatitude && serviceLongitude 
@@ -101,6 +119,51 @@ export function LocationMap({
 
     return R * c;
   };
+
+  // Fetch route from OSRM (Open Source Routing Machine) - FREE
+  const fetchRoute = useCallback(async () => {
+    if (!technicianLocation || !serviceLocation) return;
+
+    setLoadingRoute(true);
+    setRouteError(null);
+
+    try {
+      // OSRM API - completely free, no API key needed
+      const url = `https://router.project-osrm.org/route/v1/driving/${technicianLocation[1]},${technicianLocation[0]};${serviceLocation[1]},${serviceLocation[0]}?overview=full&geometries=geojson`;
+      
+      const response = await fetch(url);
+      const data = await response.json();
+
+      if (data.code === 'Ok' && data.routes && data.routes.length > 0) {
+        const route = data.routes[0];
+        const coordinates: [number, number][] = route.geometry.coordinates.map(
+          (coord: [number, number]) => [coord[1], coord[0]] as [number, number]
+        );
+        
+        setRouteInfo({
+          coordinates,
+          distance: route.distance,
+          duration: route.duration
+        });
+      } else {
+        setRouteError('Tidak dapat menemukan rute');
+      }
+    } catch (error) {
+      console.error('Error fetching route:', error);
+      setRouteError('Gagal memuat rute');
+    } finally {
+      setLoadingRoute(false);
+    }
+  }, [technicianLocation, serviceLocation]);
+
+  // Open navigation in external app
+  const openExternalNavigation = useCallback(() => {
+    if (!serviceLocation || !technicianLocation) return;
+
+    // Try to open Google Maps navigation
+    const googleMapsUrl = `https://www.google.com/maps/dir/?api=1&origin=${technicianLocation[0]},${technicianLocation[1]}&destination=${serviceLocation[0]},${serviceLocation[1]}&travelmode=driving`;
+    window.open(googleMapsUrl, '_blank');
+  }, [serviceLocation, technicianLocation]);
 
   useEffect(() => {
     if (!showTechnicianLocation) return;
@@ -160,6 +223,16 @@ export function LocationMap({
     return `${(meters / 1000).toFixed(2)} km`;
   };
 
+  const formatDuration = (seconds: number): string => {
+    const hours = Math.floor(seconds / 3600);
+    const minutes = Math.floor((seconds % 3600) / 60);
+    
+    if (hours > 0) {
+      return `${hours} jam ${minutes} menit`;
+    }
+    return `${minutes} menit`;
+  };
+
   const defaultCenter: [number, number] = serviceLocation || technicianLocation || [-6.2088, 106.8456]; // Default to Jakarta
 
   if (!serviceLocation && !technicianLocation) {
@@ -201,6 +274,12 @@ export function LocationMap({
               <span>Posisi Teknisi</span>
             </div>
           )}
+          {routeInfo && (
+            <div className="flex items-center gap-2">
+              <div className="w-4 h-1 bg-emerald-500 rounded"></div>
+              <span>Rute</span>
+            </div>
+          )}
           {distance !== null && (
             <Badge variant="outline" className="ml-auto">
               <Navigation className="h-3 w-3 mr-1" />
@@ -208,6 +287,54 @@ export function LocationMap({
             </Badge>
           )}
         </div>
+
+        {/* Route Controls */}
+        {showTechnicianLocation && technicianLocation && serviceLocation && (
+          <div className="flex flex-wrap gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={fetchRoute}
+              disabled={loadingRoute}
+            >
+              {loadingRoute ? (
+                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+              ) : (
+                <Route className="h-4 w-4 mr-2" />
+              )}
+              {routeInfo ? 'Perbarui Rute' : 'Tampilkan Rute'}
+            </Button>
+            <Button
+              variant="default"
+              size="sm"
+              onClick={openExternalNavigation}
+              className="bg-emerald-600 hover:bg-emerald-700"
+            >
+              <ExternalLink className="h-4 w-4 mr-2" />
+              Buka di Google Maps
+            </Button>
+          </div>
+        )}
+
+        {/* Route Info */}
+        {routeInfo && (
+          <div className="flex flex-wrap gap-4 p-3 bg-emerald-50 rounded-lg border border-emerald-200">
+            <div className="flex items-center gap-2 text-emerald-800">
+              <Route className="h-4 w-4" />
+              <span className="font-medium">Jarak Rute: {formatDistance(routeInfo.distance)}</span>
+            </div>
+            <div className="flex items-center gap-2 text-emerald-800">
+              <Clock className="h-4 w-4" />
+              <span className="font-medium">Estimasi: {formatDuration(routeInfo.duration)}</span>
+            </div>
+          </div>
+        )}
+
+        {routeError && (
+          <div className="text-sm text-red-600 bg-red-50 p-2 rounded">
+            ⚠️ {routeError}
+          </div>
+        )}
 
         {locationError && (
           <div className="text-sm text-amber-600 bg-amber-50 p-2 rounded">
@@ -230,8 +357,22 @@ export function LocationMap({
             
             <FitBounds 
               serviceLocation={serviceLocation} 
-              technicianLocation={technicianLocation} 
+              technicianLocation={technicianLocation}
+              routeCoordinates={routeInfo?.coordinates || []}
             />
+
+            {/* Route Polyline */}
+            {routeInfo && (
+              <Polyline
+                positions={routeInfo.coordinates}
+                pathOptions={{
+                  color: '#10b981',
+                  weight: 5,
+                  opacity: 0.8,
+                  dashArray: undefined
+                }}
+              />
+            )}
             
             {/* Service Location Marker */}
             {serviceLocation && (
