@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '@/hooks/useAuth';
+import { supabase } from '@/integrations/supabase/client';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -58,6 +59,19 @@ export default function Auth() {
           : error.message,
       });
     } else {
+      // Log successful login
+      const { data: { user: loggedInUser } } = await supabase.auth.getUser();
+      if (loggedInUser) {
+        await supabase.from('audit_logs').insert([{
+          user_id: loggedInUser.id,
+          action: 'login',
+          entity_type: 'user',
+          entity_id: loggedInUser.id,
+          new_data: { email: loggedInUser.email },
+          user_agent: navigator.userAgent,
+        }]);
+      }
+      
       toast({
         title: 'Welcome back!',
         description: 'You have successfully logged in.',

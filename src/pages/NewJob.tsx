@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
+import { useAuditLog } from '@/hooks/useAuditLog';
 import { useTechnicianAvailability } from '@/hooks/useTechnicianAvailability';
 import DashboardLayout from '@/components/layout/DashboardLayout';
 import { Button } from '@/components/ui/button';
@@ -66,6 +67,7 @@ interface TechnicianRecommendation {
 export default function NewJob() {
   const navigate = useNavigate();
   const { employee } = useAuth();
+  const { log: auditLog } = useAuditLog();
   const { toast } = useToast();
   const { getAvailableTechniciansForDate, loading: availabilityLoading } = useTechnicianAvailability();
   const [loading, setLoading] = useState(false);
@@ -230,6 +232,21 @@ export default function NewJob() {
         .single();
 
       if (error) throw error;
+
+      // Audit log for job creation
+      await auditLog({
+        action: 'create',
+        entityType: 'job',
+        entityId: data.id,
+        newData: {
+          job_number: data.job_number,
+          title: data.title,
+          customer_id: data.customer_id,
+          assigned_technician_id: data.assigned_technician_id,
+          status: data.status,
+          priority: data.priority,
+        },
+      });
 
       toast({
         title: 'Job Created',

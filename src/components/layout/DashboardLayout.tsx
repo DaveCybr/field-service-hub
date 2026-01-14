@@ -1,6 +1,7 @@
 import { ReactNode, useState } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '@/hooks/useAuth';
+import { useAuditLog } from '@/hooks/useAuditLog';
 import { useRealtimeNotifications } from '@/hooks/useRealtimeNotifications';
 import { Button } from '@/components/ui/button';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
@@ -53,7 +54,8 @@ const superadminNavigation = [
 
 export default function DashboardLayout({ children }: DashboardLayoutProps) {
   const [sidebarOpen, setSidebarOpen] = useState(false);
-  const { employee, isSuperadmin, userRole, signOut } = useAuth();
+  const { employee, isSuperadmin, userRole, signOut, user } = useAuth();
+  const { log: auditLog } = useAuditLog();
   const { notifications, unreadCount, markAsRead, markAllAsRead, clearNotifications } = useRealtimeNotifications();
   const location = useLocation();
   const navigate = useNavigate();
@@ -64,6 +66,12 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
     : baseNavigation;
 
   const handleSignOut = async () => {
+    // Log logout before signing out
+    await auditLog({
+      action: 'logout',
+      entityType: 'user',
+      entityId: user?.id,
+    });
     await signOut();
     navigate('/auth');
   };

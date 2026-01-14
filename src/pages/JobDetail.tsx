@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
+import { useAuditLog } from '@/hooks/useAuditLog';
 import DashboardLayout from '@/components/layout/DashboardLayout';
 import JobPhotoGallery from '@/components/jobs/JobPhotoGallery';
 import { Button } from '@/components/ui/button';
@@ -123,6 +124,7 @@ export default function JobDetail() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const { toast } = useToast();
+  const { log: auditLog } = useAuditLog();
   
   const [job, setJob] = useState<JobDetails | null>(null);
   const [loading, setLoading] = useState(true);
@@ -194,6 +196,7 @@ export default function JobDetail() {
   const updateJobStatus = async (newStatus: JobStatus) => {
     if (!job) return;
     setUpdating(true);
+    const oldStatus = job.status;
     try {
       const updates: any = { status: newStatus };
       
@@ -215,6 +218,15 @@ export default function JobDetail() {
         .eq('id', job.id);
 
       if (error) throw error;
+
+      // Audit log for status change
+      await auditLog({
+        action: 'status_change',
+        entityType: 'job',
+        entityId: job.id,
+        oldData: { status: oldStatus, job_number: job.job_number },
+        newData: { status: newStatus, job_number: job.job_number },
+      });
 
       toast({
         title: 'Status Updated',
