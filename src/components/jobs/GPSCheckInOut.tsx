@@ -3,6 +3,8 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Alert, AlertDescription } from '@/components/ui/alert';
+import { Separator } from '@/components/ui/separator';
+import PhotoUpload from './PhotoUpload';
 import { 
   Navigation, 
   MapPin, 
@@ -11,7 +13,8 @@ import {
   Loader2, 
   AlertTriangle,
   Play,
-  Square
+  Square,
+  Camera
 } from 'lucide-react';
 
 interface GPSCheckInOutProps {
@@ -24,8 +27,10 @@ interface GPSCheckInOutProps {
   actualCheckoutAt: string | null;
   checkinGpsValid: boolean | null;
   checkoutGpsValid: boolean | null;
-  onCheckIn: (latitude: number, longitude: number, isValid: boolean) => Promise<void>;
-  onCheckOut: (latitude: number, longitude: number, isValid: boolean) => Promise<void>;
+  beforePhotos?: string[];
+  afterPhotos?: string[];
+  onCheckIn: (latitude: number, longitude: number, isValid: boolean, photos: string[]) => Promise<void>;
+  onCheckOut: (latitude: number, longitude: number, isValid: boolean, photos: string[]) => Promise<void>;
   disabled?: boolean;
 }
 
@@ -63,6 +68,8 @@ export default function GPSCheckInOut({
   actualCheckoutAt,
   checkinGpsValid,
   checkoutGpsValid,
+  beforePhotos = [],
+  afterPhotos = [],
   onCheckIn,
   onCheckOut,
   disabled = false,
@@ -72,6 +79,10 @@ export default function GPSCheckInOut({
   const [loading, setLoading] = useState(false);
   const [gettingLocation, setGettingLocation] = useState(false);
   const [distance, setDistance] = useState<number | null>(null);
+  
+  // Photo state
+  const [checkinPhotos, setCheckinPhotos] = useState<string[]>(beforePhotos);
+  const [checkoutPhotos, setCheckoutPhotos] = useState<string[]>(afterPhotos);
 
   const hasServiceLocation = serviceLatitude !== null && serviceLongitude !== null;
   const canCheckIn = jobStatus === 'approved' && !actualCheckinAt;
@@ -143,7 +154,7 @@ export default function GPSCheckInOut({
       if (hasServiceLocation && distance !== null) {
         isValid = distance <= MAX_DISTANCE_METERS;
       }
-      await onCheckIn(currentLocation.lat, currentLocation.lng, isValid);
+      await onCheckIn(currentLocation.lat, currentLocation.lng, isValid, checkinPhotos);
     } finally {
       setLoading(false);
     }
@@ -162,7 +173,7 @@ export default function GPSCheckInOut({
       if (hasServiceLocation && distance !== null) {
         isValid = distance <= MAX_DISTANCE_METERS;
       }
-      await onCheckOut(currentLocation.lat, currentLocation.lng, isValid);
+      await onCheckOut(currentLocation.lat, currentLocation.lng, isValid, checkoutPhotos);
     } finally {
       setLoading(false);
     }
@@ -327,6 +338,47 @@ export default function GPSCheckInOut({
             </div>
           )}
         </div>
+
+        {/* Photo Upload Section */}
+        {canCheckIn && (
+          <>
+            <Separator />
+            <div className="space-y-2">
+              <div className="flex items-center gap-2">
+                <Camera className="h-4 w-4 text-muted-foreground" />
+                <span className="text-sm font-medium">Before Photos (Optional)</span>
+              </div>
+              <PhotoUpload
+                jobId={jobId}
+                type="before"
+                onPhotosChange={setCheckinPhotos}
+                existingPhotos={checkinPhotos}
+                disabled={loading}
+                maxPhotos={5}
+              />
+            </div>
+          </>
+        )}
+
+        {canCheckOut && (
+          <>
+            <Separator />
+            <div className="space-y-2">
+              <div className="flex items-center gap-2">
+                <Camera className="h-4 w-4 text-muted-foreground" />
+                <span className="text-sm font-medium">After Photos (Recommended)</span>
+              </div>
+              <PhotoUpload
+                jobId={jobId}
+                type="after"
+                onPhotosChange={setCheckoutPhotos}
+                existingPhotos={checkoutPhotos}
+                disabled={loading}
+                maxPhotos={5}
+              />
+            </div>
+          </>
+        )}
 
         {/* Action Button */}
         {canCheckIn && (
