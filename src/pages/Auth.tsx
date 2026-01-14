@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
 import { useAuth } from '@/hooks/useAuth';
 import { supabase } from '@/integrations/supabase/client';
 import { Button } from '@/components/ui/button';
@@ -9,13 +10,10 @@ import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle }
 import { useToast } from '@/hooks/use-toast';
 import { Wrench, Loader2, Lock } from 'lucide-react';
 import { z } from 'zod';
-
-const loginSchema = z.object({
-  email: z.string().email('Please enter a valid email address'),
-  password: z.string().min(6, 'Password must be at least 6 characters'),
-});
+import { LanguageSwitcher } from '@/components/LanguageSwitcher';
 
 export default function Auth() {
+  const { t } = useTranslation();
   const [isLoading, setIsLoading] = useState(false);
   const [loginEmail, setLoginEmail] = useState('');
   const [loginPassword, setLoginPassword] = useState('');
@@ -23,6 +21,11 @@ export default function Auth() {
   const { signIn, user, loading } = useAuth();
   const navigate = useNavigate();
   const { toast } = useToast();
+
+  const loginSchema = z.object({
+    email: z.string().email(t('validation.invalidEmail')),
+    password: z.string().min(6, t('validation.minLength', { count: 6 })),
+  });
 
   useEffect(() => {
     if (!loading && user) {
@@ -39,7 +42,7 @@ export default function Auth() {
       if (err instanceof z.ZodError) {
         toast({
           variant: 'destructive',
-          title: 'Validation Error',
+          title: t('common.error'),
           description: err.errors[0].message,
         });
         return;
@@ -53,9 +56,9 @@ export default function Auth() {
     if (error) {
       toast({
         variant: 'destructive',
-        title: 'Login Failed',
+        title: t('messages.loadFailed'),
         description: error.message === 'Invalid login credentials' 
-          ? 'Email or password is incorrect' 
+          ? 'Email atau password salah' 
           : error.message,
       });
     } else {
@@ -73,8 +76,8 @@ export default function Auth() {
       }
       
       toast({
-        title: 'Welcome back!',
-        description: 'You have successfully logged in.',
+        title: t('auth.welcomeBack'),
+        description: t('messages.saveSuccess'),
       });
       navigate('/dashboard');
     }
@@ -91,6 +94,11 @@ export default function Auth() {
   return (
     <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-background via-background to-primary/5 px-4">
       <div className="w-full max-w-md space-y-6">
+        {/* Language Switcher */}
+        <div className="flex justify-end">
+          <LanguageSwitcher />
+        </div>
+
         {/* Logo */}
         <div className="text-center space-y-2">
           <div className="flex items-center justify-center gap-2">
@@ -104,15 +112,15 @@ export default function Auth() {
 
         <Card className="shadow-soft">
           <CardHeader className="text-center">
-            <CardTitle>Staff Login</CardTitle>
+            <CardTitle>{t('auth.loginTitle')}</CardTitle>
             <CardDescription>
-              Enter your credentials to access the dashboard
+              {t('auth.enterCredentials')}
             </CardDescription>
           </CardHeader>
           <form onSubmit={handleLogin}>
             <CardContent className="space-y-4">
               <div className="space-y-2">
-                <Label htmlFor="login-email">Email</Label>
+                <Label htmlFor="login-email">{t('auth.email')}</Label>
                 <Input
                   id="login-email"
                   type="email"
@@ -123,7 +131,7 @@ export default function Auth() {
                 />
               </div>
               <div className="space-y-2">
-                <Label htmlFor="login-password">Password</Label>
+                <Label htmlFor="login-password">{t('auth.password')}</Label>
                 <Input
                   id="login-password"
                   type="password"
@@ -135,7 +143,7 @@ export default function Auth() {
               </div>
               <div className="text-right">
                 <a href="/forgot-password" className="text-sm text-primary hover:underline">
-                  Lupa password?
+                  {t('auth.forgotPassword')}
                 </a>
               </div>
             </CardContent>
@@ -144,15 +152,15 @@ export default function Auth() {
                 {isLoading ? (
                   <>
                     <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                    Logging in...
+                    {t('common.loading')}
                   </>
                 ) : (
-                  'Login'
+                  t('auth.login')
                 )}
               </Button>
               <div className="flex items-center gap-2 text-xs text-muted-foreground">
                 <Lock className="h-3 w-3" />
-                <span>New accounts can only be created by administrators</span>
+                <span>Akun baru hanya bisa dibuat oleh administrator</span>
               </div>
             </CardFooter>
           </form>
@@ -160,7 +168,7 @@ export default function Auth() {
 
         <div className="text-center">
           <a href="/portal/login" className="text-sm text-primary hover:underline">
-            Customer Portal Login →
+            Login Portal Pelanggan →
           </a>
         </div>
       </div>
