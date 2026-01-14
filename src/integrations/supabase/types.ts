@@ -104,6 +104,111 @@ export type Database = {
         }
         Relationships: []
       }
+      inventory_transactions: {
+        Row: {
+          created_at: string
+          created_by: string | null
+          id: string
+          notes: string | null
+          product_id: string
+          quantity: number
+          reference_id: string | null
+          stock_after: number
+          stock_before: number
+          transaction_type: string
+        }
+        Insert: {
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          notes?: string | null
+          product_id: string
+          quantity: number
+          reference_id?: string | null
+          stock_after: number
+          stock_before: number
+          transaction_type: string
+        }
+        Update: {
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          notes?: string | null
+          product_id?: string
+          quantity?: number
+          reference_id?: string | null
+          stock_after?: number
+          stock_before?: number
+          transaction_type?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "inventory_transactions_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "employees"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "inventory_transactions_product_id_fkey"
+            columns: ["product_id"]
+            isOneToOne: false
+            referencedRelation: "products"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      products: {
+        Row: {
+          category: Database["public"]["Enums"]["product_category"]
+          cost_price: number
+          created_at: string
+          description: string | null
+          id: string
+          is_active: boolean | null
+          is_service_item: boolean | null
+          min_stock_threshold: number
+          name: string
+          sell_price: number
+          sku: string
+          stock: number
+          unit: string
+          updated_at: string
+        }
+        Insert: {
+          category?: Database["public"]["Enums"]["product_category"]
+          cost_price?: number
+          created_at?: string
+          description?: string | null
+          id?: string
+          is_active?: boolean | null
+          is_service_item?: boolean | null
+          min_stock_threshold?: number
+          name: string
+          sell_price?: number
+          sku: string
+          stock?: number
+          unit?: string
+          updated_at?: string
+        }
+        Update: {
+          category?: Database["public"]["Enums"]["product_category"]
+          cost_price?: number
+          created_at?: string
+          description?: string | null
+          id?: string
+          is_active?: boolean | null
+          is_service_item?: boolean | null
+          min_stock_threshold?: number
+          name?: string
+          sell_price?: number
+          sku?: string
+          stock?: number
+          unit?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
       service_jobs: {
         Row: {
           actual_checkin_at: string | null
@@ -244,6 +349,57 @@ export type Database = {
           },
         ]
       }
+      stock_alerts: {
+        Row: {
+          acknowledged_at: string | null
+          acknowledged_by: string | null
+          alert_type: string
+          created_at: string
+          current_stock: number
+          id: string
+          product_id: string
+          status: string
+          threshold: number
+        }
+        Insert: {
+          acknowledged_at?: string | null
+          acknowledged_by?: string | null
+          alert_type?: string
+          created_at?: string
+          current_stock: number
+          id?: string
+          product_id: string
+          status?: string
+          threshold: number
+        }
+        Update: {
+          acknowledged_at?: string | null
+          acknowledged_by?: string | null
+          alert_type?: string
+          created_at?: string
+          current_stock?: number
+          id?: string
+          product_id?: string
+          status?: string
+          threshold?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "stock_alerts_acknowledged_by_fkey"
+            columns: ["acknowledged_by"]
+            isOneToOne: false
+            referencedRelation: "employees"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "stock_alerts_product_id_fkey"
+            columns: ["product_id"]
+            isOneToOne: false
+            referencedRelation: "products"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       technician_skills: {
         Row: {
           created_at: string
@@ -365,6 +521,7 @@ export type Database = {
     }
     Functions: {
       generate_job_number: { Args: never; Returns: string }
+      generate_sku: { Args: { category_prefix: string }; Returns: string }
       get_employee_id: { Args: { _user_id: string }; Returns: string }
       has_role: {
         Args: {
@@ -388,6 +545,12 @@ export type Database = {
         | "completed_paid"
         | "cancelled"
       payment_status: "pending" | "paid" | "partial" | "overdue"
+      product_category:
+        | "spare_parts"
+        | "consumables"
+        | "equipment"
+        | "accessories"
+        | "service_labor"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -529,6 +692,13 @@ export const Constants = {
         "cancelled",
       ],
       payment_status: ["pending", "paid", "partial", "overdue"],
+      product_category: [
+        "spare_parts",
+        "consumables",
+        "equipment",
+        "accessories",
+        "service_labor",
+      ],
     },
   },
 } as const
