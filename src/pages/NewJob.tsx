@@ -26,8 +26,9 @@ import {
 } from '@/components/ui/dialog';
 import { Badge } from '@/components/ui/badge';
 import { useToast } from '@/hooks/use-toast';
-import { ArrowLeft, Loader2, Wand2, Star, CheckCircle, User, Clock, AlertCircle } from 'lucide-react';
+import { ArrowLeft, Loader2, Wand2, Star, CheckCircle, User, Clock, AlertCircle, MapPin } from 'lucide-react';
 import { Link } from 'react-router-dom';
+import { LocationPicker } from '@/components/jobs/LocationPicker';
 
 interface Customer {
   id: string;
@@ -87,6 +88,8 @@ export default function NewJob() {
   const [scheduledDate, setScheduledDate] = useState('');
   const [estimatedDuration, setEstimatedDuration] = useState('60');
   const [serviceAddress, setServiceAddress] = useState('');
+  const [serviceLatitude, setServiceLatitude] = useState<number | null>(null);
+  const [serviceLongitude, setServiceLongitude] = useState<number | null>(null);
   const [serviceCost, setServiceCost] = useState('');
   const [requiredSkills, setRequiredSkills] = useState('');
 
@@ -220,6 +223,8 @@ export default function NewJob() {
         scheduled_date: scheduledDate || null,
         estimated_duration_minutes: parseInt(estimatedDuration) || 60,
         service_address: serviceAddress,
+        service_latitude: serviceLatitude,
+        service_longitude: serviceLongitude,
         service_cost: parseFloat(serviceCost) || 0,
         status: technicianId ? 'pending_approval' : 'pending_assignment',
         created_by: employee?.id,
@@ -326,13 +331,30 @@ export default function NewJob() {
                 </div>
 
                 <div className="space-y-2">
-                  <Label htmlFor="address">Service Address</Label>
+                  <Label htmlFor="address">Alamat Servis</Label>
                   <Textarea
                     id="address"
-                    placeholder="Enter service location address"
+                    placeholder="Masukkan alamat lokasi servis"
                     value={serviceAddress}
                     onChange={(e) => setServiceAddress(e.target.value)}
-                    rows={3}
+                    rows={2}
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <Label className="flex items-center gap-2">
+                    <MapPin className="h-4 w-4" />
+                    Lokasi GPS (untuk validasi check-in/out)
+                  </Label>
+                  <LocationPicker
+                    latitude={serviceLatitude}
+                    longitude={serviceLongitude}
+                    address={serviceAddress}
+                    onLocationChange={(lat, lng) => {
+                      setServiceLatitude(lat);
+                      setServiceLongitude(lng);
+                    }}
+                    onAddressChange={setServiceAddress}
                   />
                 </div>
               </CardContent>
