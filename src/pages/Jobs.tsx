@@ -99,7 +99,7 @@ export default function Jobs() {
           total_cost,
           created_at,
           customers (name),
-          employees (name)
+          employees!service_jobs_assigned_technician_id_fkey (name)
         `)
         .order('created_at', { ascending: false });
 
