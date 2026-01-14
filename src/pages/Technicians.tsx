@@ -33,9 +33,11 @@ import {
   RefreshCw,
   Wrench,
   Settings,
+  Clock,
 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import SkillsManagementDialog from '@/components/technicians/SkillsManagementDialog';
+import AvailabilityManagementDialog from '@/components/technicians/AvailabilityManagementDialog';
 
 interface Technician {
   id: string;
@@ -60,6 +62,7 @@ export default function Technicians() {
   const [newTechPhone, setNewTechPhone] = useState('');
   const [creating, setCreating] = useState(false);
   const [skillsDialogOpen, setSkillsDialogOpen] = useState(false);
+  const [availabilityDialogOpen, setAvailabilityDialogOpen] = useState(false);
   const [selectedTechnician, setSelectedTechnician] = useState<Technician | null>(null);
   const { toast } = useToast();
 
@@ -356,16 +359,30 @@ export default function Technicians() {
                           </div>
                         </TableCell>
                         <TableCell>
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => {
-                              setSelectedTechnician(tech);
-                              setSkillsDialogOpen(true);
-                            }}
-                          >
-                            <Settings className="h-4 w-4" />
-                          </Button>
+                          <div className="flex items-center gap-1">
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => {
+                                setSelectedTechnician(tech);
+                                setAvailabilityDialogOpen(true);
+                              }}
+                              title="Manage Availability"
+                            >
+                              <Clock className="h-4 w-4" />
+                            </Button>
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => {
+                                setSelectedTechnician(tech);
+                                setSkillsDialogOpen(true);
+                              }}
+                              title="Manage Skills"
+                            >
+                              <Settings className="h-4 w-4" />
+                            </Button>
+                          </div>
                         </TableCell>
                       </TableRow>
                     ))}
@@ -384,6 +401,17 @@ export default function Technicians() {
             technicianId={selectedTechnician.id}
             technicianName={selectedTechnician.name}
             onSkillsUpdated={fetchTechnicians}
+          />
+        )}
+
+        {/* Availability Management Dialog */}
+        {selectedTechnician && (
+          <AvailabilityManagementDialog
+            open={availabilityDialogOpen}
+            onOpenChange={setAvailabilityDialogOpen}
+            technicianId={selectedTechnician.id}
+            technicianName={selectedTechnician.name}
+            onAvailabilityUpdated={fetchTechnicians}
           />
         )}
       </div>

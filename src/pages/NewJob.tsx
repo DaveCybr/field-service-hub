@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
+import { useTechnicianAvailability } from '@/hooks/useTechnicianAvailability';
 import DashboardLayout from '@/components/layout/DashboardLayout';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -24,7 +25,7 @@ import {
 } from '@/components/ui/dialog';
 import { Badge } from '@/components/ui/badge';
 import { useToast } from '@/hooks/use-toast';
-import { ArrowLeft, Loader2, Wand2, Star, CheckCircle, User } from 'lucide-react';
+import { ArrowLeft, Loader2, Wand2, Star, CheckCircle, User, Clock, AlertCircle } from 'lucide-react';
 import { Link } from 'react-router-dom';
 
 interface Customer {
@@ -46,6 +47,9 @@ interface Technician {
   id: string;
   name: string;
   status: string;
+  isAvailable?: boolean;
+  availabilityReason?: string;
+  workingHours?: string;
 }
 
 interface TechnicianRecommendation {
@@ -63,7 +67,7 @@ export default function NewJob() {
   const navigate = useNavigate();
   const { employee } = useAuth();
   const { toast } = useToast();
-
+  const { getAvailableTechniciansForDate, loading: availabilityLoading } = useTechnicianAvailability();
   const [loading, setLoading] = useState(false);
   const [autoAssigning, setAutoAssigning] = useState(false);
   const [showRecommendations, setShowRecommendations] = useState(false);
@@ -121,14 +125,28 @@ export default function NewJob() {
     if (data) setUnits(data);
   };
 
-  const fetchTechnicians = async () => {
-    const { data } = await supabase
-      .from('employees')
-      .select('id, name, status')
-      .eq('role', 'technician')
-      .order('name');
-    if (data) setTechnicians(data);
+  const fetchTechnicians = async (forDate?: Date) => {
+    if (forDate) {
+      const availableTechs = await getAvailableTechniciansForDate(forDate);
+      setTechnicians(availableTechs);
+    } else {
+      const { data } = await supabase
+        .from('employees')
+        .select('id, name, status')
+        .eq('role', 'technician')
+        .order('name');
+      if (data) setTechnicians(data.map(t => ({ ...t, isAvailable: true })));
+    }
   };
+
+  // Update technicians when scheduled date changes
+  useEffect(() => {
+    if (scheduledDate) {
+      fetchTechnicians(new Date(scheduledDate));
+    } else {
+      fetchTechnicians();
+    }
+  }, [scheduledDate]);
 
   const handleAutoAssign = async () => {
     setAutoAssigning(true);
@@ -415,24 +433,55 @@ export default function NewJob() {
                 </div>
 
                 <div className="space-y-2">
-                  <Label htmlFor="technician">Assign Technician</Label>
+                  <div className="flex items-center justify-between">
+                    <Label htmlFor="technician">Assign Technician</Label>
+                    {scheduledDate && availabilityLoading && (
+                      <span className="text-xs text-muted-foreground flex items-center gap-1">
+                        <Loader2 className="h-3 w-3 animate-spin" />
+                        Checking availability...
+                      </span>
+                    )}
+                  </div>
                   <Select value={technicianId} onValueChange={setTechnicianId}>
                     <SelectTrigger>
                       <SelectValue placeholder="Select technician (optional)" />
                     </SelectTrigger>
                     <SelectContent>
                       {technicians.map((tech) => (
-                        <SelectItem key={tech.id} value={tech.id}>
-                          {tech.name}
-                          <span className={`ml-2 text-xs ${
-                            tech.status === 'available' ? 'text-emerald-600' : 'text-amber-600'
-                          }`}>
-                            ({tech.status})
-                          </span>
+                        <SelectItem 
+                          key={tech.id} 
+                          value={tech.id}
+                          disabled={tech.isAvailable === false}
+                        >
+                          <div className="flex items-center gap-2">
+                            <span>{tech.name}</span>
+                            {scheduledDate && tech.isAvailable === false ? (
+                              <Badge variant="outline" className="text-xs border-destructive text-destructive">
+                                Unavailable
+                              </Badge>
+                            ) : scheduledDate && tech.workingHours ? (
+                              <Badge variant="outline" className="text-xs border-emerald-500 text-emerald-700">
+                                <Clock className="h-3 w-3 mr-1" />
+                                {tech.workingHours}
+                              </Badge>
+                            ) : (
+                              <span className={`text-xs ${
+                                tech.status === 'available' ? 'text-emerald-600' : 'text-amber-600'
+                              }`}>
+                                ({tech.status})
+                              </span>
+                            )}
+                          </div>
                         </SelectItem>
                       ))}
                     </SelectContent>
                   </Select>
+                  {scheduledDate && technicians.some(t => t.isAvailable === false) && (
+                    <p className="text-xs text-muted-foreground flex items-center gap-1">
+                      <AlertCircle className="h-3 w-3" />
+                      Some technicians are unavailable on the selected date
+                    </p>
+                  )}
                 </div>
 
                 <div className="space-y-2">
