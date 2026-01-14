@@ -33,6 +33,7 @@ import {
   RefreshCw,
   CalendarDays,
   List,
+  Map,
 } from 'lucide-react';
 import {
   DropdownMenu,
@@ -43,6 +44,7 @@ import {
 import { format } from 'date-fns';
 import { useToast } from '@/hooks/use-toast';
 import JobCalendar from '@/components/jobs/JobCalendar';
+import { JobsOverviewMap } from '@/components/jobs/JobsOverviewMap';
 
 interface Job {
   id: string;
@@ -63,7 +65,7 @@ export default function Jobs() {
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
   const [priorityFilter, setPriorityFilter] = useState('all');
-  const [viewMode, setViewMode] = useState<'list' | 'calendar'>('list');
+  const [viewMode, setViewMode] = useState<'list' | 'calendar' | 'map'>('list');
   const { toast } = useToast();
   const { userRole, isSuperadmin, isAdmin } = useAuth();
 
@@ -225,6 +227,7 @@ export default function Jobs() {
                   variant={viewMode === 'list' ? 'secondary' : 'ghost'}
                   size="sm"
                   onClick={() => setViewMode('list')}
+                  title="List View"
                 >
                   <List className="h-4 w-4" />
                 </Button>
@@ -232,9 +235,20 @@ export default function Jobs() {
                   variant={viewMode === 'calendar' ? 'secondary' : 'ghost'}
                   size="sm"
                   onClick={() => setViewMode('calendar')}
+                  title="Calendar View"
                 >
                   <CalendarDays className="h-4 w-4" />
                 </Button>
+                {canCreateJobs && (
+                  <Button
+                    variant={viewMode === 'map' ? 'secondary' : 'ghost'}
+                    size="sm"
+                    onClick={() => setViewMode('map')}
+                    title="Map View"
+                  >
+                    <Map className="h-4 w-4" />
+                  </Button>
+                )}
               </div>
             )}
             {canCreateJobs && (
@@ -296,8 +310,11 @@ export default function Jobs() {
           </CardContent>
         </Card>
 
-        {/* Calendar View */}
-        {viewMode === 'calendar' ? (
+        {/* Map View */}
+        {viewMode === 'map' ? (
+          <JobsOverviewMap />
+        ) : viewMode === 'calendar' ? (
+          /* Calendar View */
           <Card>
             <CardContent className="p-4">
               {loading ? (
