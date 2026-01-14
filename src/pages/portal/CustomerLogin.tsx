@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
 import { supabase } from '@/integrations/supabase/client';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -7,8 +8,10 @@ import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { useToast } from '@/hooks/use-toast';
 import { Wrench, Loader2, ArrowLeft } from 'lucide-react';
+import { LanguageSwitcher } from '@/components/LanguageSwitcher';
 
 export default function CustomerLogin() {
+  const { t } = useTranslation();
   const navigate = useNavigate();
   const { toast } = useToast();
   const [loading, setLoading] = useState(false);
@@ -38,15 +41,15 @@ export default function CustomerLogin() {
         await supabase.auth.signOut();
         toast({
           variant: 'destructive',
-          title: 'Access Denied',
-          description: 'This account is not linked to a customer profile. Please contact support.',
+          title: t('common.error'),
+          description: t('messages.loadFailed'),
         });
         return;
       }
 
       toast({
-        title: 'Welcome back!',
-        description: 'You have successfully signed in.',
+        title: t('auth.welcomeBack'),
+        description: t('messages.saveSuccess'),
       });
 
       navigate('/portal');
@@ -54,8 +57,8 @@ export default function CustomerLogin() {
       console.error('Login error:', error);
       toast({
         variant: 'destructive',
-        title: 'Login failed',
-        description: error.message || 'Please check your credentials and try again.',
+        title: t('common.error'),
+        description: error.message || t('messages.loadFailed'),
       });
     } finally {
       setLoading(false);
@@ -64,26 +67,29 @@ export default function CustomerLogin() {
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-background to-muted p-4">
+      <div className="absolute top-4 right-4">
+        <LanguageSwitcher />
+      </div>
       <div className="w-full max-w-md">
         <div className="text-center mb-8">
           <div className="inline-flex items-center justify-center h-16 w-16 rounded-2xl bg-primary text-primary-foreground mb-4">
             <Wrench className="h-8 w-8" />
           </div>
-          <h1 className="text-2xl font-bold">Customer Portal</h1>
-          <p className="text-muted-foreground mt-2">Track your service jobs and history</p>
+          <h1 className="text-2xl font-bold">{t('portal.customerPortal')}</h1>
+          <p className="text-muted-foreground mt-2">{t('portal.trackService')}</p>
         </div>
 
         <Card>
           <CardHeader>
-            <CardTitle>Sign In</CardTitle>
+            <CardTitle>{t('auth.signIn')}</CardTitle>
             <CardDescription>
-              Enter your credentials to access your service portal
+              {t('portal.signInCredentials')}
             </CardDescription>
           </CardHeader>
           <CardContent>
             <form onSubmit={handleLogin} className="space-y-4">
               <div className="space-y-2">
-                <Label htmlFor="email">Email</Label>
+                <Label htmlFor="email">{t('common.email')}</Label>
                 <Input
                   id="email"
                   type="email"
@@ -94,7 +100,7 @@ export default function CustomerLogin() {
                 />
               </div>
               <div className="space-y-2">
-                <Label htmlFor="password">Password</Label>
+                <Label htmlFor="password">{t('auth.password')}</Label>
                 <Input
                   id="password"
                   type="password"
@@ -108,10 +114,10 @@ export default function CustomerLogin() {
                 {loading ? (
                   <>
                     <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                    Signing in...
+                    {t('common.loading')}
                   </>
                 ) : (
-                  'Sign In'
+                  t('auth.signIn')
                 )}
               </Button>
             </form>
@@ -121,7 +127,7 @@ export default function CustomerLogin() {
         <div className="mt-6 text-center">
           <Link to="/auth" className="text-sm text-muted-foreground hover:text-primary flex items-center justify-center gap-1">
             <ArrowLeft className="h-4 w-4" />
-            Staff Login
+            {t('auth.staffLogin')}
           </Link>
         </div>
       </div>

@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
 import DashboardLayout from '@/components/layout/DashboardLayout';
@@ -40,6 +41,7 @@ interface RecentJob {
 }
 
 export default function Dashboard() {
+  const { t } = useTranslation();
   const { employee, userRole, isSuperadmin, isAdmin } = useAuth();
   const [stats, setStats] = useState<DashboardStats>({
     totalJobsToday: 0,
@@ -137,7 +139,7 @@ export default function Dashboard() {
           title: job.title,
           status: job.status,
           priority: job.priority,
-          customer_name: (job.customers as any)?.name || 'Unknown',
+          customer_name: (job.customers as any)?.name || t('common.unknown'),
           technician_name: (job.employees as any)?.name || null,
           created_at: job.created_at,
         })));
@@ -150,54 +152,54 @@ export default function Dashboard() {
   };
 
   const getStatusBadge = (status: string) => {
-    const statusConfig: Record<string, { label: string; className: string }> = {
-      pending_assignment: { label: 'Pending', className: 'badge-status-pending' },
-      pending_approval: { label: 'Needs Approval', className: 'badge-status-pending' },
-      approved: { label: 'Approved', className: 'badge-status-approved' },
-      in_progress: { label: 'In Progress', className: 'badge-status-progress' },
-      completed: { label: 'Completed', className: 'badge-status-completed' },
-      completed_paid: { label: 'Paid', className: 'badge-status-completed' },
-      cancelled: { label: 'Cancelled', className: 'badge-status-cancelled' },
+    const statusConfig: Record<string, { labelKey: string; className: string }> = {
+      pending_assignment: { labelKey: 'jobStatus.pending', className: 'badge-status-pending' },
+      pending_approval: { labelKey: 'jobStatus.needsApproval', className: 'badge-status-pending' },
+      approved: { labelKey: 'jobStatus.approved', className: 'badge-status-approved' },
+      in_progress: { labelKey: 'jobStatus.in_progress', className: 'badge-status-progress' },
+      completed: { labelKey: 'jobStatus.completed', className: 'badge-status-completed' },
+      completed_paid: { labelKey: 'jobStatus.paid', className: 'badge-status-completed' },
+      cancelled: { labelKey: 'jobStatus.cancelled', className: 'badge-status-cancelled' },
     };
-    const config = statusConfig[status] || { label: status, className: '' };
-    return <Badge variant="outline" className={config.className}>{config.label}</Badge>;
+    const config = statusConfig[status] || { labelKey: status, className: '' };
+    return <Badge variant="outline" className={config.className}>{t(config.labelKey)}</Badge>;
   };
 
   const getPriorityBadge = (priority: string) => {
-    const priorityConfig: Record<string, { label: string; className: string }> = {
-      low: { label: 'Low', className: 'badge-priority-low' },
-      normal: { label: 'Normal', className: 'badge-priority-normal' },
-      high: { label: 'High', className: 'badge-priority-high' },
-      urgent: { label: 'Urgent', className: 'badge-priority-urgent' },
+    const priorityConfig: Record<string, { labelKey: string; className: string }> = {
+      low: { labelKey: 'jobPriority.low', className: 'badge-priority-low' },
+      normal: { labelKey: 'jobPriority.normal', className: 'badge-priority-normal' },
+      high: { labelKey: 'jobPriority.high', className: 'badge-priority-high' },
+      urgent: { labelKey: 'jobPriority.urgent', className: 'badge-priority-urgent' },
     };
-    const config = priorityConfig[priority] || { label: priority, className: '' };
-    return <Badge className={config.className}>{config.label}</Badge>;
+    const config = priorityConfig[priority] || { labelKey: priority, className: '' };
+    return <Badge className={config.className}>{t(config.labelKey)}</Badge>;
   };
 
   const statCards = [
     {
-      title: 'Jobs Today',
+      title: t('dashboard.todayJobs'),
       value: stats.totalJobsToday,
       icon: Wrench,
       color: 'text-primary',
       bgColor: 'bg-primary/10',
     },
     {
-      title: 'Pending Approval',
+      title: t('dashboard.pendingApproval'),
       value: stats.pendingApprovals,
       icon: Clock,
       color: 'text-amber-600',
       bgColor: 'bg-amber-100',
     },
     {
-      title: 'In Progress',
+      title: t('dashboard.inProgress'),
       value: stats.inProgress,
       icon: TrendingUp,
       color: 'text-blue-600',
       bgColor: 'bg-blue-100',
     },
     {
-      title: 'Completed Today',
+      title: t('dashboard.completedToday'),
       value: stats.completedToday,
       icon: CheckCircle2,
       color: 'text-emerald-600',
@@ -230,16 +232,16 @@ export default function Dashboard() {
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
           <div>
             <h1 className="text-2xl font-bold tracking-tight">
-              Welcome back, {employee?.name?.split(' ')[0] || 'User'}!
+              {t('dashboard.welcomeBack')}, {employee?.name?.split(' ')[0] || 'User'}!
             </h1>
             <p className="text-muted-foreground">
-              Here's what's happening with your service operations today.
+              {t('dashboard.welcomeMessage')}
             </p>
           </div>
           <Button asChild>
             <Link to="/jobs/new">
               <Plus className="mr-2 h-4 w-4" />
-              New Service Job
+              {t('dashboard.newServiceJob')}
             </Link>
           </Button>
         </div>
@@ -268,14 +270,14 @@ export default function Dashboard() {
         <Card>
           <CardHeader className="flex flex-row items-center justify-between">
             <div>
-              <CardTitle className="text-lg">Technician Availability</CardTitle>
+              <CardTitle className="text-lg">{t('dashboard.technicianAvailability')}</CardTitle>
               <CardDescription>
-                {stats.availableTechnicians} of {stats.totalTechnicians} technicians available
+                {t('dashboard.techniciansAvailable', { available: stats.availableTechnicians, total: stats.totalTechnicians })}
               </CardDescription>
             </div>
             <Button variant="outline" asChild>
               <Link to="/technicians">
-                View All
+                {t('dashboard.viewAll')}
                 <ArrowRight className="ml-2 h-4 w-4" />
               </Link>
             </Button>
@@ -305,12 +307,12 @@ export default function Dashboard() {
         <Card>
           <CardHeader className="flex flex-row items-center justify-between">
             <div>
-              <CardTitle className="text-lg">Recent Service Jobs</CardTitle>
-              <CardDescription>Latest jobs created in the system</CardDescription>
+              <CardTitle className="text-lg">{t('dashboard.recentJobs')}</CardTitle>
+              <CardDescription>{t('dashboard.latestJobsCreated')}</CardDescription>
             </div>
             <Button variant="outline" asChild>
               <Link to="/jobs">
-                View All Jobs
+                {t('dashboard.viewAllJobs')}
                 <ArrowRight className="ml-2 h-4 w-4" />
               </Link>
             </Button>
@@ -323,14 +325,14 @@ export default function Dashboard() {
             ) : recentJobs.length === 0 ? (
               <div className="text-center py-8">
                 <AlertCircle className="mx-auto h-12 w-12 text-muted-foreground/50" />
-                <h3 className="mt-4 text-lg font-medium">No jobs yet</h3>
+                <h3 className="mt-4 text-lg font-medium">{t('dashboard.noJobsYet')}</h3>
                 <p className="mt-2 text-sm text-muted-foreground">
-                  Get started by creating your first service job.
+                  {t('dashboard.getStartedJob')}
                 </p>
                 <Button asChild className="mt-4">
                   <Link to="/jobs/new">
                     <Plus className="mr-2 h-4 w-4" />
-                    Create Job
+                    {t('dashboard.createJob')}
                   </Link>
                 </Button>
               </div>
@@ -352,7 +354,7 @@ export default function Dashboard() {
                       <p className="font-medium mt-1 truncate">{job.title}</p>
                       <p className="text-sm text-muted-foreground mt-0.5">
                         {job.customer_name}
-                        {job.technician_name && ` • Assigned to ${job.technician_name}`}
+                        {job.technician_name && ` • ${t('dashboard.assignedTo')} ${job.technician_name}`}
                       </p>
                     </div>
                     <div className="ml-4 flex-shrink-0">

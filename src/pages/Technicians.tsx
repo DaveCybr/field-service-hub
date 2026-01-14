@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { supabase } from '@/integrations/supabase/client';
 import DashboardLayout from '@/components/layout/DashboardLayout';
 import { Button } from '@/components/ui/button';
@@ -53,6 +54,7 @@ interface Technician {
 }
 
 export default function Technicians() {
+  const { t } = useTranslation();
   const [technicians, setTechnicians] = useState<Technician[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
@@ -104,8 +106,8 @@ export default function Technicians() {
       console.error('Error fetching technicians:', error);
       toast({
         variant: 'destructive',
-        title: 'Error',
-        description: 'Failed to load technicians.',
+        title: t('common.error'),
+        description: t('messages.loadFailed'),
       });
     } finally {
       setLoading(false);
@@ -116,8 +118,8 @@ export default function Technicians() {
     if (!newTechName || !newTechEmail) {
       toast({
         variant: 'destructive',
-        title: 'Validation Error',
-        description: 'Name and email are required.',
+        title: t('common.error'),
+        description: t('validation.nameEmailRequired'),
       });
       return;
     }
@@ -137,8 +139,8 @@ export default function Technicians() {
       if (error) throw error;
 
       toast({
-        title: 'Technician Added',
-        description: `${newTechName} has been added to the team.`,
+        title: t('technicians.technicianAdded'),
+        description: t('technicians.technicianAddedDesc', { name: newTechName }),
       });
 
       setDialogOpen(false);
@@ -150,8 +152,8 @@ export default function Technicians() {
       console.error('Error creating technician:', error);
       toast({
         variant: 'destructive',
-        title: 'Error',
-        description: error.message || 'Failed to add technician.',
+        title: t('common.error'),
+        description: error.message || t('messages.saveFailed'),
       });
     } finally {
       setCreating(false);
@@ -159,14 +161,14 @@ export default function Technicians() {
   };
 
   const getStatusBadge = (status: string) => {
-    const statusConfig: Record<string, { label: string; className: string }> = {
-      available: { label: 'Available', className: 'bg-emerald-100 text-emerald-800' },
-      on_job: { label: 'On Job', className: 'bg-blue-100 text-blue-800' },
-      locked: { label: 'Locked', className: 'bg-red-100 text-red-800' },
-      off_duty: { label: 'Off Duty', className: 'bg-gray-100 text-gray-800' },
+    const statusConfig: Record<string, { labelKey: string; className: string }> = {
+      available: { labelKey: 'technicians.available', className: 'bg-emerald-100 text-emerald-800' },
+      on_job: { labelKey: 'technicians.onJob', className: 'bg-blue-100 text-blue-800' },
+      locked: { labelKey: 'technicians.locked', className: 'bg-red-100 text-red-800' },
+      off_duty: { labelKey: 'technicians.offDuty', className: 'bg-gray-100 text-gray-800' },
     };
-    const config = statusConfig[status] || { label: status, className: '' };
-    return <Badge className={config.className}>{config.label}</Badge>;
+    const config = statusConfig[status] || { labelKey: status, className: '' };
+    return <Badge className={config.className}>{t(config.labelKey)}</Badge>;
   };
 
   const getInitials = (name: string) => {
@@ -189,28 +191,28 @@ export default function Technicians() {
         {/* Header */}
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
           <div>
-            <h1 className="text-2xl font-bold tracking-tight">Technicians</h1>
+            <h1 className="text-2xl font-bold tracking-tight">{t('technicians.title')}</h1>
             <p className="text-muted-foreground">
-              Manage your field service technicians
+              {t('technicians.subtitle')}
             </p>
           </div>
           <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
             <DialogTrigger asChild>
               <Button>
                 <Plus className="mr-2 h-4 w-4" />
-                Add Technician
+                {t('technicians.addTechnician')}
               </Button>
             </DialogTrigger>
             <DialogContent>
               <DialogHeader>
-                <DialogTitle>Add New Technician</DialogTitle>
+                <DialogTitle>{t('technicians.newTechnician')}</DialogTitle>
                 <DialogDescription>
-                  Enter the details for the new technician.
+                  {t('technicians.enterDetails')}
                 </DialogDescription>
               </DialogHeader>
               <div className="space-y-4 py-4">
                 <div className="space-y-2">
-                  <Label htmlFor="name">Full Name *</Label>
+                  <Label htmlFor="name">{t('auth.fullName')} *</Label>
                   <Input
                     id="name"
                     placeholder="John Doe"
@@ -219,7 +221,7 @@ export default function Technicians() {
                   />
                 </div>
                 <div className="space-y-2">
-                  <Label htmlFor="email">Email *</Label>
+                  <Label htmlFor="email">{t('common.email')} *</Label>
                   <Input
                     id="email"
                     type="email"
@@ -229,7 +231,7 @@ export default function Technicians() {
                   />
                 </div>
                 <div className="space-y-2">
-                  <Label htmlFor="phone">Phone</Label>
+                  <Label htmlFor="phone">{t('common.phone')}</Label>
                   <Input
                     id="phone"
                     placeholder="+62 812 3456 7890"
@@ -240,10 +242,10 @@ export default function Technicians() {
               </div>
               <DialogFooter>
                 <Button variant="outline" onClick={() => setDialogOpen(false)}>
-                  Cancel
+                  {t('common.cancel')}
                 </Button>
                 <Button onClick={handleCreateTechnician} disabled={creating}>
-                  {creating ? 'Adding...' : 'Add Technician'}
+                  {creating ? t('common.adding') : t('technicians.addTechnician')}
                 </Button>
               </DialogFooter>
             </DialogContent>
@@ -257,7 +259,7 @@ export default function Technicians() {
               <div className="relative flex-1">
                 <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
                 <Input
-                  placeholder="Search technicians..."
+                  placeholder={t('technicians.searchTechnicians')}
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
                   className="pl-9"
@@ -279,9 +281,9 @@ export default function Technicians() {
               </div>
             ) : filteredTechnicians.length === 0 ? (
               <div className="text-center py-12">
-                <h3 className="text-lg font-medium">No technicians found</h3>
+                <h3 className="text-lg font-medium">{t('technicians.noTechniciansFound')}</h3>
                 <p className="mt-2 text-sm text-muted-foreground">
-                  Add your first technician to get started.
+                  {t('technicians.addFirstTechnician')}
                 </p>
               </div>
             ) : (
@@ -289,13 +291,13 @@ export default function Technicians() {
                 <Table>
                   <TableHeader>
                     <TableRow>
-                      <TableHead>Technician</TableHead>
-                      <TableHead>Contact</TableHead>
-                      <TableHead>Status</TableHead>
-                      <TableHead>Rating</TableHead>
-                      <TableHead>Jobs Completed</TableHead>
-                      <TableHead>Skills</TableHead>
-                      <TableHead className="w-[80px]">Actions</TableHead>
+                      <TableHead>{t('technicians.title')}</TableHead>
+                      <TableHead>{t('common.contact')}</TableHead>
+                      <TableHead>{t('common.status')}</TableHead>
+                      <TableHead>{t('technicians.rating')}</TableHead>
+                      <TableHead>{t('technicians.jobsCompleted')}</TableHead>
+                      <TableHead>{t('technicians.skills')}</TableHead>
+                      <TableHead className="w-[80px]">{t('common.actions')}</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
@@ -338,7 +340,7 @@ export default function Technicians() {
                         </TableCell>
                         <TableCell>
                           <span className="font-medium">{tech.total_jobs_completed}</span>
-                          <span className="text-muted-foreground"> jobs</span>
+                          <span className="text-muted-foreground"> {t('technicians.jobs')}</span>
                         </TableCell>
                         <TableCell>
                           <div className="flex flex-wrap gap-1">
@@ -349,7 +351,7 @@ export default function Technicians() {
                                 </Badge>
                               ))
                             ) : (
-                              <span className="text-muted-foreground text-sm italic">No skills</span>
+                              <span className="text-muted-foreground text-sm italic">{t('technicians.noSkills')}</span>
                             )}
                             {tech.skills.length > 3 && (
                               <Badge variant="secondary" className="text-xs">
@@ -367,7 +369,7 @@ export default function Technicians() {
                                 setSelectedTechnician(tech);
                                 setAvailabilityDialogOpen(true);
                               }}
-                              title="Manage Availability"
+                              title={t('technicians.manageAvailability')}
                             >
                               <Clock className="h-4 w-4" />
                             </Button>
@@ -378,7 +380,7 @@ export default function Technicians() {
                                 setSelectedTechnician(tech);
                                 setSkillsDialogOpen(true);
                               }}
-                              title="Manage Skills"
+                              title={t('technicians.manageSkills')}
                             >
                               <Settings className="h-4 w-4" />
                             </Button>
