@@ -1,1 +1,4 @@
 project_id = "uhxiloagucpjbcnyditg"
+
+[functions.auto-assign-technician]
+verify_jwt = false
