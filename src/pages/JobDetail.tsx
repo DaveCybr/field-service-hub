@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuditLog } from '@/hooks/useAuditLog';
+import { useAuth } from '@/hooks/useAuth';
 import DashboardLayout from '@/components/layout/DashboardLayout';
 import JobPhotoGallery from '@/components/jobs/JobPhotoGallery';
 import { Button } from '@/components/ui/button';
@@ -141,6 +142,17 @@ export default function JobDetail() {
   const [notesDialogOpen, setNotesDialogOpen] = useState(false);
   const [adminNotes, setAdminNotes] = useState('');
 
+  // Payment dialog state (for cashier)
+  const [paymentDialogOpen, setPaymentDialogOpen] = useState(false);
+  const [paymentMethod, setPaymentMethod] = useState('cash');
+  const [paymentNotes, setPaymentNotes] = useState('');
+  const [processingPayment, setProcessingPayment] = useState(false);
+
+  // Auth for role check
+  const { userRole } = useAuth();
+  const isCashier = userRole === 'cashier';
+  const canProcessPayment = isCashier || userRole === 'superadmin' || userRole === 'admin' || userRole === 'manager';
+
   useEffect(() => {
     if (id) {
       fetchJob();
@@ -271,6 +283,60 @@ export default function JobDetail() {
       });
     } finally {
       setUpdating(false);
+    }
+  };
+
+  // Mark job as paid (cashier function)
+  const markAsPaid = async () => {
+    if (!job) return;
+    setProcessingPayment(true);
+    try {
+      const { error } = await supabase
+        .from('service_jobs')
+        .update({ 
+          status: 'completed_paid',
+          payment_status: 'paid',
+          admin_notes: job.admin_notes 
+            ? `${job.admin_notes}\n\n--- Payment ---\nMethod: ${paymentMethod}\nProcessed: ${new Date().toLocaleString()}${paymentNotes ? `\nNotes: ${paymentNotes}` : ''}`
+            : `--- Payment ---\nMethod: ${paymentMethod}\nProcessed: ${new Date().toLocaleString()}${paymentNotes ? `\nNotes: ${paymentNotes}` : ''}`
+        })
+        .eq('id', job.id);
+
+      if (error) throw error;
+
+      // Audit log for payment
+      await auditLog({
+        action: 'payment',
+        entityType: 'job',
+        entityId: job.id,
+        oldData: { status: job.status, payment_status: job.payment_status },
+        newData: { 
+          status: 'completed_paid', 
+          payment_status: 'paid',
+          payment_method: paymentMethod,
+          job_number: job.job_number,
+          total_cost: job.total_cost
+        },
+      });
+
+      toast({
+        title: 'Payment Processed',
+        description: `Payment for ${job.job_number} has been marked as paid.`,
+      });
+      
+      setPaymentDialogOpen(false);
+      setPaymentMethod('cash');
+      setPaymentNotes('');
+      fetchJob();
+    } catch (error) {
+      console.error('Error processing payment:', error);
+      toast({
+        variant: 'destructive',
+        title: 'Error',
+        description: 'Failed to process payment.',
+      });
+    } finally {
+      setProcessingPayment(false);
     }
   };
 
@@ -436,8 +502,18 @@ export default function JobDetail() {
   };
 
 
-  const getNextActions = (): { label: string; status: JobStatus; variant: 'default' | 'outline' | 'destructive' }[] => {
+  const getNextActions = (): { label: string; status: JobStatus; variant: 'default' | 'outline' | 'destructive'; isPayment?: boolean }[] => {
     if (!job) return [];
+    
+    // Cashier only sees payment-related actions for completed jobs
+    if (isCashier) {
+      if (job.status === 'completed') {
+        return [
+          { label: 'Process Payment', status: 'completed_paid', variant: 'default', isPayment: true },
+        ];
+      }
+      return [];
+    }
     
     switch (job.status) {
       case 'pending_approval':
@@ -454,9 +530,9 @@ export default function JobDetail() {
           { label: 'Complete Job', status: 'completed', variant: 'default' },
         ];
       case 'completed':
-        return [
-          { label: 'Mark as Paid', status: 'completed_paid', variant: 'default' },
-        ];
+        return canProcessPayment 
+          ? [{ label: 'Mark as Paid', status: 'completed_paid', variant: 'default', isPayment: true }]
+          : [];
       default:
         return [];
     }
@@ -516,42 +592,148 @@ export default function JobDetail() {
           
           <div className="flex flex-wrap gap-2">
             {getNextActions().map((action) => (
-              <Button 
-                key={action.status}
-                variant={action.variant}
-                onClick={() => updateJobStatus(action.status)}
-                disabled={updating}
-              >
-                {action.label}
-              </Button>
-            ))}
-            <Dialog open={notesDialogOpen} onOpenChange={setNotesDialogOpen}>
-              <DialogTrigger asChild>
-                <Button variant="outline">
-                  <FileText className="mr-2 h-4 w-4" />
-                  Notes
+              action.isPayment ? (
+                <Button 
+                  key={action.status}
+                  variant={action.variant}
+                  onClick={() => setPaymentDialogOpen(true)}
+                  disabled={updating}
+                >
+                  <DollarSign className="mr-2 h-4 w-4" />
+                  {action.label}
                 </Button>
-              </DialogTrigger>
-              <DialogContent>
+              ) : (
+                <Button 
+                  key={action.status}
+                  variant={action.variant}
+                  onClick={() => updateJobStatus(action.status)}
+                  disabled={updating}
+                >
+                  {action.label}
+                </Button>
+              )
+            ))}
+            
+            {/* Payment Dialog */}
+            <Dialog open={paymentDialogOpen} onOpenChange={setPaymentDialogOpen}>
+              <DialogContent className="sm:max-w-md">
                 <DialogHeader>
-                  <DialogTitle>Admin Notes</DialogTitle>
+                  <DialogTitle className="flex items-center gap-2">
+                    <DollarSign className="h-5 w-5 text-emerald-600" />
+                    Process Payment
+                  </DialogTitle>
                 </DialogHeader>
                 <div className="space-y-4">
+                  {/* Payment Summary */}
+                  <div className="rounded-lg border bg-muted/50 p-4 space-y-2">
+                    <div className="flex justify-between text-sm">
+                      <span className="text-muted-foreground">Job Number</span>
+                      <span className="font-medium">{job.job_number}</span>
+                    </div>
+                    <div className="flex justify-between text-sm">
+                      <span className="text-muted-foreground">Service Cost</span>
+                      <span>{formatCurrency(job.service_cost)}</span>
+                    </div>
+                    <div className="flex justify-between text-sm">
+                      <span className="text-muted-foreground">Parts Cost</span>
+                      <span>{formatCurrency(job.parts_cost)}</span>
+                    </div>
+                    <Separator />
+                    <div className="flex justify-between font-medium">
+                      <span>Total Amount</span>
+                      <span className="text-lg text-emerald-600">{formatCurrency(job.total_cost)}</span>
+                    </div>
+                  </div>
+
+                  {/* Payment Method */}
                   <div className="space-y-2">
-                    <Label>Notes</Label>
+                    <Label>Payment Method</Label>
+                    <Select value={paymentMethod} onValueChange={setPaymentMethod}>
+                      <SelectTrigger>
+                        <SelectValue placeholder="Select payment method" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="cash">Cash</SelectItem>
+                        <SelectItem value="transfer">Bank Transfer</SelectItem>
+                        <SelectItem value="card">Credit/Debit Card</SelectItem>
+                        <SelectItem value="qris">QRIS</SelectItem>
+                        <SelectItem value="other">Other</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  {/* Payment Notes */}
+                  <div className="space-y-2">
+                    <Label>Notes (Optional)</Label>
                     <Textarea
-                      value={adminNotes}
-                      onChange={(e) => setAdminNotes(e.target.value)}
-                      rows={6}
-                      placeholder="Add internal notes about this job..."
+                      value={paymentNotes}
+                      onChange={(e) => setPaymentNotes(e.target.value)}
+                      rows={3}
+                      placeholder="Add payment notes if needed..."
                     />
                   </div>
-                  <Button onClick={saveAdminNotes} disabled={updating} className="w-full">
-                    Save Notes
-                  </Button>
+
+                  {/* Action Buttons */}
+                  <div className="flex gap-2 pt-2">
+                    <Button 
+                      variant="outline" 
+                      className="flex-1"
+                      onClick={() => setPaymentDialogOpen(false)}
+                    >
+                      Cancel
+                    </Button>
+                    <Button 
+                      className="flex-1 bg-emerald-600 hover:bg-emerald-700"
+                      onClick={markAsPaid}
+                      disabled={processingPayment}
+                    >
+                      {processingPayment ? (
+                        <>
+                          <div className="h-4 w-4 animate-spin rounded-full border-2 border-current border-t-transparent mr-2" />
+                          Processing...
+                        </>
+                      ) : (
+                        <>
+                          <CheckCircle className="mr-2 h-4 w-4" />
+                          Confirm Payment
+                        </>
+                      )}
+                    </Button>
+                  </div>
                 </div>
               </DialogContent>
             </Dialog>
+
+            {/* Notes Dialog - only show for non-cashier */}
+            {!isCashier && (
+              <Dialog open={notesDialogOpen} onOpenChange={setNotesDialogOpen}>
+                <DialogTrigger asChild>
+                  <Button variant="outline">
+                    <FileText className="mr-2 h-4 w-4" />
+                    Notes
+                  </Button>
+                </DialogTrigger>
+                <DialogContent>
+                  <DialogHeader>
+                    <DialogTitle>Admin Notes</DialogTitle>
+                  </DialogHeader>
+                  <div className="space-y-4">
+                    <div className="space-y-2">
+                      <Label>Notes</Label>
+                      <Textarea
+                        value={adminNotes}
+                        onChange={(e) => setAdminNotes(e.target.value)}
+                        rows={6}
+                        placeholder="Add internal notes about this job..."
+                      />
+                    </div>
+                    <Button onClick={saveAdminNotes} disabled={updating} className="w-full">
+                      Save Notes
+                    </Button>
+                  </div>
+                </DialogContent>
+              </Dialog>
+            )}
           </div>
         </div>
 
