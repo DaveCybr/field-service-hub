@@ -6,6 +6,7 @@ import { useAuth } from '@/hooks/useAuth';
 import DashboardLayout from '@/components/layout/DashboardLayout';
 import JobPhotoGallery from '@/components/jobs/JobPhotoGallery';
 import GPSCheckInOut from '@/components/jobs/GPSCheckInOut';
+import { LocationMap } from '@/components/jobs/LocationMap';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -908,8 +909,9 @@ export default function JobDetail() {
             )}
 
             <Tabs defaultValue="overview" className="w-full">
-              <TabsList className="grid w-full grid-cols-4">
+              <TabsList className="grid w-full grid-cols-5">
                 <TabsTrigger value="overview">Overview</TabsTrigger>
+                <TabsTrigger value="map">Map</TabsTrigger>
                 <TabsTrigger value="timeline">Timeline</TabsTrigger>
                 <TabsTrigger value="photos">Photos</TabsTrigger>
                 <TabsTrigger value="parts">Parts</TabsTrigger>
@@ -1097,6 +1099,17 @@ export default function JobDetail() {
                     </CardContent>
                   </Card>
                 )}
+              </TabsContent>
+
+              {/* Map Tab */}
+              <TabsContent value="map">
+                <LocationMap
+                  serviceLatitude={job.service_latitude}
+                  serviceLongitude={job.service_longitude}
+                  serviceAddress={job.service_address}
+                  technicianName={job.technician?.name}
+                  showTechnicianLocation={isTechnician && job.status === 'in_progress'}
+                />
               </TabsContent>
 
               {/* Timeline Tab */}
