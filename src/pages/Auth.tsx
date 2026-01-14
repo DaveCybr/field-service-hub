@@ -261,9 +261,14 @@ export default function Auth() {
           </Tabs>
         </Card>
 
-        <p className="text-center text-sm text-muted-foreground">
-          By continuing, you agree to our Terms of Service and Privacy Policy.
-        </p>
+        <div className="text-center space-y-2">
+          <p className="text-sm text-muted-foreground">
+            By continuing, you agree to our Terms of Service and Privacy Policy.
+          </p>
+          <a href="/portal/login" className="text-sm text-primary hover:underline">
+            Customer Portal Login →
+          </a>
+        </div>
       </div>
     </div>
   );
