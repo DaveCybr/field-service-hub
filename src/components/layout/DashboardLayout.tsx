@@ -36,7 +36,10 @@ interface DashboardLayoutProps {
   children: ReactNode;
 }
 
-const baseNavigation = [
+import { CreditCard } from 'lucide-react';
+
+// Navigation items for different roles
+const adminNavigation = [
   { name: 'Dashboard', href: '/dashboard', icon: LayoutDashboard },
   { name: 'Service Jobs', href: '/jobs', icon: Wrench },
   { name: 'Technicians', href: '/technicians', icon: Users },
@@ -47,23 +50,49 @@ const baseNavigation = [
   { name: 'Settings', href: '/settings', icon: Settings },
 ];
 
-const superadminNavigation = [
+const technicianNavigation = [
+  { name: 'Dashboard', href: '/dashboard', icon: LayoutDashboard },
+  { name: 'My Jobs', href: '/jobs', icon: Wrench },
+  { name: 'Settings', href: '/settings', icon: Settings },
+];
+
+const cashierNavigation = [
+  { name: 'Dashboard', href: '/dashboard', icon: LayoutDashboard },
+  { name: 'Payments', href: '/jobs', icon: CreditCard },
+  { name: 'Settings', href: '/settings', icon: Settings },
+];
+
+const superadminExtras = [
   { name: 'User Management', href: '/users', icon: Shield },
   { name: 'Audit Logs', href: '/audit-logs', icon: ScrollText },
 ];
 
 export default function DashboardLayout({ children }: DashboardLayoutProps) {
   const [sidebarOpen, setSidebarOpen] = useState(false);
-  const { employee, isSuperadmin, userRole, signOut, user } = useAuth();
+  const { employee, isSuperadmin, isAdmin, userRole, signOut, user } = useAuth();
   const { log: auditLog } = useAuditLog();
   const { notifications, unreadCount, markAsRead, markAllAsRead, clearNotifications } = useRealtimeNotifications();
   const location = useLocation();
   const navigate = useNavigate();
 
   // Build navigation based on role
-  const navigation = isSuperadmin 
-    ? [...baseNavigation, ...superadminNavigation]
-    : baseNavigation;
+  const getNavigationByRole = () => {
+    if (isSuperadmin) {
+      return [...adminNavigation, ...superadminExtras];
+    }
+    if (isAdmin || userRole === 'manager') {
+      return adminNavigation;
+    }
+    if (userRole === 'cashier') {
+      return cashierNavigation;
+    }
+    if (userRole === 'technician') {
+      return technicianNavigation;
+    }
+    return technicianNavigation; // Default fallback
+  };
+
+  const navigation = getNavigationByRole();
 
   const handleSignOut = async () => {
     // Log logout before signing out

@@ -51,6 +51,37 @@ function ProtectedRoute({ children }: { children: React.ReactNode }) {
   return <>{children}</>;
 }
 
+// Role-based route protection
+type AllowedRole = 'superadmin' | 'admin' | 'manager' | 'technician' | 'cashier';
+
+function RoleProtectedRoute({ 
+  children, 
+  allowedRoles 
+}: { 
+  children: React.ReactNode; 
+  allowedRoles: AllowedRole[];
+}) {
+  const { user, userRole, loading } = useAuth();
+
+  if (loading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-background">
+        <div className="h-8 w-8 animate-spin rounded-full border-4 border-primary border-t-transparent" />
+      </div>
+    );
+  }
+
+  if (!user) {
+    return <Navigate to="/auth" replace />;
+  }
+
+  if (userRole && !allowedRoles.includes(userRole)) {
+    return <Navigate to="/dashboard" replace />;
+  }
+
+  return <>{children}</>;
+}
+
 function CustomerProtectedRoute({ children }: { children: React.ReactNode }) {
   const { user, isCustomer, loading } = useCustomerAuth();
 
@@ -139,16 +170,70 @@ function AppRoutes() {
       <Route path="/" element={<SetupRoute><Navigate to="/dashboard" replace /></SetupRoute>} />
       <Route path="/dashboard" element={<SetupRoute><ProtectedRoute><Dashboard /></ProtectedRoute></SetupRoute>} />
       <Route path="/jobs" element={<SetupRoute><ProtectedRoute><Jobs /></ProtectedRoute></SetupRoute>} />
-      <Route path="/jobs/new" element={<SetupRoute><ProtectedRoute><NewJob /></ProtectedRoute></SetupRoute>} />
+      <Route path="/jobs/new" element={
+        <SetupRoute>
+          <RoleProtectedRoute allowedRoles={['superadmin', 'admin', 'manager']}>
+            <NewJob />
+          </RoleProtectedRoute>
+        </SetupRoute>
+      } />
       <Route path="/jobs/:id" element={<SetupRoute><ProtectedRoute><JobDetail /></ProtectedRoute></SetupRoute>} />
-      <Route path="/technicians" element={<SetupRoute><ProtectedRoute><Technicians /></ProtectedRoute></SetupRoute>} />
-      <Route path="/customers" element={<SetupRoute><ProtectedRoute><Customers /></ProtectedRoute></SetupRoute>} />
-      <Route path="/units" element={<SetupRoute><ProtectedRoute><Units /></ProtectedRoute></SetupRoute>} />
-      <Route path="/units/scan" element={<SetupRoute><ProtectedRoute><ScanUnit /></ProtectedRoute></SetupRoute>} />
-      <Route path="/inventory" element={<SetupRoute><ProtectedRoute><Inventory /></ProtectedRoute></SetupRoute>} />
-      <Route path="/reports" element={<SetupRoute><ProtectedRoute><Reports /></ProtectedRoute></SetupRoute>} />
-      <Route path="/users" element={<SetupRoute><ProtectedRoute><UserManagement /></ProtectedRoute></SetupRoute>} />
-      <Route path="/audit-logs" element={<SetupRoute><ProtectedRoute><AuditLogs /></ProtectedRoute></SetupRoute>} />
+      <Route path="/technicians" element={
+        <SetupRoute>
+          <RoleProtectedRoute allowedRoles={['superadmin', 'admin', 'manager']}>
+            <Technicians />
+          </RoleProtectedRoute>
+        </SetupRoute>
+      } />
+      <Route path="/customers" element={
+        <SetupRoute>
+          <RoleProtectedRoute allowedRoles={['superadmin', 'admin', 'manager']}>
+            <Customers />
+          </RoleProtectedRoute>
+        </SetupRoute>
+      } />
+      <Route path="/units" element={
+        <SetupRoute>
+          <RoleProtectedRoute allowedRoles={['superadmin', 'admin', 'manager', 'technician']}>
+            <Units />
+          </RoleProtectedRoute>
+        </SetupRoute>
+      } />
+      <Route path="/units/scan" element={
+        <SetupRoute>
+          <RoleProtectedRoute allowedRoles={['superadmin', 'admin', 'manager', 'technician']}>
+            <ScanUnit />
+          </RoleProtectedRoute>
+        </SetupRoute>
+      } />
+      <Route path="/inventory" element={
+        <SetupRoute>
+          <RoleProtectedRoute allowedRoles={['superadmin', 'admin', 'manager']}>
+            <Inventory />
+          </RoleProtectedRoute>
+        </SetupRoute>
+      } />
+      <Route path="/reports" element={
+        <SetupRoute>
+          <RoleProtectedRoute allowedRoles={['superadmin', 'admin', 'manager']}>
+            <Reports />
+          </RoleProtectedRoute>
+        </SetupRoute>
+      } />
+      <Route path="/users" element={
+        <SetupRoute>
+          <RoleProtectedRoute allowedRoles={['superadmin']}>
+            <UserManagement />
+          </RoleProtectedRoute>
+        </SetupRoute>
+      } />
+      <Route path="/audit-logs" element={
+        <SetupRoute>
+          <RoleProtectedRoute allowedRoles={['superadmin', 'admin']}>
+            <AuditLogs />
+          </RoleProtectedRoute>
+        </SetupRoute>
+      } />
       <Route path="/settings" element={<SetupRoute><ProtectedRoute><Settings /></ProtectedRoute></SetupRoute>} />
       
       {/* Customer Portal Routes */}
