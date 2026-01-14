@@ -2,11 +2,13 @@ import { createContext, useContext, useEffect, useState, ReactNode } from 'react
 import { User, Session } from '@supabase/supabase-js';
 import { supabase } from '@/integrations/supabase/client';
 
+type EmployeeRole = 'superadmin' | 'admin' | 'manager' | 'technician' | 'cashier';
+
 interface Employee {
   id: string;
   name: string;
   email: string;
-  role: 'admin' | 'manager' | 'technician' | 'cashier';
+  role: EmployeeRole;
   status: string;
   avatar_url: string | null;
 }
@@ -15,7 +17,10 @@ interface AuthContextType {
   user: User | null;
   session: Session | null;
   employee: Employee | null;
+  userRole: EmployeeRole | null;
   loading: boolean;
+  isSuperadmin: boolean;
+  isAdmin: boolean;
   signIn: (email: string, password: string) => Promise<{ error: Error | null }>;
   signUp: (email: string, password: string, name: string, role?: string) => Promise<{ error: Error | null }>;
   signOut: () => Promise<void>;
@@ -27,6 +32,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [session, setSession] = useState<Session | null>(null);
   const [employee, setEmployee] = useState<Employee | null>(null);
+  const [userRole, setUserRole] = useState<EmployeeRole | null>(null);
   const [loading, setLoading] = useState(true);
 
   const fetchEmployee = async (userId: string) => {
@@ -41,6 +47,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   };
 
+  const fetchUserRole = async (userId: string) => {
+    const { data, error } = await supabase
+      .from('user_roles')
+      .select('role')
+      .eq('user_id', userId)
+      .single();
+
+    if (!error && data) {
+      setUserRole(data.role as EmployeeRole);
+    }
+  };
+
   useEffect(() => {
     // Set up auth state listener FIRST
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
@@ -52,9 +70,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         if (session?.user) {
           setTimeout(() => {
             fetchEmployee(session.user.id);
+            fetchUserRole(session.user.id);
           }, 0);
         } else {
           setEmployee(null);
+          setUserRole(null);
         }
         
         setLoading(false);
@@ -68,6 +88,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       
       if (session?.user) {
         fetchEmployee(session.user.id);
+        fetchUserRole(session.user.id);
       }
       
       setLoading(false);
@@ -104,10 +125,25 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const signOut = async () => {
     await supabase.auth.signOut();
     setEmployee(null);
+    setUserRole(null);
   };
 
+  const isSuperadmin = userRole === 'superadmin';
+  const isAdmin = userRole === 'superadmin' || userRole === 'admin';
+
   return (
-    <AuthContext.Provider value={{ user, session, employee, loading, signIn, signUp, signOut }}>
+    <AuthContext.Provider value={{ 
+      user, 
+      session, 
+      employee, 
+      userRole,
+      loading, 
+      isSuperadmin,
+      isAdmin,
+      signIn, 
+      signUp, 
+      signOut 
+    }}>
       {children}
     </AuthContext.Provider>
   );

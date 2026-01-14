@@ -241,6 +241,33 @@ export type Database = {
         }
         Relationships: []
       }
+      profiles: {
+        Row: {
+          avatar_url: string | null
+          created_at: string
+          full_name: string | null
+          id: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          avatar_url?: string | null
+          created_at?: string
+          full_name?: string | null
+          id?: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          avatar_url?: string | null
+          created_at?: string
+          full_name?: string | null
+          id?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       service_jobs: {
         Row: {
           actual_checkin_at: string | null
@@ -634,6 +661,10 @@ export type Database = {
       generate_job_number: { Args: never; Returns: string }
       generate_sku: { Args: { category_prefix: string }; Returns: string }
       get_employee_id: { Args: { _user_id: string }; Returns: string }
+      get_user_role: {
+        Args: { _user_id: string }
+        Returns: Database["public"]["Enums"]["employee_role"]
+      }
       has_role: {
         Args: {
           _role: Database["public"]["Enums"]["employee_role"]
@@ -641,6 +672,7 @@ export type Database = {
         }
         Returns: boolean
       }
+      is_superadmin: { Args: { _user_id: string }; Returns: boolean }
     }
     Enums: {
       customer_category: "retail" | "project"
