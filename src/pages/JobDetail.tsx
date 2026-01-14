@@ -5,6 +5,7 @@ import { useAuditLog } from '@/hooks/useAuditLog';
 import { useAuth } from '@/hooks/useAuth';
 import DashboardLayout from '@/components/layout/DashboardLayout';
 import JobPhotoGallery from '@/components/jobs/JobPhotoGallery';
+import GPSCheckInOut from '@/components/jobs/GPSCheckInOut';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -149,8 +150,9 @@ export default function JobDetail() {
   const [processingPayment, setProcessingPayment] = useState(false);
 
   // Auth for role check
-  const { userRole } = useAuth();
+  const { userRole, employee } = useAuth();
   const isCashier = userRole === 'cashier';
+  const isTechnician = userRole === 'technician';
   const canProcessPayment = isCashier || userRole === 'superadmin' || userRole === 'admin' || userRole === 'manager';
 
   useEffect(() => {
@@ -337,6 +339,118 @@ export default function JobDetail() {
       });
     } finally {
       setProcessingPayment(false);
+    }
+  };
+
+  // GPS Check-in handler for technicians
+  const handleGPSCheckIn = async (latitude: number, longitude: number, isValid: boolean) => {
+    if (!job) return;
+    
+    try {
+      const updates = {
+        status: 'in_progress' as JobStatus,
+        actual_checkin_at: new Date().toISOString(),
+        checkin_gps_valid: isValid,
+        gps_violation_detected: !isValid,
+      };
+
+      const { error } = await supabase
+        .from('service_jobs')
+        .update(updates)
+        .eq('id', job.id);
+
+      if (error) throw error;
+
+      await auditLog({
+        action: 'status_change',
+        entityType: 'job',
+        entityId: job.id,
+        oldData: { status: job.status },
+        newData: { 
+          status: 'in_progress', 
+          checkin_gps_valid: isValid,
+          checkin_latitude: latitude,
+          checkin_longitude: longitude,
+        },
+      });
+
+      toast({
+        title: isValid ? 'Checked In Successfully' : 'Checked In (GPS Warning)',
+        description: isValid 
+          ? 'Your location has been verified. Job is now in progress.' 
+          : 'Job started, but GPS location does not match service address.',
+        variant: isValid ? 'default' : 'destructive',
+      });
+
+      fetchJob();
+    } catch (error) {
+      console.error('Error checking in:', error);
+      toast({
+        variant: 'destructive',
+        title: 'Check-in Failed',
+        description: 'Failed to check in. Please try again.',
+      });
+    }
+  };
+
+  // GPS Check-out handler for technicians
+  const handleGPSCheckOut = async (latitude: number, longitude: number, isValid: boolean) => {
+    if (!job) return;
+    
+    try {
+      const checkoutTime = new Date();
+      let durationMinutes = 0;
+      
+      if (job.actual_checkin_at) {
+        const checkinTime = new Date(job.actual_checkin_at);
+        durationMinutes = Math.round((checkoutTime.getTime() - checkinTime.getTime()) / 60000);
+      }
+
+      const updates = {
+        status: 'completed' as JobStatus,
+        actual_checkout_at: checkoutTime.toISOString(),
+        actual_duration_minutes: durationMinutes,
+        checkout_gps_valid: isValid,
+        gps_violation_detected: job.gps_violation_detected || !isValid,
+      };
+
+      const { error } = await supabase
+        .from('service_jobs')
+        .update(updates)
+        .eq('id', job.id);
+
+      if (error) throw error;
+
+      await auditLog({
+        action: 'status_change',
+        entityType: 'job',
+        entityId: job.id,
+        oldData: { status: job.status },
+        newData: { 
+          status: 'completed', 
+          checkout_gps_valid: isValid,
+          checkout_latitude: latitude,
+          checkout_longitude: longitude,
+          actual_duration_minutes: durationMinutes,
+        },
+      });
+
+      toast({
+        title: isValid ? 'Job Completed' : 'Job Completed (GPS Warning)',
+        description: isValid 
+          ? `Job completed successfully. Duration: ${durationMinutes} minutes.` 
+          : `Job completed, but GPS location does not match service address.`,
+        variant: isValid ? 'default' : 'destructive',
+      });
+
+      fetchJob();
+    } catch (error) {
+      console.error('Error checking out:', error);
+      toast({
+        variant: 'destructive',
+        title: 'Check-out Failed',
+        description: 'Failed to check out. Please try again.',
+      });
     }
   };
 
@@ -741,6 +855,42 @@ export default function JobDetail() {
         <div className="grid gap-6 lg:grid-cols-3">
           {/* Left Column - Details */}
           <div className="lg:col-span-2 space-y-6">
+            {/* GPS Check-in/out for Technicians */}
+            {isTechnician && (job.status === 'approved' || job.status === 'in_progress') && (
+              <GPSCheckInOut
+                jobId={job.id}
+                jobStatus={job.status}
+                serviceLatitude={job.service_latitude}
+                serviceLongitude={job.service_longitude}
+                serviceAddress={job.service_address}
+                actualCheckinAt={job.actual_checkin_at}
+                actualCheckoutAt={job.actual_checkout_at}
+                checkinGpsValid={job.checkin_gps_valid}
+                checkoutGpsValid={job.checkout_gps_valid}
+                onCheckIn={handleGPSCheckIn}
+                onCheckOut={handleGPSCheckOut}
+                disabled={updating}
+              />
+            )}
+
+            {/* GPS Verification Summary (for non-technicians viewing completed jobs) */}
+            {!isTechnician && (job.actual_checkin_at || job.actual_checkout_at) && (
+              <GPSCheckInOut
+                jobId={job.id}
+                jobStatus={job.status}
+                serviceLatitude={job.service_latitude}
+                serviceLongitude={job.service_longitude}
+                serviceAddress={job.service_address}
+                actualCheckinAt={job.actual_checkin_at}
+                actualCheckoutAt={job.actual_checkout_at}
+                checkinGpsValid={job.checkin_gps_valid}
+                checkoutGpsValid={job.checkout_gps_valid}
+                onCheckIn={handleGPSCheckIn}
+                onCheckOut={handleGPSCheckOut}
+                disabled={true}
+              />
+            )}
+
             <Tabs defaultValue="overview" className="w-full">
               <TabsList className="grid w-full grid-cols-4">
                 <TabsTrigger value="overview">Overview</TabsTrigger>
