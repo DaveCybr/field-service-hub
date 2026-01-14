@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { supabase } from '@/integrations/supabase/client';
 import DashboardLayout from '@/components/layout/DashboardLayout';
 import { Button } from '@/components/ui/button';
@@ -56,6 +57,7 @@ interface Customer {
 }
 
 export default function Customers() {
+  const { t } = useTranslation();
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
@@ -98,8 +100,8 @@ export default function Customers() {
       console.error('Error fetching customers:', error);
       toast({
         variant: 'destructive',
-        title: 'Error',
-        description: 'Failed to load customers.',
+        title: t('common.error'),
+        description: t('messages.loadFailed'),
       });
     } finally {
       setLoading(false);
@@ -110,8 +112,8 @@ export default function Customers() {
     if (!formData.name || !formData.phone) {
       toast({
         variant: 'destructive',
-        title: 'Validation Error',
-        description: 'Name and phone are required.',
+        title: t('common.error'),
+        description: t('validation.namePhoneRequired'),
       });
       return;
     }
@@ -133,8 +135,8 @@ export default function Customers() {
       if (error) throw error;
 
       toast({
-        title: 'Customer Added',
-        description: `${formData.name} has been added successfully.`,
+        title: t('customers.customerAdded'),
+        description: t('customers.customerAddedDesc', { name: formData.name }),
       });
 
       setDialogOpen(false);
@@ -151,8 +153,8 @@ export default function Customers() {
       console.error('Error creating customer:', error);
       toast({
         variant: 'destructive',
-        title: 'Error',
-        description: error.message || 'Failed to add customer.',
+        title: t('common.error'),
+        description: error.message || t('messages.saveFailed'),
       });
     } finally {
       setCreating(false);
@@ -178,37 +180,37 @@ export default function Customers() {
         {/* Header */}
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
           <div>
-            <h1 className="text-2xl font-bold tracking-tight">Customers</h1>
+            <h1 className="text-2xl font-bold tracking-tight">{t('customers.title')}</h1>
             <p className="text-muted-foreground">
-              Manage your customer database
+              {t('customers.subtitle')}
             </p>
           </div>
           <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
             <DialogTrigger asChild>
               <Button>
                 <Plus className="mr-2 h-4 w-4" />
-                Add Customer
+                {t('customers.addCustomer')}
               </Button>
             </DialogTrigger>
             <DialogContent className="max-w-md">
               <DialogHeader>
-                <DialogTitle>Add New Customer</DialogTitle>
+                <DialogTitle>{t('customers.newCustomer')}</DialogTitle>
                 <DialogDescription>
-                  Enter the customer details below.
+                  {t('customers.enterDetails')}
                 </DialogDescription>
               </DialogHeader>
               <div className="space-y-4 py-4">
                 <div className="space-y-2">
-                  <Label htmlFor="name">Name *</Label>
+                  <Label htmlFor="name">{t('common.name')} *</Label>
                   <Input
                     id="name"
-                    placeholder="Customer name"
+                    placeholder={t('customers.customerName')}
                     value={formData.name}
                     onChange={(e) => setFormData({ ...formData, name: e.target.value })}
                   />
                 </div>
                 <div className="space-y-2">
-                  <Label htmlFor="phone">Phone *</Label>
+                  <Label htmlFor="phone">{t('common.phone')} *</Label>
                   <Input
                     id="phone"
                     placeholder="+62 812 3456 7890"
@@ -217,7 +219,7 @@ export default function Customers() {
                   />
                 </div>
                 <div className="space-y-2">
-                  <Label htmlFor="email">Email</Label>
+                  <Label htmlFor="email">{t('common.email')}</Label>
                   <Input
                     id="email"
                     type="email"
@@ -227,17 +229,17 @@ export default function Customers() {
                   />
                 </div>
                 <div className="space-y-2">
-                  <Label htmlFor="address">Address</Label>
+                  <Label htmlFor="address">{t('common.address')}</Label>
                   <Textarea
                     id="address"
-                    placeholder="Full address"
+                    placeholder={t('common.address')}
                     value={formData.address}
                     onChange={(e) => setFormData({ ...formData, address: e.target.value })}
                   />
                 </div>
                 <div className="grid grid-cols-2 gap-4">
                   <div className="space-y-2">
-                    <Label htmlFor="category">Category</Label>
+                    <Label htmlFor="category">{t('customers.category')}</Label>
                     <Select 
                       value={formData.category} 
                       onValueChange={(value) => setFormData({ ...formData, category: value })}
@@ -246,14 +248,14 @@ export default function Customers() {
                         <SelectValue />
                       </SelectTrigger>
                       <SelectContent>
-                        <SelectItem value="retail">Retail</SelectItem>
-                        <SelectItem value="project">Project</SelectItem>
+                        <SelectItem value="retail">{t('customers.retail')}</SelectItem>
+                        <SelectItem value="project">{t('customers.project')}</SelectItem>
                       </SelectContent>
                     </Select>
                   </div>
                   {formData.category === 'project' && (
                     <div className="space-y-2">
-                      <Label htmlFor="terms">Payment Terms (days)</Label>
+                      <Label htmlFor="terms">{t('customers.paymentTermsDays')}</Label>
                       <Select 
                         value={formData.payment_terms_days} 
                         onValueChange={(value) => setFormData({ ...formData, payment_terms_days: value })}
@@ -262,10 +264,10 @@ export default function Customers() {
                           <SelectValue />
                         </SelectTrigger>
                         <SelectContent>
-                          <SelectItem value="7">7 days</SelectItem>
-                          <SelectItem value="14">14 days</SelectItem>
-                          <SelectItem value="30">30 days</SelectItem>
-                          <SelectItem value="60">60 days</SelectItem>
+                          <SelectItem value="7">7 {t('time.days')}</SelectItem>
+                          <SelectItem value="14">14 {t('time.days')}</SelectItem>
+                          <SelectItem value="30">30 {t('time.days')}</SelectItem>
+                          <SelectItem value="60">60 {t('time.days')}</SelectItem>
                         </SelectContent>
                       </Select>
                     </div>
@@ -274,10 +276,10 @@ export default function Customers() {
               </div>
               <DialogFooter>
                 <Button variant="outline" onClick={() => setDialogOpen(false)}>
-                  Cancel
+                  {t('common.cancel')}
                 </Button>
                 <Button onClick={handleCreateCustomer} disabled={creating}>
-                  {creating ? 'Adding...' : 'Add Customer'}
+                  {creating ? t('common.adding') : t('customers.addCustomer')}
                 </Button>
               </DialogFooter>
             </DialogContent>
@@ -291,7 +293,7 @@ export default function Customers() {
               <div className="relative flex-1">
                 <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
                 <Input
-                  placeholder="Search by name or phone..."
+                  placeholder={t('customers.searchCustomers')}
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
                   className="pl-9"
@@ -299,12 +301,12 @@ export default function Customers() {
               </div>
               <Select value={categoryFilter} onValueChange={setCategoryFilter}>
                 <SelectTrigger className="w-full sm:w-[150px]">
-                  <SelectValue placeholder="Category" />
+                  <SelectValue placeholder={t('customers.category')} />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="all">All</SelectItem>
-                  <SelectItem value="retail">Retail</SelectItem>
-                  <SelectItem value="project">Project</SelectItem>
+                  <SelectItem value="all">{t('common.all')}</SelectItem>
+                  <SelectItem value="retail">{t('customers.retail')}</SelectItem>
+                  <SelectItem value="project">{t('customers.project')}</SelectItem>
                 </SelectContent>
               </Select>
               <Button variant="outline" onClick={fetchCustomers}>
@@ -323,9 +325,9 @@ export default function Customers() {
               </div>
             ) : filteredCustomers.length === 0 ? (
               <div className="text-center py-12">
-                <h3 className="text-lg font-medium">No customers found</h3>
+                <h3 className="text-lg font-medium">{t('customers.noCustomersFound')}</h3>
                 <p className="mt-2 text-sm text-muted-foreground">
-                  Add your first customer to get started.
+                  {t('customers.addFirstCustomer')}
                 </p>
               </div>
             ) : (
@@ -333,12 +335,12 @@ export default function Customers() {
                 <Table>
                   <TableHeader>
                     <TableRow>
-                      <TableHead>Customer</TableHead>
-                      <TableHead>Contact</TableHead>
-                      <TableHead>Category</TableHead>
-                      <TableHead>Payment Terms</TableHead>
-                      <TableHead className="text-right">Outstanding</TableHead>
-                      <TableHead>Status</TableHead>
+                      <TableHead>{t('customers.customerName')}</TableHead>
+                      <TableHead>{t('common.contact')}</TableHead>
+                      <TableHead>{t('customers.category')}</TableHead>
+                      <TableHead>{t('customers.paymentTerms')}</TableHead>
+                      <TableHead className="text-right">{t('customers.outstanding')}</TableHead>
+                      <TableHead>{t('common.status')}</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
@@ -380,13 +382,13 @@ export default function Customers() {
                         </TableCell>
                         <TableCell>
                           <Badge variant={customer.category === 'project' ? 'default' : 'secondary'}>
-                            {customer.category}
+                            {t(`customers.${customer.category}`)}
                           </Badge>
                         </TableCell>
                         <TableCell>
                           {customer.category === 'project' && customer.payment_terms_days > 0
-                            ? `${customer.payment_terms_days} days`
-                            : 'Immediate'}
+                            ? `${customer.payment_terms_days} ${t('time.days')}`
+                            : t('common.immediate')}
                         </TableCell>
                         <TableCell className="text-right">
                           <span className={customer.current_outstanding > 0 ? 'text-destructive font-medium' : ''}>
@@ -395,10 +397,10 @@ export default function Customers() {
                         </TableCell>
                         <TableCell>
                           {customer.blacklisted ? (
-                            <Badge variant="destructive">Blacklisted</Badge>
+                            <Badge variant="destructive">{t('customers.blacklisted')}</Badge>
                           ) : (
                             <Badge variant="outline" className="bg-emerald-50 text-emerald-700 border-emerald-200">
-                              Active
+                              {t('common.active')}
                             </Badge>
                           )}
                         </TableCell>

@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
 import DashboardLayout from '@/components/layout/DashboardLayout';
@@ -60,6 +61,7 @@ interface Job {
 }
 
 export default function Jobs() {
+  const { t } = useTranslation();
   const [jobs, setJobs] = useState<Job[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
@@ -120,7 +122,7 @@ export default function Jobs() {
         status: job.status,
         priority: job.priority,
         scheduled_date: job.scheduled_date,
-        customer_name: (job.customers as any)?.name || 'Unknown',
+        customer_name: (job.customers as any)?.name || t('common.unknown'),
         technician_name: (job.employees as any)?.name || null,
         total_cost: job.total_cost || 0,
         created_at: job.created_at,
@@ -129,8 +131,8 @@ export default function Jobs() {
       console.error('Error fetching jobs:', error);
       toast({
         variant: 'destructive',
-        title: 'Error',
-        description: 'Failed to load jobs. Please try again.',
+        title: t('common.error'),
+        description: t('messages.loadFailed'),
       });
     } finally {
       setLoading(false);
@@ -149,8 +151,8 @@ export default function Jobs() {
       if (error) throw error;
 
       toast({
-        title: 'Status Updated',
-        description: `Job status changed to ${newStatus.replace('_', ' ')}.`,
+        title: t('messages.statusUpdated'),
+        description: t('messages.statusChangedTo', { status: t(`jobStatus.${newStatus}`) }),
       });
 
       fetchJobs();
@@ -158,35 +160,35 @@ export default function Jobs() {
       console.error('Error updating job status:', error);
       toast({
         variant: 'destructive',
-        title: 'Error',
-        description: 'Failed to update job status.',
+        title: t('common.error'),
+        description: t('messages.failedToUpdateStatus'),
       });
     }
   };
 
   const getStatusBadge = (status: string) => {
-    const statusConfig: Record<string, { label: string; className: string }> = {
-      pending_assignment: { label: 'Pending', className: 'badge-status-pending' },
-      pending_approval: { label: 'Needs Approval', className: 'badge-status-pending' },
-      approved: { label: 'Approved', className: 'badge-status-approved' },
-      in_progress: { label: 'In Progress', className: 'badge-status-progress' },
-      completed: { label: 'Completed', className: 'badge-status-completed' },
-      completed_paid: { label: 'Paid', className: 'badge-status-completed' },
-      cancelled: { label: 'Cancelled', className: 'badge-status-cancelled' },
+    const statusConfig: Record<string, { labelKey: string; className: string }> = {
+      pending_assignment: { labelKey: 'jobStatus.pending', className: 'badge-status-pending' },
+      pending_approval: { labelKey: 'jobStatus.needsApproval', className: 'badge-status-pending' },
+      approved: { labelKey: 'jobStatus.approved', className: 'badge-status-approved' },
+      in_progress: { labelKey: 'jobStatus.in_progress', className: 'badge-status-progress' },
+      completed: { labelKey: 'jobStatus.completed', className: 'badge-status-completed' },
+      completed_paid: { labelKey: 'jobStatus.paid', className: 'badge-status-completed' },
+      cancelled: { labelKey: 'jobStatus.cancelled', className: 'badge-status-cancelled' },
     };
-    const config = statusConfig[status] || { label: status, className: '' };
-    return <Badge variant="outline" className={config.className}>{config.label}</Badge>;
+    const config = statusConfig[status] || { labelKey: status, className: '' };
+    return <Badge variant="outline" className={config.className}>{t(config.labelKey)}</Badge>;
   };
 
   const getPriorityBadge = (priority: string) => {
-    const priorityConfig: Record<string, { label: string; className: string }> = {
-      low: { label: 'Low', className: 'badge-priority-low' },
-      normal: { label: 'Normal', className: 'badge-priority-normal' },
-      high: { label: 'High', className: 'badge-priority-high' },
-      urgent: { label: 'Urgent', className: 'badge-priority-urgent' },
+    const priorityConfig: Record<string, { labelKey: string; className: string }> = {
+      low: { labelKey: 'jobPriority.low', className: 'badge-priority-low' },
+      normal: { labelKey: 'jobPriority.normal', className: 'badge-priority-normal' },
+      high: { labelKey: 'jobPriority.high', className: 'badge-priority-high' },
+      urgent: { labelKey: 'jobPriority.urgent', className: 'badge-priority-urgent' },
     };
-    const config = priorityConfig[priority] || { label: priority, className: '' };
-    return <Badge className={config.className}>{config.label}</Badge>;
+    const config = priorityConfig[priority] || { labelKey: priority, className: '' };
+    return <Badge className={config.className}>{t(config.labelKey)}</Badge>;
   };
 
   const formatCurrency = (amount: number) => {
@@ -210,14 +212,14 @@ export default function Jobs() {
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
           <div>
             <h1 className="text-2xl font-bold tracking-tight">
-              {isCashier ? 'Payment Processing' : isTechnician ? 'My Jobs' : 'Service Jobs'}
+              {isCashier ? t('jobs.paymentProcessingTitle') : isTechnician ? t('jobs.myJobsTitle') : t('jobs.title')}
             </h1>
             <p className="text-muted-foreground">
               {isCashier 
-                ? 'Process payments for completed jobs' 
+                ? t('jobs.paymentProcessingSubtitle')
                 : isTechnician 
-                  ? 'View and manage your assigned jobs'
-                  : 'Manage and track all service jobs'}
+                  ? t('jobs.myJobsSubtitle')
+                  : t('jobs.subtitle')}
             </p>
           </div>
           <div className="flex items-center gap-2">
@@ -227,7 +229,7 @@ export default function Jobs() {
                   variant={viewMode === 'list' ? 'secondary' : 'ghost'}
                   size="sm"
                   onClick={() => setViewMode('list')}
-                  title="List View"
+                  title={t('jobs.listView')}
                 >
                   <List className="h-4 w-4" />
                 </Button>
@@ -235,7 +237,7 @@ export default function Jobs() {
                   variant={viewMode === 'calendar' ? 'secondary' : 'ghost'}
                   size="sm"
                   onClick={() => setViewMode('calendar')}
-                  title="Calendar View"
+                  title={t('jobs.calendarView')}
                 >
                   <CalendarDays className="h-4 w-4" />
                 </Button>
@@ -244,7 +246,7 @@ export default function Jobs() {
                     variant={viewMode === 'map' ? 'secondary' : 'ghost'}
                     size="sm"
                     onClick={() => setViewMode('map')}
-                    title="Map View"
+                    title={t('jobs.mapView')}
                   >
                     <Map className="h-4 w-4" />
                   </Button>
@@ -255,7 +257,7 @@ export default function Jobs() {
               <Button asChild>
                 <Link to="/jobs/new">
                   <Plus className="mr-2 h-4 w-4" />
-                  New Job
+                  {t('jobs.newJob')}
                 </Link>
               </Button>
             )}
@@ -269,7 +271,7 @@ export default function Jobs() {
               <div className="relative flex-1">
                 <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
                 <Input
-                  placeholder="Search jobs..."
+                  placeholder={t('jobs.searchJobs')}
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
                   className="pl-9"
@@ -278,29 +280,29 @@ export default function Jobs() {
               <Select value={statusFilter} onValueChange={setStatusFilter}>
                 <SelectTrigger className="w-full sm:w-[180px]">
                   <Filter className="mr-2 h-4 w-4" />
-                  <SelectValue placeholder="Status" />
+                  <SelectValue placeholder={t('common.status')} />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="all">All Status</SelectItem>
-                  <SelectItem value="pending_assignment">Pending Assignment</SelectItem>
-                  <SelectItem value="pending_approval">Pending Approval</SelectItem>
-                  <SelectItem value="approved">Approved</SelectItem>
-                  <SelectItem value="in_progress">In Progress</SelectItem>
-                  <SelectItem value="completed">Completed</SelectItem>
-                  <SelectItem value="completed_paid">Paid</SelectItem>
-                  <SelectItem value="cancelled">Cancelled</SelectItem>
+                  <SelectItem value="all">{t('jobs.allStatus')}</SelectItem>
+                  <SelectItem value="pending_assignment">{t('jobStatus.pending_assignment')}</SelectItem>
+                  <SelectItem value="pending_approval">{t('jobStatus.pending_approval')}</SelectItem>
+                  <SelectItem value="approved">{t('jobStatus.approved')}</SelectItem>
+                  <SelectItem value="in_progress">{t('jobStatus.in_progress')}</SelectItem>
+                  <SelectItem value="completed">{t('jobStatus.completed')}</SelectItem>
+                  <SelectItem value="completed_paid">{t('jobStatus.paid')}</SelectItem>
+                  <SelectItem value="cancelled">{t('jobStatus.cancelled')}</SelectItem>
                 </SelectContent>
               </Select>
               <Select value={priorityFilter} onValueChange={setPriorityFilter}>
                 <SelectTrigger className="w-full sm:w-[150px]">
-                  <SelectValue placeholder="Priority" />
+                  <SelectValue placeholder={t('common.priority')} />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="all">All Priority</SelectItem>
-                  <SelectItem value="low">Low</SelectItem>
-                  <SelectItem value="normal">Normal</SelectItem>
-                  <SelectItem value="high">High</SelectItem>
-                  <SelectItem value="urgent">Urgent</SelectItem>
+                  <SelectItem value="all">{t('jobs.allPriority')}</SelectItem>
+                  <SelectItem value="low">{t('jobPriority.low')}</SelectItem>
+                  <SelectItem value="normal">{t('jobPriority.normal')}</SelectItem>
+                  <SelectItem value="high">{t('jobPriority.high')}</SelectItem>
+                  <SelectItem value="urgent">{t('jobPriority.urgent')}</SelectItem>
                 </SelectContent>
               </Select>
               <Button variant="outline" onClick={fetchJobs}>
@@ -336,11 +338,11 @@ export default function Jobs() {
                 </div>
               ) : filteredJobs.length === 0 ? (
                 <div className="text-center py-12">
-                  <h3 className="text-lg font-medium">No jobs found</h3>
+                  <h3 className="text-lg font-medium">{t('jobs.noJobsFound')}</h3>
                   <p className="mt-2 text-sm text-muted-foreground">
                     {searchQuery || statusFilter !== 'all' || priorityFilter !== 'all'
-                      ? 'Try adjusting your filters'
-                      : 'Get started by creating a new service job'}
+                      ? t('jobs.adjustFilters')
+                      : t('jobs.getStarted')}
                   </p>
                 </div>
               ) : (
@@ -348,14 +350,14 @@ export default function Jobs() {
                   <Table>
                     <TableHeader>
                       <TableRow>
-                        <TableHead>Job #</TableHead>
-                        <TableHead>Title</TableHead>
-                        <TableHead>Customer</TableHead>
-                        <TableHead>Technician</TableHead>
-                        <TableHead>Priority</TableHead>
-                        <TableHead>Status</TableHead>
-                        <TableHead>Scheduled</TableHead>
-                        <TableHead className="text-right">Cost</TableHead>
+                        <TableHead>{t('jobs.jobNumber')}</TableHead>
+                        <TableHead>{t('jobs.jobTitle')}</TableHead>
+                        <TableHead>{t('jobs.customer')}</TableHead>
+                        <TableHead>{t('jobs.technician')}</TableHead>
+                        <TableHead>{t('common.priority')}</TableHead>
+                        <TableHead>{t('common.status')}</TableHead>
+                        <TableHead>{t('jobs.scheduled')}</TableHead>
+                        <TableHead className="text-right">{t('common.cost')}</TableHead>
                         <TableHead className="w-[50px]"></TableHead>
                       </TableRow>
                     </TableHeader>
@@ -376,7 +378,7 @@ export default function Jobs() {
                           <TableCell>{job.customer_name}</TableCell>
                           <TableCell>
                             {job.technician_name || (
-                              <span className="text-muted-foreground italic">Unassigned</span>
+                              <span className="text-muted-foreground italic">{t('common.unassigned')}</span>
                             )}
                           </TableCell>
                           <TableCell>{getPriorityBadge(job.priority)}</TableCell>
@@ -400,7 +402,7 @@ export default function Jobs() {
                                 <DropdownMenuItem asChild>
                                   <Link to={`/jobs/${job.id}`}>
                                     <Eye className="mr-2 h-4 w-4" />
-                                    View Details
+                                    {t('common.viewDetails')}
                                   </Link>
                                 </DropdownMenuItem>
                                 {job.status === 'pending_approval' && (
@@ -409,13 +411,13 @@ export default function Jobs() {
                                       onClick={() => updateJobStatus(job.id, 'approved')}
                                     >
                                       <CheckCircle className="mr-2 h-4 w-4 text-emerald-600" />
-                                      Approve
+                                      {t('jobs.approve')}
                                     </DropdownMenuItem>
                                     <DropdownMenuItem 
                                       onClick={() => updateJobStatus(job.id, 'cancelled')}
                                     >
                                       <XCircle className="mr-2 h-4 w-4 text-destructive" />
-                                      Reject
+                                      {t('jobs.reject')}
                                     </DropdownMenuItem>
                                   </>
                                 )}
