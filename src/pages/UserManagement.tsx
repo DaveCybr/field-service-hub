@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { Navigate } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
+import { useAuditLog } from '@/hooks/useAuditLog';
 import DashboardLayout from '@/components/layout/DashboardLayout';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -66,6 +67,7 @@ const ROLES = [
 
 export default function UserManagement() {
   const { isSuperadmin, userRole, loading: authLoading, session } = useAuth();
+  const { log: auditLog } = useAuditLog();
   const [users, setUsers] = useState<UserWithRole[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
@@ -144,6 +146,18 @@ export default function UserManagement() {
       if (response.error) throw response.error;
       if (response.data?.error) throw new Error(response.data.error);
 
+      // Audit log for user creation
+      await auditLog({
+        action: 'create',
+        entityType: 'user',
+        entityId: response.data?.user?.id,
+        newData: {
+          name: formData.name,
+          email: formData.email,
+          role: formData.role,
+        },
+      });
+
       toast({
         title: 'User Created',
         description: `${formData.name} has been created successfully.`,
@@ -166,6 +180,8 @@ export default function UserManagement() {
 
   const handleUpdateRole = async () => {
     if (!selectedUser) return;
+    const originalUser = users.find(u => u.id === selectedUser.id);
+    const oldRole = originalUser?.role;
 
     setUpdating(true);
     try {
@@ -178,6 +194,15 @@ export default function UserManagement() {
 
       if (response.error) throw response.error;
       if (response.data?.error) throw new Error(response.data.error);
+
+      // Audit log for role update
+      await auditLog({
+        action: 'update',
+        entityType: 'user',
+        entityId: selectedUser.user_id,
+        oldData: { name: selectedUser.name, role: oldRole },
+        newData: { name: selectedUser.name, role: selectedUser.role },
+      });
 
       toast({
         title: 'Role Updated',
