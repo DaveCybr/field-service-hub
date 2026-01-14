@@ -119,6 +119,11 @@ export default function Auth() {
                   required
                 />
               </div>
+              <div className="text-right">
+                <a href="/forgot-password" className="text-sm text-primary hover:underline">
+                  Lupa password?
+                </a>
+              </div>
             </CardContent>
             <CardFooter className="flex-col gap-4">
               <Button type="submit" className="w-full" disabled={isLoading}>

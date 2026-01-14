@@ -26,6 +26,7 @@ import {
   X,
   ChevronRight,
   Shield,
+  ScrollText,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import NotificationsDropdown from './NotificationsDropdown';
@@ -47,6 +48,7 @@ const baseNavigation = [
 
 const superadminNavigation = [
   { name: 'User Management', href: '/users', icon: Shield },
+  { name: 'Audit Logs', href: '/audit-logs', icon: ScrollText },
 ];
 
 export default function DashboardLayout({ children }: DashboardLayoutProps) {
