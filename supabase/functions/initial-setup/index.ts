@@ -96,10 +96,13 @@ Deno.serve(async (req) => {
         console.error('Error creating profile:', profileError);
       }
 
-      // Create user_roles entry with superadmin role
-      const { error: roleError } = await adminClient.from('user_roles').insert({
+      // Create or update user_roles entry with superadmin role (use upsert to handle existing entries from triggers)
+      const { error: roleError } = await adminClient.from('user_roles').upsert({
         user_id: newUser.user.id,
         role: 'superadmin',
+      }, { 
+        onConflict: 'user_id,role',
+        ignoreDuplicates: true 
       });
 
       if (roleError) {
