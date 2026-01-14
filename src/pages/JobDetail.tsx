@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
 import DashboardLayout from '@/components/layout/DashboardLayout';
+import JobPhotoGallery from '@/components/jobs/JobPhotoGallery';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -43,8 +44,6 @@ import {
   Camera,
   Plus,
   X,
-  ChevronLeft,
-  ChevronRight,
 } from 'lucide-react';
 
 type JobStatus = 'pending_assignment' | 'pending_approval' | 'approved' | 'in_progress' | 'completed' | 'completed_paid' | 'cancelled';
@@ -128,9 +127,6 @@ export default function JobDetail() {
   const [job, setJob] = useState<JobDetails | null>(null);
   const [loading, setLoading] = useState(true);
   const [updating, setUpdating] = useState(false);
-  const [selectedImage, setSelectedImage] = useState<string | null>(null);
-  const [imageIndex, setImageIndex] = useState(0);
-  const [allPhotos, setAllPhotos] = useState<string[]>([]);
   
   // Parts dialog state
   const [partsDialogOpen, setPartsDialogOpen] = useState(false);
@@ -173,13 +169,6 @@ export default function JobDetail() {
         unit: data.units as JobDetails['unit'],
       });
       setAdminNotes(data.admin_notes || '');
-      
-      // Combine all photos
-      const photos = [
-        ...(data.before_photos || []),
-        ...(data.after_photos || [])
-      ];
-      setAllPhotos(photos);
     } catch (error) {
       console.error('Error fetching job:', error);
       toast({
@@ -434,19 +423,6 @@ export default function JobDetail() {
     return events.sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime());
   };
 
-  const openImageGallery = (photo: string, index: number) => {
-    setSelectedImage(photo);
-    setImageIndex(index);
-  };
-
-  const navigateImage = (direction: 'prev' | 'next') => {
-    if (direction === 'prev') {
-      setImageIndex(prev => (prev > 0 ? prev - 1 : allPhotos.length - 1));
-    } else {
-      setImageIndex(prev => (prev < allPhotos.length - 1 ? prev + 1 : 0));
-    }
-    setSelectedImage(allPhotos[imageIndex]);
-  };
 
   const getNextActions = (): { label: string; status: JobStatus; variant: 'default' | 'outline' | 'destructive' }[] => {
     if (!job) return [];
@@ -806,66 +782,12 @@ export default function JobDetail() {
 
               {/* Photos Tab */}
               <TabsContent value="photos">
-                <Card>
-                  <CardHeader>
-                    <CardTitle className="text-base flex items-center gap-2">
-                      <Camera className="h-5 w-5" />
-                      Photo Gallery
-                    </CardTitle>
-                    <CardDescription>Before and after photos from the service</CardDescription>
-                  </CardHeader>
-                  <CardContent>
-                    {/* Before Photos */}
-                    <div className="mb-6">
-                      <h4 className="text-sm font-medium mb-3">Before Photos</h4>
-                      {job.before_photos && job.before_photos.length > 0 ? (
-                        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
-                          {job.before_photos.map((photo, index) => (
-                            <div 
-                              key={index}
-                              className="aspect-square rounded-lg overflow-hidden bg-muted cursor-pointer hover:opacity-90 transition-opacity"
-                              onClick={() => openImageGallery(photo, index)}
-                            >
-                              <img 
-                                src={photo} 
-                                alt={`Before ${index + 1}`}
-                                className="w-full h-full object-cover"
-                              />
-                            </div>
-                          ))}
-                        </div>
-                      ) : (
-                        <p className="text-sm text-muted-foreground">No before photos uploaded</p>
-                      )}
-                    </div>
-
-                    <Separator className="my-6" />
-
-                    {/* After Photos */}
-                    <div>
-                      <h4 className="text-sm font-medium mb-3">After Photos</h4>
-                      {job.after_photos && job.after_photos.length > 0 ? (
-                        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
-                          {job.after_photos.map((photo, index) => (
-                            <div 
-                              key={index}
-                              className="aspect-square rounded-lg overflow-hidden bg-muted cursor-pointer hover:opacity-90 transition-opacity"
-                              onClick={() => openImageGallery(photo, (job.before_photos?.length || 0) + index)}
-                            >
-                              <img 
-                                src={photo} 
-                                alt={`After ${index + 1}`}
-                                className="w-full h-full object-cover"
-                              />
-                            </div>
-                          ))}
-                        </div>
-                      ) : (
-                        <p className="text-sm text-muted-foreground">No after photos uploaded</p>
-                      )}
-                    </div>
-                  </CardContent>
-                </Card>
+                <JobPhotoGallery
+                  jobId={job.id}
+                  beforePhotos={job.before_photos || []}
+                  afterPhotos={job.after_photos || []}
+                  onPhotosUpdated={fetchJob}
+                />
               </TabsContent>
 
               {/* Parts Tab */}
@@ -1111,42 +1033,6 @@ export default function JobDetail() {
           </div>
         </div>
       </div>
-
-      {/* Image Gallery Modal */}
-      <Dialog open={!!selectedImage} onOpenChange={() => setSelectedImage(null)}>
-        <DialogContent className="max-w-4xl">
-          <div className="relative">
-            {allPhotos.length > 1 && (
-              <>
-                <Button
-                  variant="outline"
-                  size="icon"
-                  className="absolute left-2 top-1/2 -translate-y-1/2 z-10"
-                  onClick={() => navigateImage('prev')}
-                >
-                  <ChevronLeft className="h-4 w-4" />
-                </Button>
-                <Button
-                  variant="outline"
-                  size="icon"
-                  className="absolute right-2 top-1/2 -translate-y-1/2 z-10"
-                  onClick={() => navigateImage('next')}
-                >
-                  <ChevronRight className="h-4 w-4" />
-                </Button>
-              </>
-            )}
-            <img
-              src={allPhotos[imageIndex]}
-              alt={`Photo ${imageIndex + 1}`}
-              className="w-full h-auto max-h-[70vh] object-contain rounded-lg"
-            />
-            <p className="text-center text-sm text-muted-foreground mt-2">
-              {imageIndex + 1} of {allPhotos.length}
-            </p>
-          </div>
-        </DialogContent>
-      </Dialog>
     </DashboardLayout>
   );
 }
