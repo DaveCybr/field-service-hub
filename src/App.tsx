@@ -17,6 +17,7 @@ import ScanUnit from "./pages/ScanUnit";
 import Inventory from "./pages/Inventory";
 import Reports from "./pages/Reports";
 import Settings from "./pages/Settings";
+import UserManagement from "./pages/UserManagement";
 import NotFound from "./pages/NotFound";
 // Customer Portal
 import CustomerLogin from "./pages/portal/CustomerLogin";
@@ -79,6 +80,7 @@ function AppRoutes() {
       <Route path="/units/scan" element={<ProtectedRoute><ScanUnit /></ProtectedRoute>} />
       <Route path="/inventory" element={<ProtectedRoute><Inventory /></ProtectedRoute>} />
       <Route path="/reports" element={<ProtectedRoute><Reports /></ProtectedRoute>} />
+      <Route path="/users" element={<ProtectedRoute><UserManagement /></ProtectedRoute>} />
       <Route path="/settings" element={<ProtectedRoute><Settings /></ProtectedRoute>} />
       
       {/* Customer Portal Routes */}

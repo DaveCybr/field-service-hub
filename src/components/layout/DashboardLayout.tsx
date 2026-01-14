@@ -25,6 +25,7 @@ import {
   Menu,
   X,
   ChevronRight,
+  Shield,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import NotificationsDropdown from './NotificationsDropdown';
@@ -33,7 +34,7 @@ interface DashboardLayoutProps {
   children: ReactNode;
 }
 
-const navigation = [
+const baseNavigation = [
   { name: 'Dashboard', href: '/dashboard', icon: LayoutDashboard },
   { name: 'Service Jobs', href: '/jobs', icon: Wrench },
   { name: 'Technicians', href: '/technicians', icon: Users },
@@ -44,12 +45,21 @@ const navigation = [
   { name: 'Settings', href: '/settings', icon: Settings },
 ];
 
+const superadminNavigation = [
+  { name: 'User Management', href: '/users', icon: Shield },
+];
+
 export default function DashboardLayout({ children }: DashboardLayoutProps) {
   const [sidebarOpen, setSidebarOpen] = useState(false);
-  const { employee, signOut } = useAuth();
+  const { employee, isSuperadmin, userRole, signOut } = useAuth();
   const { notifications, unreadCount, markAsRead, markAllAsRead, clearNotifications } = useRealtimeNotifications();
   const location = useLocation();
   const navigate = useNavigate();
+
+  // Build navigation based on role
+  const navigation = isSuperadmin 
+    ? [...baseNavigation, ...superadminNavigation]
+    : baseNavigation;
 
   const handleSignOut = async () => {
     await signOut();
