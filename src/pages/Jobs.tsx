@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
+import { useAuth } from '@/hooks/useAuth';
 import DashboardLayout from '@/components/layout/DashboardLayout';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -64,6 +65,16 @@ export default function Jobs() {
   const [priorityFilter, setPriorityFilter] = useState('all');
   const [viewMode, setViewMode] = useState<'list' | 'calendar'>('list');
   const { toast } = useToast();
+  const { userRole, isSuperadmin, isAdmin } = useAuth();
+
+  // Check if user can create jobs (admin, manager, superadmin)
+  const canCreateJobs = isSuperadmin || isAdmin || userRole === 'manager';
+  
+  // Check if user is cashier (limited view)
+  const isCashier = userRole === 'cashier';
+  
+  // Check if user is technician (limited view)
+  const isTechnician = userRole === 'technician';
 
   useEffect(() => {
     fetchJobs();
@@ -196,34 +207,44 @@ export default function Jobs() {
         {/* Header */}
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
           <div>
-            <h1 className="text-2xl font-bold tracking-tight">Service Jobs</h1>
+            <h1 className="text-2xl font-bold tracking-tight">
+              {isCashier ? 'Payment Processing' : isTechnician ? 'My Jobs' : 'Service Jobs'}
+            </h1>
             <p className="text-muted-foreground">
-              Manage and track all service jobs
+              {isCashier 
+                ? 'Process payments for completed jobs' 
+                : isTechnician 
+                  ? 'View and manage your assigned jobs'
+                  : 'Manage and track all service jobs'}
             </p>
           </div>
           <div className="flex items-center gap-2">
-            <div className="flex items-center border rounded-lg p-1">
-              <Button
-                variant={viewMode === 'list' ? 'secondary' : 'ghost'}
-                size="sm"
-                onClick={() => setViewMode('list')}
-              >
-                <List className="h-4 w-4" />
+            {!isCashier && (
+              <div className="flex items-center border rounded-lg p-1">
+                <Button
+                  variant={viewMode === 'list' ? 'secondary' : 'ghost'}
+                  size="sm"
+                  onClick={() => setViewMode('list')}
+                >
+                  <List className="h-4 w-4" />
+                </Button>
+                <Button
+                  variant={viewMode === 'calendar' ? 'secondary' : 'ghost'}
+                  size="sm"
+                  onClick={() => setViewMode('calendar')}
+                >
+                  <CalendarDays className="h-4 w-4" />
+                </Button>
+              </div>
+            )}
+            {canCreateJobs && (
+              <Button asChild>
+                <Link to="/jobs/new">
+                  <Plus className="mr-2 h-4 w-4" />
+                  New Job
+                </Link>
               </Button>
-              <Button
-                variant={viewMode === 'calendar' ? 'secondary' : 'ghost'}
-                size="sm"
-                onClick={() => setViewMode('calendar')}
-              >
-                <CalendarDays className="h-4 w-4" />
-              </Button>
-            </div>
-            <Button asChild>
-              <Link to="/jobs/new">
-                <Plus className="mr-2 h-4 w-4" />
-                New Job
-              </Link>
-            </Button>
+            )}
           </div>
         </div>
 
