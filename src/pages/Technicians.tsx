@@ -4,7 +4,7 @@ import DashboardLayout from '@/components/layout/DashboardLayout';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent } from '@/components/ui/card';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import {
   Table,
@@ -31,8 +31,11 @@ import {
   Phone,
   Mail,
   RefreshCw,
+  Wrench,
+  Settings,
 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
+import SkillsManagementDialog from '@/components/technicians/SkillsManagementDialog';
 
 interface Technician {
   id: string;
@@ -56,6 +59,8 @@ export default function Technicians() {
   const [newTechEmail, setNewTechEmail] = useState('');
   const [newTechPhone, setNewTechPhone] = useState('');
   const [creating, setCreating] = useState(false);
+  const [skillsDialogOpen, setSkillsDialogOpen] = useState(false);
+  const [selectedTechnician, setSelectedTechnician] = useState<Technician | null>(null);
   const { toast } = useToast();
 
   useEffect(() => {
@@ -287,6 +292,7 @@ export default function Technicians() {
                       <TableHead>Rating</TableHead>
                       <TableHead>Jobs Completed</TableHead>
                       <TableHead>Skills</TableHead>
+                      <TableHead className="w-[80px]">Actions</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
@@ -349,6 +355,18 @@ export default function Technicians() {
                             )}
                           </div>
                         </TableCell>
+                        <TableCell>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => {
+                              setSelectedTechnician(tech);
+                              setSkillsDialogOpen(true);
+                            }}
+                          >
+                            <Settings className="h-4 w-4" />
+                          </Button>
+                        </TableCell>
                       </TableRow>
                     ))}
                   </TableBody>
@@ -357,6 +375,17 @@ export default function Technicians() {
             )}
           </CardContent>
         </Card>
+
+        {/* Skills Management Dialog */}
+        {selectedTechnician && (
+          <SkillsManagementDialog
+            open={skillsDialogOpen}
+            onOpenChange={setSkillsDialogOpen}
+            technicianId={selectedTechnician.id}
+            technicianName={selectedTechnician.name}
+            onSkillsUpdated={fetchTechnicians}
+          />
+        )}
       </div>
     </DashboardLayout>
   );
