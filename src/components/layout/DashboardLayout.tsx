@@ -31,6 +31,7 @@ import {
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import NotificationsDropdown from './NotificationsDropdown';
+import { LanguageSwitcher } from '@/components/LanguageSwitcher';
 
 interface DashboardLayoutProps {
   children: ReactNode;
@@ -203,6 +204,9 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
           </button>
 
           <div className="flex-1" />
+
+          {/* Language Switcher */}
+          <LanguageSwitcher />
 
           {/* Notifications */}
           <NotificationsDropdown
