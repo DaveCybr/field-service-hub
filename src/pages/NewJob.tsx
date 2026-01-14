@@ -15,8 +15,16 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
+import { Badge } from '@/components/ui/badge';
 import { useToast } from '@/hooks/use-toast';
-import { ArrowLeft, Loader2 } from 'lucide-react';
+import { ArrowLeft, Loader2, Wand2, Star, CheckCircle, User } from 'lucide-react';
 import { Link } from 'react-router-dom';
 
 interface Customer {
@@ -40,12 +48,26 @@ interface Technician {
   status: string;
 }
 
+interface TechnicianRecommendation {
+  id: string;
+  name: string;
+  status: string;
+  score: number;
+  skillsMatch: number;
+  availabilityScore: number;
+  workloadScore: number;
+  skills: string[];
+}
+
 export default function NewJob() {
   const navigate = useNavigate();
   const { employee } = useAuth();
   const { toast } = useToast();
 
   const [loading, setLoading] = useState(false);
+  const [autoAssigning, setAutoAssigning] = useState(false);
+  const [showRecommendations, setShowRecommendations] = useState(false);
+  const [recommendations, setRecommendations] = useState<TechnicianRecommendation[]>([]);
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [units, setUnits] = useState<Unit[]>([]);
   const [technicians, setTechnicians] = useState<Technician[]>([]);
@@ -60,6 +82,7 @@ export default function NewJob() {
   const [estimatedDuration, setEstimatedDuration] = useState('60');
   const [serviceAddress, setServiceAddress] = useState('');
   const [serviceCost, setServiceCost] = useState('');
+  const [requiredSkills, setRequiredSkills] = useState('');
 
   useEffect(() => {
     fetchCustomers();
@@ -105,6 +128,51 @@ export default function NewJob() {
       .eq('role', 'technician')
       .order('name');
     if (data) setTechnicians(data);
+  };
+
+  const handleAutoAssign = async () => {
+    setAutoAssigning(true);
+    try {
+      const skills = requiredSkills.split(',').map(s => s.trim()).filter(Boolean);
+      
+      const { data, error } = await supabase.functions.invoke('auto-assign-technician', {
+        body: {
+          requiredSkills: skills,
+          priority,
+        },
+      });
+
+      if (error) throw error;
+
+      if (data.success && data.recommendations?.length > 0) {
+        setRecommendations(data.recommendations);
+        setShowRecommendations(true);
+      } else {
+        toast({
+          variant: 'destructive',
+          title: 'No technicians available',
+          description: 'No eligible technicians found for this job.',
+        });
+      }
+    } catch (error: any) {
+      console.error('Auto-assign error:', error);
+      toast({
+        variant: 'destructive',
+        title: 'Auto-assign failed',
+        description: error.message || 'Failed to get recommendations.',
+      });
+    } finally {
+      setAutoAssigning(false);
+    }
+  };
+
+  const selectRecommendedTechnician = (techId: string) => {
+    setTechnicianId(techId);
+    setShowRecommendations(false);
+    toast({
+      title: 'Technician Selected',
+      description: 'The recommended technician has been assigned.',
+    });
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -299,9 +367,53 @@ export default function NewJob() {
             <Card>
               <CardHeader>
                 <CardTitle>Assignment</CardTitle>
-                <CardDescription>Assign technician and schedule</CardDescription>
+                <CardDescription>Assign technician manually or use AI auto-assign</CardDescription>
               </CardHeader>
               <CardContent className="space-y-4">
+                {/* Required Skills for Auto-Assign */}
+                <div className="space-y-2">
+                  <Label htmlFor="skills">Required Skills (for auto-assign)</Label>
+                  <Input
+                    id="skills"
+                    placeholder="e.g., AC Repair, Refrigeration, Electrical"
+                    value={requiredSkills}
+                    onChange={(e) => setRequiredSkills(e.target.value)}
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    Comma-separated list of skills needed for this job
+                  </p>
+                </div>
+
+                {/* Auto-Assign Button */}
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="w-full gap-2"
+                  onClick={handleAutoAssign}
+                  disabled={autoAssigning}
+                >
+                  {autoAssigning ? (
+                    <>
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                      Finding best technician...
+                    </>
+                  ) : (
+                    <>
+                      <Wand2 className="h-4 w-4" />
+                      Auto-Assign Best Technician
+                    </>
+                  )}
+                </Button>
+
+                <div className="relative">
+                  <div className="absolute inset-0 flex items-center">
+                    <span className="w-full border-t" />
+                  </div>
+                  <div className="relative flex justify-center text-xs uppercase">
+                    <span className="bg-card px-2 text-muted-foreground">Or select manually</span>
+                  </div>
+                </div>
+
                 <div className="space-y-2">
                   <Label htmlFor="technician">Assign Technician</Label>
                   <Select value={technicianId} onValueChange={setTechnicianId}>
@@ -376,6 +488,96 @@ export default function NewJob() {
             </Button>
           </div>
         </form>
+
+        {/* Auto-Assign Recommendations Dialog */}
+        <Dialog open={showRecommendations} onOpenChange={setShowRecommendations}>
+          <DialogContent className="max-w-lg">
+            <DialogHeader>
+              <DialogTitle className="flex items-center gap-2">
+                <Wand2 className="h-5 w-5 text-primary" />
+                Recommended Technicians
+              </DialogTitle>
+              <DialogDescription>
+                Based on skills, availability, and workload analysis
+              </DialogDescription>
+            </DialogHeader>
+            <div className="space-y-3 max-h-[400px] overflow-y-auto">
+              {recommendations.map((tech, index) => (
+                <div
+                  key={tech.id}
+                  className={`p-4 rounded-lg border transition-all cursor-pointer hover:border-primary ${
+                    index === 0 ? 'border-primary bg-primary/5' : ''
+                  }`}
+                  onClick={() => selectRecommendedTechnician(tech.id)}
+                >
+                  <div className="flex items-start justify-between">
+                    <div className="flex items-center gap-3">
+                      <div className={`flex items-center justify-center h-10 w-10 rounded-full ${
+                        index === 0 ? 'bg-primary text-primary-foreground' : 'bg-muted'
+                      }`}>
+                        {index === 0 ? <Star className="h-5 w-5" /> : <User className="h-5 w-5" />}
+                      </div>
+                      <div>
+                        <div className="flex items-center gap-2">
+                          <p className="font-medium">{tech.name}</p>
+                          {index === 0 && (
+                            <Badge className="bg-primary/20 text-primary text-xs">Best Match</Badge>
+                          )}
+                        </div>
+                        <div className="flex items-center gap-2 mt-1">
+                          <Badge variant="outline" className={
+                            tech.status === 'available' ? 'border-emerald-500 text-emerald-700' : 'border-amber-500 text-amber-700'
+                          }>
+                            {tech.status}
+                          </Badge>
+                          <span className="text-xs text-muted-foreground">
+                            Score: {tech.score.toFixed(1)}
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+                    <Button size="sm" variant={index === 0 ? 'default' : 'outline'}>
+                      <CheckCircle className="h-4 w-4 mr-1" />
+                      Select
+                    </Button>
+                  </div>
+                  
+                  {/* Score Breakdown */}
+                  <div className="mt-3 grid grid-cols-3 gap-2 text-xs">
+                    <div className="p-2 rounded bg-muted text-center">
+                      <p className="text-muted-foreground">Skills</p>
+                      <p className="font-medium">{tech.skillsMatch.toFixed(1)}</p>
+                    </div>
+                    <div className="p-2 rounded bg-muted text-center">
+                      <p className="text-muted-foreground">Availability</p>
+                      <p className="font-medium">{tech.availabilityScore.toFixed(1)}</p>
+                    </div>
+                    <div className="p-2 rounded bg-muted text-center">
+                      <p className="text-muted-foreground">Workload</p>
+                      <p className="font-medium">{tech.workloadScore.toFixed(1)}</p>
+                    </div>
+                  </div>
+                  
+                  {/* Skills */}
+                  {tech.skills.length > 0 && (
+                    <div className="mt-2 flex flex-wrap gap-1">
+                      {tech.skills.slice(0, 5).map(skill => (
+                        <Badge key={skill} variant="secondary" className="text-xs">
+                          {skill}
+                        </Badge>
+                      ))}
+                      {tech.skills.length > 5 && (
+                        <Badge variant="secondary" className="text-xs">
+                          +{tech.skills.length - 5} more
+                        </Badge>
+                      )}
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+          </DialogContent>
+        </Dialog>
       </div>
     </DashboardLayout>
   );
