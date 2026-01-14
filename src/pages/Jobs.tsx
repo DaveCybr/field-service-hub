@@ -85,11 +85,11 @@ export default function Jobs() {
         .order('created_at', { ascending: false });
 
       if (statusFilter !== 'all') {
-        query = query.eq('status', statusFilter);
+        query = query.eq('status', statusFilter as 'pending_assignment' | 'pending_approval' | 'approved' | 'in_progress' | 'completed' | 'completed_paid' | 'cancelled');
       }
 
       if (priorityFilter !== 'all') {
-        query = query.eq('priority', priorityFilter);
+        query = query.eq('priority', priorityFilter as 'low' | 'normal' | 'high' | 'urgent');
       }
 
       const { data, error } = await query;

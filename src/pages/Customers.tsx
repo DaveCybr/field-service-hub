@@ -87,7 +87,7 @@ export default function Customers() {
         .order('name');
 
       if (categoryFilter !== 'all') {
-        query = query.eq('category', categoryFilter);
+        query = query.eq('category', categoryFilter as 'retail' | 'project');
       }
 
       const { data, error } = await query;
