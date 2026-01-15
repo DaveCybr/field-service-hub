@@ -1,4 +1,7 @@
 project_id = "phaqqnqticnmcabjgzui"
 
-[functions.auto-assign-technician, functions.auto-assign-on-checkout]
+[functions.auto-assign-technician]
+verify_jwt = false
+
+[functions.auto-assign-on-checkout]
 verify_jwt = false
