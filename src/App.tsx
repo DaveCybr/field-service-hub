@@ -33,18 +33,21 @@ import CustomerHistory from "./pages/portal/CustomerHistory";
 
 const queryClient = new QueryClient();
 
-function ProtectedRoute({ children }: { children: React.ReactNode }) {
-  const { user, loading } = useAuth();
+// Loading component to avoid repetition
+const LoadingSpinner = () => (
+  <div className="min-h-screen flex items-center justify-center bg-background">
+    <div className="h-8 w-8 animate-spin rounded-full border-4 border-primary border-t-transparent" />
+  </div>
+);
 
-  if (loading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-background">
-        <div className="h-8 w-8 animate-spin rounded-full border-4 border-primary border-t-transparent" />
-      </div>
-    );
+function ProtectedRoute({ children }: { children: React.ReactNode }) {
+  const auth = useAuth();
+
+  if (auth.loading) {
+    return <LoadingSpinner />;
   }
 
-  if (!user) {
+  if (!auth.user) {
     return <Navigate to="/auth" replace />;
   }
 
@@ -61,21 +64,17 @@ function RoleProtectedRoute({
   children: React.ReactNode; 
   allowedRoles: AllowedRole[];
 }) {
-  const { user, userRole, loading } = useAuth();
+  const auth = useAuth();
 
-  if (loading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-background">
-        <div className="h-8 w-8 animate-spin rounded-full border-4 border-primary border-t-transparent" />
-      </div>
-    );
+  if (auth.loading) {
+    return <LoadingSpinner />;
   }
 
-  if (!user) {
+  if (!auth.user) {
     return <Navigate to="/auth" replace />;
   }
 
-  if (userRole && !allowedRoles.includes(userRole)) {
+  if (auth.userRole && !allowedRoles.includes(auth.userRole)) {
     return <Navigate to="/dashboard" replace />;
   }
 
@@ -83,17 +82,13 @@ function RoleProtectedRoute({
 }
 
 function CustomerProtectedRoute({ children }: { children: React.ReactNode }) {
-  const { user, isCustomer, loading } = useCustomerAuth();
+  const customerAuth = useCustomerAuth();
 
-  if (loading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-background">
-        <div className="h-8 w-8 animate-spin rounded-full border-4 border-primary border-t-transparent" />
-      </div>
-    );
+  if (customerAuth.loading) {
+    return <LoadingSpinner />;
   }
 
-  if (!user || !isCustomer) {
+  if (!customerAuth.user || !customerAuth.isCustomer) {
     return <Navigate to="/portal/login" replace />;
   }
 
@@ -101,17 +96,13 @@ function CustomerProtectedRoute({ children }: { children: React.ReactNode }) {
 }
 
 function SetupRoute({ children }: { children: React.ReactNode }) {
-  const { needsSetup, loading } = useInitialSetup();
+  const setup = useInitialSetup();
 
-  if (loading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-background">
-        <div className="h-8 w-8 animate-spin rounded-full border-4 border-primary border-t-transparent" />
-      </div>
-    );
+  if (setup.loading) {
+    return <LoadingSpinner />;
   }
 
-  if (needsSetup) {
+  if (setup.needsSetup) {
     return <Navigate to="/setup" replace />;
   }
 
@@ -119,17 +110,13 @@ function SetupRoute({ children }: { children: React.ReactNode }) {
 }
 
 function AuthRoute() {
-  const { needsSetup, loading } = useInitialSetup();
+  const setup = useInitialSetup();
 
-  if (loading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-background">
-        <div className="h-8 w-8 animate-spin rounded-full border-4 border-primary border-t-transparent" />
-      </div>
-    );
+  if (setup.loading) {
+    return <LoadingSpinner />;
   }
 
-  if (needsSetup) {
+  if (setup.needsSetup) {
     return <Navigate to="/setup" replace />;
   }
 
@@ -137,18 +124,13 @@ function AuthRoute() {
 }
 
 function SetupPage() {
-  const { needsSetup, loading } = useInitialSetup();
+  const setup = useInitialSetup();
 
-  if (loading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-background">
-        <div className="h-8 w-8 animate-spin rounded-full border-4 border-primary border-t-transparent" />
-      </div>
-    );
+  if (setup.loading) {
+    return <LoadingSpinner />;
   }
 
-  // If setup is not needed, redirect to auth
-  if (!needsSetup) {
+  if (!setup.needsSetup) {
     return <Navigate to="/auth" replace />;
   }
 
