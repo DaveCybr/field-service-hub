@@ -38,6 +38,15 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { Alert, AlertDescription } from "@/components/ui/alert";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
 import {
@@ -57,10 +66,14 @@ import {
   Copy,
   Check,
   AlertTriangle,
+  Info,
+  Trash2,
+  MoreVertical,
 } from "lucide-react";
 import { format } from "date-fns";
 
 interface UserWithRole {
+  phone: string;
   id: string;
   user_id: string;
   name: string;
@@ -105,19 +118,38 @@ export default function UserManagement() {
   const [searchQuery, setSearchQuery] = useState("");
   const [createDialogOpen, setCreateDialogOpen] = useState(false);
   const [editDialogOpen, setEditDialogOpen] = useState(false);
+  const [editProfileDialogOpen, setEditProfileDialogOpen] = useState(false);
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [selectedUser, setSelectedUser] = useState<UserWithRole | null>(null);
   const [creating, setCreating] = useState(false);
   const [updating, setUpdating] = useState(false);
+  const [deleting, setDeleting] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const [passwordCopied, setPasswordCopied] = useState(false);
   const { toast } = useToast();
+
+  const [editFormData, setEditFormData] = useState({
+    name: "",
+    email: "",
+    phone: "",
+  });
 
   const [formData, setFormData] = useState({
     email: "",
     password: "",
     name: "",
+    phone: "",
     role: "technician",
   });
+
+  // Check if selected user is the current logged-in user
+  const isEditingSelf = selectedUser?.user_id === session?.user?.id;
+
+  // Check if trying to delete the last superadmin
+  const isSelfDeletion = selectedUser?.user_id === session?.user?.id;
+  const superadminCount = users.filter((u) => u.role === "superadmin").length;
+  const isLastSuperadmin =
+    selectedUser?.role === "superadmin" && superadminCount === 1;
 
   useEffect(() => {
     if (isSuperadmin) {
@@ -157,18 +189,15 @@ export default function UserManagement() {
     const all = lowercase + uppercase + numbers + symbols;
 
     let password = "";
-    // Ensure at least one of each type
     password += lowercase[Math.floor(Math.random() * lowercase.length)];
     password += uppercase[Math.floor(Math.random() * uppercase.length)];
     password += numbers[Math.floor(Math.random() * numbers.length)];
     password += symbols[Math.floor(Math.random() * symbols.length)];
 
-    // Fill the rest randomly
     for (let i = password.length; i < length; i++) {
       password += all[Math.floor(Math.random() * all.length)];
     }
 
-    // Shuffle the password
     password = password
       .split("")
       .sort(() => Math.random() - 0.5)
@@ -201,7 +230,6 @@ export default function UserManagement() {
     }
   };
 
-  // Password strength indicator
   const getPasswordStrength = (password: string) => {
     if (password.length === 0) return { strength: 0, label: "", color: "" };
     if (password.length < 8)
@@ -260,7 +288,6 @@ export default function UserManagement() {
       if (response.error) throw response.error;
       if (response.data?.error) throw new Error(response.data.error);
 
-      // Audit log for user creation
       await auditLog({
         action: "create",
         entityType: "user",
@@ -277,14 +304,19 @@ export default function UserManagement() {
         description: `${formData.name} can now log in to the system.`,
       });
 
-      // Show credentials one more time
       toast({
         title: "🔑 Login Credentials",
         description: `Email: ${formData.email}\nPassword: ${formData.password}`,
         duration: 15000,
       });
 
-      setFormData({ email: "", password: "", name: "", role: "technician" });
+      setFormData({
+        email: "",
+        password: "",
+        name: "",
+        phone: "",
+        role: "technician",
+      });
       setCreateDialogOpen(false);
       setShowPassword(false);
       fetchUsers();
@@ -302,6 +334,17 @@ export default function UserManagement() {
 
   const handleUpdateRole = async () => {
     if (!selectedUser) return;
+
+    // Prevent self role edit
+    if (isEditingSelf) {
+      toast({
+        variant: "destructive",
+        title: "Action Not Allowed",
+        description: "You cannot change your own role for security reasons.",
+      });
+      return;
+    }
+
     const originalUser = users.find((u) => u.id === selectedUser.id);
     const oldRole = originalUser?.role;
 
@@ -317,7 +360,6 @@ export default function UserManagement() {
       if (response.error) throw response.error;
       if (response.data?.error) throw new Error(response.data.error);
 
-      // Audit log for role update
       await auditLog({
         action: "update",
         entityType: "user",
@@ -346,6 +388,140 @@ export default function UserManagement() {
     }
   };
 
+  const handleUpdateProfile = async () => {
+    if (!selectedUser) return;
+
+    if (!editFormData.name || !editFormData.email) {
+      toast({
+        variant: "destructive",
+        title: "Validation Error",
+        description: "Name and email are required.",
+      });
+      return;
+    }
+
+    setUpdating(true);
+    try {
+      const { error } = await supabase
+        .from("employees")
+        .update({
+          name: editFormData.name,
+          email: editFormData.email,
+          phone: editFormData.phone || null,
+        })
+        .eq("id", selectedUser.id);
+
+      if (error) throw error;
+
+      await auditLog({
+        action: "update",
+        entityType: "user",
+        entityId: selectedUser.user_id,
+        oldData: {
+          name: selectedUser.name,
+          email: selectedUser.email,
+        },
+        newData: {
+          name: editFormData.name,
+          email: editFormData.email,
+          phone: editFormData.phone,
+        },
+      });
+
+      toast({
+        title: "Profile Updated",
+        description: `${editFormData.name}'s profile has been updated successfully.`,
+      });
+
+      setEditProfileDialogOpen(false);
+      setSelectedUser(null);
+      fetchUsers();
+    } catch (error: any) {
+      console.error("Error updating profile:", error);
+      toast({
+        variant: "destructive",
+        title: "Error",
+        description: error.message || "Failed to update profile.",
+      });
+    } finally {
+      setUpdating(false);
+    }
+  };
+
+  const handleDeleteUser = async () => {
+    if (!selectedUser) return;
+
+    // Prevent self deletion
+    if (isSelfDeletion) {
+      toast({
+        variant: "destructive",
+        title: "Action Not Allowed",
+        description: "You cannot delete your own account.",
+      });
+      return;
+    }
+
+    // Prevent deleting last superadmin
+    if (isLastSuperadmin) {
+      toast({
+        variant: "destructive",
+        title: "Action Not Allowed",
+        description:
+          "Cannot delete the last superadmin account. System must have at least one superadmin.",
+      });
+      return;
+    }
+
+    setDeleting(true);
+    try {
+      // First, delete from employees table
+      const { error: employeeError } = await supabase
+        .from("employees")
+        .delete()
+        .eq("id", selectedUser.id);
+
+      if (employeeError) throw employeeError;
+
+      // Then delete the auth user (this will cascade delete user_roles)
+      const { error: authError } = await supabase.auth.admin.deleteUser(
+        selectedUser.user_id
+      );
+
+      if (authError) throw authError;
+
+      await auditLog({
+        action: "delete",
+        entityType: "user",
+        entityId: selectedUser.user_id,
+        oldData: {
+          name: selectedUser.name,
+          email: selectedUser.email,
+          role: selectedUser.role,
+        },
+      });
+
+      toast({
+        title: "User Deleted",
+        description: `${selectedUser.name} has been removed from the system.`,
+      });
+
+      setDeleteDialogOpen(false);
+      setSelectedUser(null);
+      fetchUsers();
+    } catch (error: any) {
+      console.error("Error deleting user:", error);
+      toast({
+        variant: "destructive",
+        title: "Error",
+        description:
+          error.message ||
+          "Failed to delete user. This operation requires admin privileges.",
+      });
+    } finally {
+      setDeleting(false);
+    }
+  };
+
   const getRoleConfig = (role: string) => {
     return (
       ROLES.find((r) => r.value === role) || {
@@ -366,7 +542,6 @@ export default function UserManagement() {
 
   const passwordStrength = getPasswordStrength(formData.password);
 
-  // Redirect if not superadmin
   if (!authLoading && !isSuperadmin) {
     return <Navigate to="/dashboard" replace />;
   }
@@ -394,11 +569,11 @@ export default function UserManagement() {
             onOpenChange={(open) => {
               setCreateDialogOpen(open);
               if (!open) {
-                // Reset form when dialog closes
                 setFormData({
                   email: "",
                   password: "",
                   name: "",
+                  phone: "",
                   role: "technician",
                 });
                 setShowPassword(false);
@@ -441,6 +616,18 @@ export default function UserManagement() {
                     value={formData.email}
                     onChange={(e) =>
                       setFormData({ ...formData, email: e.target.value })
+                    }
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="phone">Phone *</Label>
+                  <Input
+                    id="phone"
+                    type="tel"
+                    placeholder="+1 (555) 123-4567"
+                    value={formData.phone}
+                    onChange={(e) =>
+                      setFormData({ ...formData, phone: e.target.value })
                     }
                   />
                 </div>
@@ -525,7 +712,6 @@ export default function UserManagement() {
                     </div>
                   </div>
 
-                  {/* Password Strength Indicator */}
                   {formData.password && (
                     <div className="space-y-1">
                       <div className="flex items-center justify-between text-xs">
@@ -555,7 +741,6 @@ export default function UserManagement() {
                   )}
                 </div>
 
-                {/* Important Warning */}
                 {formData.password && (
                   <div className="rounded-lg bg-amber-50 dark:bg-amber-950 p-3 border border-amber-200 dark:border-amber-800">
                     <div className="flex gap-2">
@@ -672,6 +857,7 @@ export default function UserManagement() {
                     <TableRow>
                       <TableHead>Name</TableHead>
                       <TableHead>Email</TableHead>
+                      <TableHead>Phone</TableHead>
                       <TableHead>Role</TableHead>
                       <TableHead>Status</TableHead>
                       <TableHead>Created</TableHead>
@@ -681,12 +867,20 @@ export default function UserManagement() {
                   <TableBody>
                     {filteredUsers.map((user) => {
                       const roleConfig = getRoleConfig(user.role);
+                      const isSelf = user.user_id === session?.user?.id;
+
                       return (
                         <TableRow key={user.id}>
                           <TableCell className="font-medium">
                             {user.name}
+                            {isSelf && (
+                              <Badge variant="outline" className="ml-2 text-xs">
+                                You
+                              </Badge>
+                            )}
                           </TableCell>
                           <TableCell>{user.email}</TableCell>
+                          <TableCell>{user.phone || "-"}</TableCell>
                           <TableCell>
                             <Badge
                               variant="outline"
@@ -711,16 +905,57 @@ export default function UserManagement() {
                             {format(new Date(user.created_at), "dd MMM yyyy")}
                           </TableCell>
                           <TableCell>
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              onClick={() => {
-                                setSelectedUser(user);
-                                setEditDialogOpen(true);
-                              }}
-                            >
-                              <Edit className="h-4 w-4" />
-                            </Button>
+                            <DropdownMenu>
+                              <DropdownMenuTrigger asChild>
+                                <Button variant="ghost" size="sm">
+                                  <MoreVertical className="h-4 w-4" />
+                                </Button>
+                              </DropdownMenuTrigger>
+                              <DropdownMenuContent align="end">
+                                <DropdownMenuLabel>Actions</DropdownMenuLabel>
+                                <DropdownMenuSeparator />
+                                <DropdownMenuItem
+                                  onClick={() => {
+                                    setSelectedUser(user);
+                                    setEditFormData({
+                                      name: user.name,
+                                      email: user.email,
+                                      phone: user.phone || "",
+                                    });
+                                    setEditProfileDialogOpen(true);
+                                  }}
+                                >
+                                  <Edit className="mr-2 h-4 w-4" />
+                                  Edit Profile
+                                </DropdownMenuItem>
+                                <DropdownMenuItem
+                                  onClick={() => {
+                                    setSelectedUser(user);
+                                    setEditDialogOpen(true);
+                                  }}
+                                  disabled={isSelf}
+                                >
+                                  <ShieldCheck className="mr-2 h-4 w-4" />
+                                  Change Role
+                                </DropdownMenuItem>
+                                <DropdownMenuSeparator />
+                                <DropdownMenuItem
+                                  onClick={() => {
+                                    setSelectedUser(user);
+                                    setDeleteDialogOpen(true);
+                                  }}
+                                  disabled={
+                                    isSelf ||
+                                    (user.role === "superadmin" &&
+                                      superadminCount === 1)
+                                  }
+                                  className="text-red-600 focus:text-red-600"
+                                >
+                                  <Trash2 className="mr-2 h-4 w-4" />
+                                  Delete User
+                                </DropdownMenuItem>
+                              </DropdownMenuContent>
+                            </DropdownMenu>
                           </TableCell>
                         </TableRow>
                       );
@@ -741,30 +976,43 @@ export default function UserManagement() {
                 Change the role for {selectedUser?.name}
               </DialogDescription>
             </DialogHeader>
-            <div className="py-4">
-              <Label htmlFor="editRole">Role</Label>
-              <Select
-                value={selectedUser?.role || ""}
-                onValueChange={(value) =>
-                  setSelectedUser((prev) =>
-                    prev ? { ...prev, role: value } : null
-                  )
-                }
-              >
-                <SelectTrigger className="mt-2">
-                  <SelectValue placeholder="Select role" />
-                </SelectTrigger>
-                <SelectContent>
-                  {ROLES.map((role) => (
-                    <SelectItem key={role.value} value={role.value}>
-                      <div className="flex items-center gap-2">
-                        <role.icon className="h-4 w-4" />
-                        {role.label}
-                      </div>
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+            <div className="space-y-4 py-4">
+              {isEditingSelf && (
+                <Alert variant="destructive">
+                  <Info className="h-4 w-4" />
+                  <AlertDescription>
+                    You cannot change your own role for security reasons. Please
+                    ask another superadmin to change your role if needed.
+                  </AlertDescription>
+                </Alert>
+              )}
+
+              <div>
+                <Label htmlFor="editRole">Role</Label>
+                <Select
+                  value={selectedUser?.role || ""}
+                  onValueChange={(value) =>
+                    setSelectedUser((prev) =>
+                      prev ? { ...prev, role: value } : null
+                    )
+                  }
+                  disabled={isEditingSelf}
+                >
+                  <SelectTrigger className="mt-2">
+                    <SelectValue placeholder="Select role" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {ROLES.map((role) => (
+                      <SelectItem key={role.value} value={role.value}>
+                        <div className="flex items-center gap-2">
+                          <role.icon className="h-4 w-4" />
+                          {role.label}
+                        </div>
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
             </div>
             <DialogFooter>
               <Button
@@ -773,8 +1021,140 @@ export default function UserManagement() {
               >
                 Cancel
               </Button>
-              <Button onClick={handleUpdateRole} disabled={updating}>
+              <Button
+                onClick={handleUpdateRole}
+                disabled={updating || isEditingSelf}
+              >
                 {updating ? "Updating..." : "Update Role"}
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+
+        {/* Edit Profile Dialog */}
+        <Dialog
+          open={editProfileDialogOpen}
+          onOpenChange={setEditProfileDialogOpen}
+        >
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>Edit User Profile</DialogTitle>
+              <DialogDescription>
+                Update profile information for {selectedUser?.name}
+              </DialogDescription>
+            </DialogHeader>
+            <div className="space-y-4 py-4">
+              <div className="space-y-2">
+                <Label htmlFor="editName">Full Name *</Label>
+                <Input
+                  id="editName"
+                  value={editFormData.name}
+                  onChange={(e) =>
+                    setEditFormData({ ...editFormData, name: e.target.value })
+                  }
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="editEmail">Email *</Label>
+                <Input
+                  id="editEmail"
+                  type="email"
+                  value={editFormData.email}
+                  onChange={(e) =>
+                    setEditFormData({ ...editFormData, email: e.target.value })
+                  }
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="editPhone">Phone</Label>
+                <Input
+                  id="editPhone"
+                  type="tel"
+                  value={editFormData.phone}
+                  onChange={(e) =>
+                    setEditFormData({ ...editFormData, phone: e.target.value })
+                  }
+                  placeholder="Optional"
+                />
+              </div>
+            </div>
+            <DialogFooter>
+              <Button
+                variant="outline"
+                onClick={() => setEditProfileDialogOpen(false)}
+              >
+                Cancel
+              </Button>
+              <Button onClick={handleUpdateProfile} disabled={updating}>
+                {updating ? "Updating..." : "Update Profile"}
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+
+        {/* Delete Confirmation Dialog */}
+        <Dialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>Delete User Account</DialogTitle>
+              <DialogDescription>
+                Are you sure you want to delete {selectedUser?.name}'s account?
+              </DialogDescription>
+            </DialogHeader>
+            <div className="space-y-4 py-4">
+              {isSelfDeletion && (
+                <Alert variant="destructive">
+                  <AlertTriangle className="h-4 w-4" />
+                  <AlertDescription>
+                    You cannot delete your own account for security reasons.
+                  </AlertDescription>
+                </Alert>
+              )}
+
+              {isLastSuperadmin && !isSelfDeletion && (
+                <Alert variant="destructive">
+                  <AlertTriangle className="h-4 w-4" />
+                  <AlertDescription>
+                    Cannot delete the last superadmin account. The system must
+                    have at least one superadmin.
+                  </AlertDescription>
+                </Alert>
+              )}
+
+              {!isSelfDeletion && !isLastSuperadmin && (
+                <Alert>
+                  <AlertTriangle className="h-4 w-4" />
+                  <AlertDescription>
+                    This action cannot be undone. This will permanently delete
+                    the user account and remove all associated data.
+                  </AlertDescription>
+                </Alert>
+              )}
+
+              {selectedUser && !isSelfDeletion && !isLastSuperadmin && (
+                <div className="rounded-lg bg-muted p-4 space-y-2">
+                  <p className="text-sm font-medium">Account Details:</p>
+                  <div className="text-sm space-y-1 text-muted-foreground">
+                    <p>Name: {selectedUser.name}</p>
+                    <p>Email: {selectedUser.email}</p>
+                    <p>Role: {selectedUser.role}</p>
+                  </div>
+                </div>
+              )}
+            </div>
+            <DialogFooter>
+              <Button
+                variant="outline"
+                onClick={() => setDeleteDialogOpen(false)}
+              >
+                Cancel
+              </Button>
+              <Button
+                variant="destructive"
+                onClick={handleDeleteUser}
+                disabled={deleting || isSelfDeletion || isLastSuperadmin}
+              >
+                {deleting ? "Deleting..." : "Delete User"}
               </Button>
             </DialogFooter>
           </DialogContent>

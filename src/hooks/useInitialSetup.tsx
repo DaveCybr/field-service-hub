@@ -45,15 +45,15 @@ export function useInitialSetup() {
       }, 4000);
 
       try {
-        const { data, error } = await supabase.functions.invoke<SetupCheckResponse>(
-          "initial-setup",
-          { body: { action: "check" } }
-        );
+        const { data, error } =
+          await supabase.functions.invoke<SetupCheckResponse>("initial-setup", {
+            body: { action: "check" },
+          });
 
         if (error) throw error;
 
         const value = data?.needsSetup ?? false;
-        
+
         try {
           sessionStorage.setItem(CACHE_KEY, String(value));
         } catch {

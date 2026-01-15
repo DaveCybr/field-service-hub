@@ -19,7 +19,7 @@ Deno.serve(async (req) => {
       auth: { autoRefreshToken: false, persistSession: false },
     });
 
-    // Parse body
+    // Parse body for POST requests
     let body: any = {};
     if (req.method === "POST") {
       try {
@@ -31,54 +31,40 @@ Deno.serve(async (req) => {
 
     // Handle check action or GET request - check if setup is needed
     if (req.method === "GET" || body.action === "check") {
-      console.log("Checking if setup is needed...");
+      const { count, error } = await adminClient
+        .from("user_roles")
+        .select("*", { count: "exact", head: true });
 
-      try {
-        // Check if ada users di auth.users
-        const { data: users, error: usersError } =
-          await adminClient.auth.admin.listUsers();
-
-        console.log("Auth users count:", users?.users?.length || 0);
-
-        if (usersError) {
-          console.error("Error checking users:", usersError);
-          // Jika error, assume needs setup
-          return new Response(JSON.stringify({ needsSetup: true }), {
+      if (error) {
+        console.error("Error checking users:", error);
+        return new Response(
+          JSON.stringify({ error: "Failed to check users" }),
+          {
+            status: 500,
             headers: { ...corsHeaders, "Content-Type": "application/json" },
-          });
-        }
-
-        // Jika ada users, tidak perlu setup
-        const hasUsers = (users?.users?.length || 0) > 0;
-        const needsSetup = !hasUsers;
-
-        console.log("needsSetup:", needsSetup);
-
-        return new Response(JSON.stringify({ needsSetup }), {
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
-        });
-      } catch (checkError) {
-        console.error("Error during setup check:", checkError);
-        // Default to true (needs setup) jika ada error
-        return new Response(JSON.stringify({ needsSetup: true }), {
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
-        });
+          }
+        );
       }
+
+      return new Response(
+        JSON.stringify({
+          needsSetup: count === 0,
+        }),
+        {
+          status: 200,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        }
+      );
     }
 
     // Handle POST request - create first superadmin
     if (req.method === "POST" && body.email) {
-      console.log("Creating superadmin user...");
-
       // First, verify that no users exist
-      const { data: users, error: checkError } =
-        await adminClient.auth.admin.listUsers();
+      const { count: userCount } = await adminClient
+        .from("user_roles")
+        .select("*", { count: "exact", head: true });
 
-      if (checkError) {
-        throw new Error("Failed to check existing users");
-      }
-
-      if (users && users.users && users.users.length > 0) {
+      if (userCount && userCount > 0) {
         return new Response(
           JSON.stringify({ error: "Setup already completed" }),
           {
@@ -121,14 +107,11 @@ Deno.serve(async (req) => {
         });
 
       if (createError) {
-        console.error("Error creating user:", createError);
         return new Response(JSON.stringify({ error: createError.message }), {
           status: 400,
           headers: { ...corsHeaders, "Content-Type": "application/json" },
         });
       }
-
-      console.log("User created:", newUser.user.id);
 
       // Create profile entry
       const { error: profileError } = await adminClient
@@ -142,18 +125,32 @@ Deno.serve(async (req) => {
         console.error("Error creating profile:", profileError);
       }
 
-      // Create user_roles entry
-      const { error: roleError } = await adminClient.from("user_roles").insert({
-        user_id: newUser.user.id,
-        role: "superadmin",
-      });
+      // Create or update user_roles entry with superadmin role (use upsert to handle existing entries from triggers)
+      const { error: roleError } = await adminClient.from("user_roles").upsert(
+        {
+          user_id: newUser.user.id,
+          role: "superadmin",
+        },
+        {
+          onConflict: "user_id,role",
+          ignoreDuplicates: true,
+        }
+      );
 
       if (roleError) {
         console.error("Error creating role:", roleError);
-        // Don't rollback, user sudah dibuat
+        // Rollback - delete the created user
+        await adminClient.auth.admin.deleteUser(newUser.user.id);
+        return new Response(
+          JSON.stringify({ error: "Failed to assign superadmin role" }),
+          {
+            status: 500,
+            headers: { ...corsHeaders, "Content-Type": "application/json" },
+          }
+        );
       }
 
-      // Create employee entry
+      // Create employee entry for the superadmin
       const { error: employeeError } = await adminClient
         .from("employees")
         .insert({
