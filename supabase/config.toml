@@ -1,4 +1,4 @@
-project_id = "uhxiloagucpjbcnyditg"
+project_id = "phaqqnqticnmcabjgzui"
 
-[functions.auto-assign-technician]
+[functions.auto-assign-technician, functions.auto-assign-on-checkout]
 verify_jwt = false
