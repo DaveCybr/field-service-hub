@@ -1,29 +1,56 @@
-import { useState, useEffect } from 'react';
-import { supabase } from '@/integrations/supabase/client';
+import { useEffect, useRef, useState } from "react";
+import { supabase } from "@/integrations/supabase/client";
+
+type SetupCheckResponse = { needsSetup?: boolean };
+
+const CACHE_KEY = "initial_setup_needs_setup";
 
 export function useInitialSetup() {
-  const [needsSetup, setNeedsSetup] = useState<boolean | null>(null);
-  const [loading, setLoading] = useState(true);
+  const [needsSetup, setNeedsSetup] = useState<boolean | null>(() => {
+    const cached = sessionStorage.getItem(CACHE_KEY);
+    return cached === null ? null : cached === "true";
+  });
+  const [loading, setLoading] = useState(() => needsSetup === null);
+  const mountedRef = useRef(true);
+
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+    };
+  }, []);
 
   useEffect(() => {
     const checkSetup = async () => {
-      try {
-        // Use POST with action parameter since invoke doesn't support GET method properly
-        const { data, error } = await supabase.functions.invoke('initial-setup', {
-          body: { action: 'check' },
-        });
+      // Always stop spinner after a short grace period to avoid “loading forever” UX.
+      const hardStop = window.setTimeout(() => {
+        if (mountedRef.current) setLoading(false);
+      }, 4000);
 
-        if (error) {
-          console.error('Error checking setup status:', error);
-          setNeedsSetup(false);
-        } else {
-          setNeedsSetup(data?.needsSetup ?? false);
+      try {
+        const { data, error } = await supabase.functions.invoke<SetupCheckResponse>(
+          "initial-setup",
+          { body: { action: "check" } }
+        );
+
+        if (error) throw error;
+
+        const value = data?.needsSetup ?? false;
+        sessionStorage.setItem(CACHE_KEY, String(value));
+
+        if (mountedRef.current) {
+          setNeedsSetup(value);
+          setLoading(false);
         }
-      } catch (error) {
-        console.error('Error checking setup:', error);
-        setNeedsSetup(false);
+      } catch (err) {
+        console.error("Error checking setup:", err);
+        // Fail-open to prevent blocking the app.
+        if (mountedRef.current) {
+          setNeedsSetup(false);
+          setLoading(false);
+        }
       } finally {
-        setLoading(false);
+        window.clearTimeout(hardStop);
       }
     };
 
@@ -32,3 +59,4 @@ export function useInitialSetup() {
 
   return { needsSetup, loading };
 }
+
