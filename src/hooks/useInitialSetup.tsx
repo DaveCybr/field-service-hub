@@ -8,8 +8,9 @@ export function useInitialSetup() {
   useEffect(() => {
     const checkSetup = async () => {
       try {
+        // Use POST with action parameter since invoke doesn't support GET method properly
         const { data, error } = await supabase.functions.invoke('initial-setup', {
-          method: 'GET',
+          body: { action: 'check' },
         });
 
         if (error) {

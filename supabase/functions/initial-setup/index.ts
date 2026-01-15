@@ -18,8 +18,18 @@ Deno.serve(async (req) => {
       auth: { autoRefreshToken: false, persistSession: false },
     });
 
-    // Handle GET request - check if setup is needed
-    if (req.method === 'GET') {
+    // Parse body for POST requests
+    let body: any = {};
+    if (req.method === 'POST') {
+      try {
+        body = await req.json();
+      } catch {
+        body = {};
+      }
+    }
+
+    // Handle check action or GET request - check if setup is needed
+    if (req.method === 'GET' || body.action === 'check') {
       const { count, error } = await adminClient
         .from('user_roles')
         .select('*', { count: 'exact', head: true });
@@ -41,7 +51,7 @@ Deno.serve(async (req) => {
     }
 
     // Handle POST request - create first superadmin
-    if (req.method === 'POST') {
+    if (req.method === 'POST' && body.email) {
       // First, verify that no users exist
       const { count: userCount } = await adminClient
         .from('user_roles')
@@ -54,7 +64,7 @@ Deno.serve(async (req) => {
         });
       }
 
-      const { email, password, name } = await req.json();
+      const { email, password, name } = body;
       
       if (!email || !password || !name) {
         return new Response(JSON.stringify({ error: 'Email, password, and name are required' }), {
