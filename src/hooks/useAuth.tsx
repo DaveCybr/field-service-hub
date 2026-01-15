@@ -123,6 +123,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   const signOut = async () => {
+    // Clear cached setup check to ensure fresh state on next login
+    try {
+      sessionStorage.removeItem('initial_setup_needs_setup');
+    } catch {
+      // Ignore storage errors
+    }
     await supabase.auth.signOut();
     setEmployee(null);
     setUserRole(null);
