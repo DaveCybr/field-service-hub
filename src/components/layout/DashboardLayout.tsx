@@ -1,10 +1,10 @@
-import { ReactNode, useState } from 'react';
-import { Link, useLocation, useNavigate } from 'react-router-dom';
-import { useAuth } from '@/hooks/useAuth';
-import { useAuditLog } from '@/hooks/useAuditLog';
-import { useRealtimeNotifications } from '@/hooks/useRealtimeNotifications';
-import { Button } from '@/components/ui/button';
-import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
+import { ReactNode, useState } from "react";
+import { Link, useLocation, useNavigate } from "react-router-dom";
+import { useAuth } from "@/hooks/useAuth";
+import { useAuditLog } from "@/hooks/useAuditLog";
+import { useRealtimeNotifications } from "@/hooks/useRealtimeNotifications";
+import { Button } from "@/components/ui/button";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -12,7 +12,7 @@ import {
   DropdownMenuLabel,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
-} from '@/components/ui/dropdown-menu';
+} from "@/components/ui/dropdown-menu";
 import {
   LayoutDashboard,
   Wrench,
@@ -28,51 +28,59 @@ import {
   ChevronRight,
   Shield,
   ScrollText,
-} from 'lucide-react';
-import { cn } from '@/lib/utils';
-import NotificationsDropdown from './NotificationsDropdown';
-import { LanguageSwitcher } from '@/components/LanguageSwitcher';
+} from "lucide-react";
+import { cn } from "@/lib/utils";
+import NotificationsDropdown from "./NotificationsDropdown";
+import { LanguageSwitcher } from "@/components/LanguageSwitcher";
 
 interface DashboardLayoutProps {
   children: ReactNode;
 }
 
-import { CreditCard } from 'lucide-react';
+import { CreditCard } from "lucide-react";
+import { supabase } from "@/integrations/supabase/client";
 
 // Navigation items for different roles
 const adminNavigation = [
-  { name: 'Dashboard', href: '/dashboard', icon: LayoutDashboard },
-  { name: 'Service Jobs', href: '/jobs', icon: Wrench },
-  { name: 'Technicians', href: '/technicians', icon: Users },
-  { name: 'Customers', href: '/customers', icon: UserCircle },
-  { name: 'Units', href: '/units', icon: QrCode },
-  { name: 'Inventory', href: '/inventory', icon: Package },
-  { name: 'Reports', href: '/reports', icon: FileText },
-  { name: 'Settings', href: '/settings', icon: Settings },
+  { name: "Dashboard", href: "/dashboard", icon: LayoutDashboard },
+  { name: "Service Jobs", href: "/jobs", icon: Wrench },
+  { name: "Technicians", href: "/technicians", icon: Users },
+  { name: "Customers", href: "/customers", icon: UserCircle },
+  { name: "Units", href: "/units", icon: QrCode },
+  { name: "Inventory", href: "/inventory", icon: Package },
+  { name: "Reports", href: "/reports", icon: FileText },
+  { name: "Settings", href: "/settings", icon: Settings },
 ];
 
 const technicianNavigation = [
-  { name: 'Dashboard', href: '/dashboard', icon: LayoutDashboard },
-  { name: 'My Jobs', href: '/jobs', icon: Wrench },
-  { name: 'Settings', href: '/settings', icon: Settings },
+  { name: "Dashboard", href: "/dashboard", icon: LayoutDashboard },
+  { name: "My Jobs", href: "/jobs", icon: Wrench },
+  { name: "Settings", href: "/settings", icon: Settings },
 ];
 
 const cashierNavigation = [
-  { name: 'Dashboard', href: '/dashboard', icon: LayoutDashboard },
-  { name: 'Payments', href: '/jobs', icon: CreditCard },
-  { name: 'Settings', href: '/settings', icon: Settings },
+  { name: "Dashboard", href: "/dashboard", icon: LayoutDashboard },
+  { name: "Payments", href: "/jobs", icon: CreditCard },
+  { name: "Settings", href: "/settings", icon: Settings },
 ];
 
 const superadminExtras = [
-  { name: 'User Management', href: '/users', icon: Shield },
-  { name: 'Audit Logs', href: '/audit-logs', icon: ScrollText },
+  { name: "User Management", href: "/users", icon: Shield },
+  { name: "Audit Logs", href: "/audit-logs", icon: ScrollText },
 ];
 
 export default function DashboardLayout({ children }: DashboardLayoutProps) {
   const [sidebarOpen, setSidebarOpen] = useState(false);
-  const { employee, isSuperadmin, isAdmin, userRole, signOut, user } = useAuth();
+  const { employee, isSuperadmin, isAdmin, userRole, signOut, user } =
+    useAuth();
   const { log: auditLog } = useAuditLog();
-  const { notifications, unreadCount, markAsRead, markAllAsRead, clearNotifications } = useRealtimeNotifications();
+  const {
+    notifications,
+    unreadCount,
+    markAsRead,
+    markAllAsRead,
+    clearNotifications,
+  } = useRealtimeNotifications();
   const location = useLocation();
   const navigate = useNavigate();
 
@@ -81,13 +89,13 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
     if (isSuperadmin) {
       return [...adminNavigation, ...superadminExtras];
     }
-    if (isAdmin || userRole === 'manager') {
+    if (isAdmin || userRole === "manager") {
       return adminNavigation;
     }
-    if (userRole === 'cashier') {
+    if (userRole === "cashier") {
       return cashierNavigation;
     }
-    if (userRole === 'technician') {
+    if (userRole === "technician") {
       return technicianNavigation;
     }
     return technicianNavigation; // Default fallback
@@ -95,22 +103,37 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
 
   const navigation = getNavigationByRole();
 
-  const handleSignOut = async () => {
-    // Log logout before signing out
-    await auditLog({
-      action: 'logout',
-      entityType: 'user',
-      entityId: user?.id,
+  const handleSignOut = () => {
+    console.log("1. Logout button clicked - FORCE VERSION");
+
+    // Clear storage FIRST
+    console.log("2. Clearing all storage...");
+    try {
+      localStorage.clear();
+      sessionStorage.clear();
+    } catch (e) {
+      console.error("Storage clear error:", e);
+    }
+
+    // Fire and forget supabase signout - don't wait
+    console.log("3. Signout from Supabase (fire and forget)...");
+    supabase.auth.signOut().catch((err) => {
+      console.error("Supabase error (ignored):", err);
     });
-    await signOut();
-    navigate('/auth');
+
+    // Redirect immediately - don't wait for supabase
+    console.log("4. Redirecting NOW...");
+    setTimeout(() => {
+      console.log("5. Executing redirect");
+      window.location.href = "/auth";
+    }, 100); // Minimal delay untuk memastikan log terlihat
   };
 
   const getInitials = (name: string) => {
     return name
-      .split(' ')
+      .split(" ")
       .map((n) => n[0])
-      .join('')
+      .join("")
       .toUpperCase()
       .slice(0, 2);
   };
@@ -138,7 +161,9 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
             <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary">
               <Wrench className="h-5 w-5 text-primary-foreground" />
             </div>
-            <span className="text-lg font-bold text-sidebar-foreground">REKAMTEKNIK</span>
+            <span className="text-lg font-bold text-sidebar-foreground">
+              REKAMTEKNIK
+            </span>
           </Link>
           <button
             onClick={() => setSidebarOpen(false)}
@@ -151,7 +176,9 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
         {/* Navigation */}
         <nav className="flex-1 space-y-1 px-3 py-4">
           {navigation.map((item) => {
-            const isActive = location.pathname === item.href || location.pathname.startsWith(item.href + '/');
+            const isActive =
+              location.pathname === item.href ||
+              location.pathname.startsWith(item.href + "/");
             return (
               <Link
                 key={item.name}
@@ -177,15 +204,15 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
             <Avatar className="h-9 w-9">
               <AvatarImage src={employee?.avatar_url || undefined} />
               <AvatarFallback className="bg-primary text-primary-foreground text-sm">
-                {employee?.name ? getInitials(employee.name) : 'U'}
+                {employee?.name ? getInitials(employee.name) : "U"}
               </AvatarFallback>
             </Avatar>
             <div className="flex-1 min-w-0">
               <p className="text-sm font-medium text-sidebar-foreground truncate">
-                {employee?.name || 'User'}
+                {employee?.name || "User"}
               </p>
               <p className="text-xs text-sidebar-foreground/60 capitalize">
-                {employee?.role || 'Member'}
+                {employee?.role || "Member"}
               </p>
             </div>
           </div>
@@ -196,10 +223,7 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
       <div className="lg:pl-64">
         {/* Top header */}
         <header className="sticky top-0 z-30 flex h-16 items-center gap-4 border-b bg-card px-4 lg:px-6">
-          <button
-            onClick={() => setSidebarOpen(true)}
-            className="lg:hidden"
-          >
+          <button onClick={() => setSidebarOpen(true)} className="lg:hidden">
             <Menu className="h-6 w-6" />
           </button>
 
@@ -224,7 +248,7 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
                 <Avatar className="h-8 w-8">
                   <AvatarImage src={employee?.avatar_url || undefined} />
                   <AvatarFallback className="bg-primary text-primary-foreground text-sm">
-                    {employee?.name ? getInitials(employee.name) : 'U'}
+                    {employee?.name ? getInitials(employee.name) : "U"}
                   </AvatarFallback>
                 </Avatar>
               </Button>
@@ -232,7 +256,9 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
             <DropdownMenuContent className="w-56" align="end" forceMount>
               <DropdownMenuLabel className="font-normal">
                 <div className="flex flex-col space-y-1">
-                  <p className="text-sm font-medium leading-none">{employee?.name}</p>
+                  <p className="text-sm font-medium leading-none">
+                    {employee?.name}
+                  </p>
                   <p className="text-xs leading-none text-muted-foreground">
                     {employee?.email}
                   </p>
@@ -248,9 +274,7 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
         </header>
 
         {/* Page content */}
-        <main className="p-4 lg:p-6">
-          {children}
-        </main>
+        <main className="p-4 lg:p-6">{children}</main>
       </div>
     </div>
   );

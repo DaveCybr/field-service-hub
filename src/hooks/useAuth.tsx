@@ -1,8 +1,22 @@
-import { createContext, useContext, useEffect, useState, ReactNode } from 'react';
-import { User, Session } from '@supabase/supabase-js';
-import { supabase } from '@/integrations/supabase/client';
+// ============================================
+// FILE 1: src/hooks/useAuth.tsx
+// ============================================
+import {
+  createContext,
+  useContext,
+  useEffect,
+  useState,
+  ReactNode,
+} from "react";
+import { User, Session } from "@supabase/supabase-js";
+import { supabase } from "@/integrations/supabase/client";
 
-type EmployeeRole = 'superadmin' | 'admin' | 'manager' | 'technician' | 'cashier';
+type EmployeeRole =
+  | "superadmin"
+  | "admin"
+  | "manager"
+  | "technician"
+  | "cashier";
 
 interface Employee {
   id: string;
@@ -22,7 +36,12 @@ interface AuthContextType {
   isSuperadmin: boolean;
   isAdmin: boolean;
   signIn: (email: string, password: string) => Promise<{ error: Error | null }>;
-  signUp: (email: string, password: string, name: string, role?: string) => Promise<{ error: Error | null }>;
+  signUp: (
+    email: string,
+    password: string,
+    name: string,
+    role?: string
+  ) => Promise<{ error: Error | null }>;
   signOut: () => Promise<void>;
 }
 
@@ -37,9 +56,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const fetchEmployee = async (userId: string) => {
     const { data, error } = await supabase
-      .from('employees')
-      .select('*')
-      .eq('user_id', userId)
+      .from("employees")
+      .select("*")
+      .eq("user_id", userId)
       .single();
 
     if (!error && data) {
@@ -49,9 +68,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const fetchUserRole = async (userId: string) => {
     const { data, error } = await supabase
-      .from('user_roles')
-      .select('role')
-      .eq('user_id', userId)
+      .from("user_roles")
+      .select("role")
+      .eq("user_id", userId)
       .single();
 
     if (!error && data) {
@@ -61,36 +80,38 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     // Set up auth state listener FIRST
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(
-      (event, session) => {
-        setSession(session);
-        setUser(session?.user ?? null);
-        
-        // Defer Supabase calls with setTimeout
-        if (session?.user) {
-          setTimeout(() => {
-            fetchEmployee(session.user.id);
-            fetchUserRole(session.user.id);
-          }, 0);
-        } else {
-          setEmployee(null);
-          setUserRole(null);
-        }
-        
-        setLoading(false);
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange((event, session) => {
+      console.log("Auth state changed:", event, session?.user?.email);
+
+      setSession(session);
+      setUser(session?.user ?? null);
+
+      // Defer Supabase calls with setTimeout
+      if (session?.user) {
+        setTimeout(() => {
+          fetchEmployee(session.user.id);
+          fetchUserRole(session.user.id);
+        }, 0);
+      } else {
+        setEmployee(null);
+        setUserRole(null);
       }
-    );
+
+      setLoading(false);
+    });
 
     // THEN check for existing session
     supabase.auth.getSession().then(({ data: { session } }) => {
       setSession(session);
       setUser(session?.user ?? null);
-      
+
       if (session?.user) {
         fetchEmployee(session.user.id);
         fetchUserRole(session.user.id);
       }
-      
+
       setLoading(false);
     });
 
@@ -105,9 +126,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return { error: error as Error | null };
   };
 
-  const signUp = async (email: string, password: string, name: string, role: string = 'technician') => {
+  const signUp = async (
+    email: string,
+    password: string,
+    name: string,
+    role: string = "technician"
+  ) => {
     const redirectUrl = `${window.location.origin}/`;
-    
+
     const { error } = await supabase.auth.signUp({
       email,
       password,
@@ -123,33 +149,31 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   const signOut = async () => {
-    // Clear cached setup check to ensure fresh state on next login
-    try {
-      sessionStorage.removeItem('initial_setup_needs_setup');
-    } catch {
-      // Ignore storage errors
-    }
+    // Simplified version - just do the essentials
+    localStorage.clear();
+    sessionStorage.clear();
     await supabase.auth.signOut();
-    setEmployee(null);
-    setUserRole(null);
+    window.location.href = "/auth";
   };
 
-  const isSuperadmin = userRole === 'superadmin';
-  const isAdmin = userRole === 'superadmin' || userRole === 'admin';
+  const isSuperadmin = userRole === "superadmin";
+  const isAdmin = userRole === "superadmin" || userRole === "admin";
 
   return (
-    <AuthContext.Provider value={{ 
-      user, 
-      session, 
-      employee, 
-      userRole,
-      loading, 
-      isSuperadmin,
-      isAdmin,
-      signIn, 
-      signUp, 
-      signOut 
-    }}>
+    <AuthContext.Provider
+      value={{
+        user,
+        session,
+        employee,
+        userRole,
+        loading,
+        isSuperadmin,
+        isAdmin,
+        signIn,
+        signUp,
+        signOut,
+      }}
+    >
       {children}
     </AuthContext.Provider>
   );
@@ -158,7 +182,34 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 export function useAuth() {
   const context = useContext(AuthContext);
   if (context === undefined) {
-    throw new Error('useAuth must be used within an AuthProvider');
+    throw new Error("useAuth must be used within an AuthProvider");
   }
   return context;
 }
+
+// ============================================
+// FILE 2: Update untuk DashboardLayout.tsx
+// Ganti fungsi handleSignOut (line 106-113) dengan:
+// ============================================
+
+/*
+const handleSignOut = async () => {
+  console.log('Logout button clicked');
+  
+  // Log logout action
+  try {
+    await auditLog({
+      action: 'logout',
+      entityType: 'user',
+      entityId: user?.id,
+    });
+  } catch (error) {
+    console.error('Failed to log audit:', error);
+  }
+  
+  // Call signOut - it will handle redirect
+  await signOut();
+  
+  // No need to call navigate() here since signOut() does window.location.replace()
+};
+*/
