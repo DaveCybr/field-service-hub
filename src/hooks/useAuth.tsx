@@ -1,5 +1,5 @@
 // ============================================
-// FILE 1: src/hooks/useAuth.tsx
+// FILE 2: src/hooks/useAuth.tsx (UPDATED)
 // ============================================
 import {
   createContext,
@@ -55,26 +55,38 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [loading, setLoading] = useState(true);
 
   const fetchEmployee = async (userId: string) => {
-    const { data, error } = await supabase
-      .from("employees")
-      .select("*")
-      .eq("user_id", userId)
-      .single();
+    try {
+      const { data, error } = await supabase
+        .from("employees")
+        .select("*")
+        .eq("user_id", userId)
+        .maybeSingle(); // ← Changed from .single()
 
-    if (!error && data) {
-      setEmployee(data as Employee);
+      if (!error && data) {
+        setEmployee(data as Employee);
+      } else if (error) {
+        console.log("No employee record found:", error.message);
+      }
+    } catch (err) {
+      console.error("Error fetching employee:", err);
     }
   };
 
   const fetchUserRole = async (userId: string) => {
-    const { data, error } = await supabase
-      .from("user_roles")
-      .select("role")
-      .eq("user_id", userId)
-      .single();
+    try {
+      const { data, error } = await supabase
+        .from("user_roles")
+        .select("role")
+        .eq("user_id", userId)
+        .maybeSingle(); // ← Changed from .single()
 
-    if (!error && data) {
-      setUserRole(data.role as EmployeeRole);
+      if (!error && data) {
+        setUserRole(data.role as EmployeeRole);
+      } else if (error) {
+        console.log("No user role found:", error.message);
+      }
+    } catch (err) {
+      console.error("Error fetching user role:", err);
     }
   };
 
@@ -149,7 +161,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   const signOut = async () => {
-    // Simplified version - just do the essentials
     localStorage.clear();
     sessionStorage.clear();
     await supabase.auth.signOut();
@@ -186,30 +197,3 @@ export function useAuth() {
   }
   return context;
 }
-
-// ============================================
-// FILE 2: Update untuk DashboardLayout.tsx
-// Ganti fungsi handleSignOut (line 106-113) dengan:
-// ============================================
-
-/*
-const handleSignOut = async () => {
-  console.log('Logout button clicked');
-  
-  // Log logout action
-  try {
-    await auditLog({
-      action: 'logout',
-      entityType: 'user',
-      entityId: user?.id,
-    });
-  } catch (error) {
-    console.error('Failed to log audit:', error);
-  }
-  
-  // Call signOut - it will handle redirect
-  await signOut();
-  
-  // No need to call navigate() here since signOut() does window.location.replace()
-};
-*/

@@ -1,30 +1,42 @@
-import { useEffect, useState } from 'react';
-import { useParams, Link, useNavigate } from 'react-router-dom';
-import { supabase } from '@/integrations/supabase/client';
-import { useAuditLog } from '@/hooks/useAuditLog';
-import { useAuth } from '@/hooks/useAuth';
-import DashboardLayout from '@/components/layout/DashboardLayout';
-import JobPhotoGallery from '@/components/jobs/JobPhotoGallery';
-import GPSCheckInOut from '@/components/jobs/GPSCheckInOut';
-import { LocationMap } from '@/components/jobs/LocationMap';
-import { Button } from '@/components/ui/button';
-import { Badge } from '@/components/ui/badge';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Separator } from '@/components/ui/separator';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
-import { Textarea } from '@/components/ui/textarea';
-import { Label } from '@/components/ui/label';
-import { Input } from '@/components/ui/input';
+import { useEffect, useState } from "react";
+import { useParams, Link, useNavigate } from "react-router-dom";
+import { supabase } from "@/integrations/supabase/client";
+import { useAuditLog } from "@/hooks/useAuditLog";
+import { useAuth } from "@/hooks/useAuth";
+import DashboardLayout from "@/components/layout/DashboardLayout";
+import JobPhotoGallery from "@/components/jobs/JobPhotoGallery";
+import GPSCheckInOut from "@/components/jobs/GPSCheckInOut";
+import { LocationMap } from "@/components/jobs/LocationMap";
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
+import { Separator } from "@/components/ui/separator";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog";
+import { Textarea } from "@/components/ui/textarea";
+import { Label } from "@/components/ui/label";
+import { Input } from "@/components/ui/input";
 import {
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
   SelectValue,
-} from '@/components/ui/select';
-import { useToast } from '@/hooks/use-toast';
-import { format, formatDistanceToNow } from 'date-fns';
+} from "@/components/ui/select";
+import { useToast } from "@/hooks/use-toast";
+import { format, formatDistanceToNow } from "date-fns";
 import {
   ArrowLeft,
   Calendar,
@@ -48,10 +60,17 @@ import {
   Camera,
   Plus,
   X,
-} from 'lucide-react';
+} from "lucide-react";
 
-type JobStatus = 'pending_assignment' | 'pending_approval' | 'approved' | 'in_progress' | 'completed' | 'completed_paid' | 'cancelled';
-type PaymentStatus = 'pending' | 'paid' | 'partial' | 'overdue';
+type JobStatus =
+  | "pending_assignment"
+  | "pending_approval"
+  | "approved"
+  | "in_progress"
+  | "completed"
+  | "completed_paid"
+  | "cancelled";
+type PaymentStatus = "pending" | "paid" | "partial" | "overdue";
 
 interface JobDetails {
   id: string;
@@ -108,7 +127,16 @@ interface JobDetails {
 interface TimelineEvent {
   id: string;
   timestamp: string;
-  type: 'created' | 'assigned' | 'approved' | 'checkin' | 'checkout' | 'completed' | 'paid' | 'cancelled' | 'note';
+  type:
+    | "created"
+    | "assigned"
+    | "approved"
+    | "checkin"
+    | "checkout"
+    | "completed"
+    | "paid"
+    | "cancelled"
+    | "note";
   title: string;
   description?: string;
   icon: React.ReactNode;
@@ -128,33 +156,39 @@ export default function JobDetail() {
   const navigate = useNavigate();
   const { toast } = useToast();
   const { log: auditLog } = useAuditLog();
-  
+
   const [job, setJob] = useState<JobDetails | null>(null);
   const [loading, setLoading] = useState(true);
   const [updating, setUpdating] = useState(false);
-  
+
   // Parts dialog state
   const [partsDialogOpen, setPartsDialogOpen] = useState(false);
   const [products, setProducts] = useState<Product[]>([]);
-  const [selectedProduct, setSelectedProduct] = useState('');
-  const [partQuantity, setPartQuantity] = useState('1');
-  const [usedParts, setUsedParts] = useState<{ product: Product; quantity: number }[]>([]);
-  
+  const [selectedProduct, setSelectedProduct] = useState("");
+  const [partQuantity, setPartQuantity] = useState("1");
+  const [usedParts, setUsedParts] = useState<
+    { product: Product; quantity: number }[]
+  >([]);
+
   // Notes dialog state
   const [notesDialogOpen, setNotesDialogOpen] = useState(false);
-  const [adminNotes, setAdminNotes] = useState('');
+  const [adminNotes, setAdminNotes] = useState("");
 
   // Payment dialog state (for cashier)
   const [paymentDialogOpen, setPaymentDialogOpen] = useState(false);
-  const [paymentMethod, setPaymentMethod] = useState('cash');
-  const [paymentNotes, setPaymentNotes] = useState('');
+  const [paymentMethod, setPaymentMethod] = useState("cash");
+  const [paymentNotes, setPaymentNotes] = useState("");
   const [processingPayment, setProcessingPayment] = useState(false);
 
   // Auth for role check
   const { userRole, employee } = useAuth();
-  const isCashier = userRole === 'cashier';
-  const isTechnician = userRole === 'technician';
-  const canProcessPayment = isCashier || userRole === 'superadmin' || userRole === 'admin' || userRole === 'manager';
+  const isCashier = userRole === "cashier";
+  const isTechnician = userRole === "technician";
+  const canProcessPayment =
+    isCashier ||
+    userRole === "superadmin" ||
+    userRole === "admin" ||
+    userRole === "manager";
 
   useEffect(() => {
     if (id) {
@@ -167,31 +201,33 @@ export default function JobDetail() {
     setLoading(true);
     try {
       const { data, error } = await supabase
-        .from('service_jobs')
-        .select(`
+        .from("service_jobs")
+        .select(
+          `
           *,
           customers (id, name, phone, address, email),
           employees!service_jobs_assigned_technician_id_fkey (id, name, phone, email),
           units (id, qr_code, unit_type, brand, model, serial_number)
-        `)
-        .eq('id', id)
+        `
+        )
+        .eq("id", id)
         .single();
 
       if (error) throw error;
 
       setJob({
         ...data,
-        customer: data.customers as JobDetails['customer'],
-        technician: data.employees as JobDetails['technician'],
-        unit: data.units as JobDetails['unit'],
+        customer: data.customers as JobDetails["customer"],
+        technician: data.employees as JobDetails["technician"],
+        unit: data.units as JobDetails["unit"],
       });
-      setAdminNotes(data.admin_notes || '');
+      setAdminNotes(data.admin_notes || "");
     } catch (error) {
-      console.error('Error fetching job:', error);
+      console.error("Error fetching job:", error);
       toast({
-        variant: 'destructive',
-        title: 'Error',
-        description: 'Failed to load job details.',
+        variant: "destructive",
+        title: "Error",
+        description: "Failed to load job details.",
       });
     } finally {
       setLoading(false);
@@ -200,11 +236,11 @@ export default function JobDetail() {
 
   const fetchProducts = async () => {
     const { data } = await supabase
-      .from('products')
-      .select('id, name, sku, sell_price, stock')
-      .eq('is_active', true)
-      .gt('stock', 0)
-      .order('name');
+      .from("products")
+      .select("id, name, sku, sell_price, stock")
+      .eq("is_active", true)
+      .gt("stock", 0)
+      .order("name");
     if (data) setProducts(data);
   };
 
@@ -214,46 +250,48 @@ export default function JobDetail() {
     const oldStatus = job.status;
     try {
       const updates: any = { status: newStatus };
-      
-      if (newStatus === 'in_progress' && !job.actual_checkin_at) {
+
+      if (newStatus === "in_progress" && !job.actual_checkin_at) {
         updates.actual_checkin_at = new Date().toISOString();
       }
-      if (newStatus === 'completed' && !job.actual_checkout_at) {
+      if (newStatus === "completed" && !job.actual_checkout_at) {
         updates.actual_checkout_at = new Date().toISOString();
         if (job.actual_checkin_at) {
           const checkin = new Date(job.actual_checkin_at);
           const checkout = new Date();
-          updates.actual_duration_minutes = Math.round((checkout.getTime() - checkin.getTime()) / 60000);
+          updates.actual_duration_minutes = Math.round(
+            (checkout.getTime() - checkin.getTime()) / 60000
+          );
         }
       }
 
       const { error } = await supabase
-        .from('service_jobs')
+        .from("service_jobs")
         .update(updates)
-        .eq('id', job.id);
+        .eq("id", job.id);
 
       if (error) throw error;
 
       // Audit log for status change
       await auditLog({
-        action: 'status_change',
-        entityType: 'job',
+        action: "status_change",
+        entityType: "job",
         entityId: job.id,
         oldData: { status: oldStatus, job_number: job.job_number },
         newData: { status: newStatus, job_number: job.job_number },
       });
 
       toast({
-        title: 'Status Updated',
-        description: `Job status changed to ${newStatus.replace(/_/g, ' ')}.`,
+        title: "Status Updated",
+        description: `Job status changed to ${newStatus.replace(/_/g, " ")}.`,
       });
       fetchJob();
     } catch (error) {
-      console.error('Error updating status:', error);
+      console.error("Error updating status:", error);
       toast({
-        variant: 'destructive',
-        title: 'Error',
-        description: 'Failed to update job status.',
+        variant: "destructive",
+        title: "Error",
+        description: "Failed to update job status.",
       });
     } finally {
       setUpdating(false);
@@ -265,24 +303,24 @@ export default function JobDetail() {
     setUpdating(true);
     try {
       const { error } = await supabase
-        .from('service_jobs')
+        .from("service_jobs")
         .update({ admin_notes: adminNotes })
-        .eq('id', job.id);
+        .eq("id", job.id);
 
       if (error) throw error;
 
       toast({
-        title: 'Notes Saved',
-        description: 'Admin notes have been updated.',
+        title: "Notes Saved",
+        description: "Admin notes have been updated.",
       });
       setNotesDialogOpen(false);
       fetchJob();
     } catch (error) {
-      console.error('Error saving notes:', error);
+      console.error("Error saving notes:", error);
       toast({
-        variant: 'destructive',
-        title: 'Error',
-        description: 'Failed to save notes.',
+        variant: "destructive",
+        title: "Error",
+        description: "Failed to save notes.",
       });
     } finally {
       setUpdating(false);
@@ -295,48 +333,54 @@ export default function JobDetail() {
     setProcessingPayment(true);
     try {
       const { error } = await supabase
-        .from('service_jobs')
-        .update({ 
-          status: 'completed_paid',
-          payment_status: 'paid',
-          admin_notes: job.admin_notes 
-            ? `${job.admin_notes}\n\n--- Payment ---\nMethod: ${paymentMethod}\nProcessed: ${new Date().toLocaleString()}${paymentNotes ? `\nNotes: ${paymentNotes}` : ''}`
-            : `--- Payment ---\nMethod: ${paymentMethod}\nProcessed: ${new Date().toLocaleString()}${paymentNotes ? `\nNotes: ${paymentNotes}` : ''}`
+        .from("service_jobs")
+        .update({
+          status: "completed_paid",
+          payment_status: "paid",
+          admin_notes: job.admin_notes
+            ? `${
+                job.admin_notes
+              }\n\n--- Payment ---\nMethod: ${paymentMethod}\nProcessed: ${new Date().toLocaleString()}${
+                paymentNotes ? `\nNotes: ${paymentNotes}` : ""
+              }`
+            : `--- Payment ---\nMethod: ${paymentMethod}\nProcessed: ${new Date().toLocaleString()}${
+                paymentNotes ? `\nNotes: ${paymentNotes}` : ""
+              }`,
         })
-        .eq('id', job.id);
+        .eq("id", job.id);
 
       if (error) throw error;
 
       // Audit log for payment
       await auditLog({
-        action: 'payment',
-        entityType: 'job',
+        action: "payment",
+        entityType: "job",
         entityId: job.id,
         oldData: { status: job.status, payment_status: job.payment_status },
-        newData: { 
-          status: 'completed_paid', 
-          payment_status: 'paid',
+        newData: {
+          status: "completed_paid",
+          payment_status: "paid",
           payment_method: paymentMethod,
           job_number: job.job_number,
-          total_cost: job.total_cost
+          total_cost: job.total_cost,
         },
       });
 
       toast({
-        title: 'Payment Processed',
+        title: "Payment Processed",
         description: `Payment for ${job.job_number} has been marked as paid.`,
       });
-      
+
       setPaymentDialogOpen(false);
-      setPaymentMethod('cash');
-      setPaymentNotes('');
+      setPaymentMethod("cash");
+      setPaymentNotes("");
       fetchJob();
     } catch (error) {
-      console.error('Error processing payment:', error);
+      console.error("Error processing payment:", error);
       toast({
-        variant: 'destructive',
-        title: 'Error',
-        description: 'Failed to process payment.',
+        variant: "destructive",
+        title: "Error",
+        description: "Failed to process payment.",
       });
     } finally {
       setProcessingPayment(false);
@@ -344,12 +388,17 @@ export default function JobDetail() {
   };
 
   // GPS Check-in handler for technicians
-  const handleGPSCheckIn = async (latitude: number, longitude: number, isValid: boolean, photos: string[]) => {
+  const handleGPSCheckIn = async (
+    latitude: number,
+    longitude: number,
+    isValid: boolean,
+    photos: string[]
+  ) => {
     if (!job) return;
-    
+
     try {
       const updates: Record<string, any> = {
-        status: 'in_progress' as JobStatus,
+        status: "in_progress" as JobStatus,
         actual_checkin_at: new Date().toISOString(),
         checkin_gps_valid: isValid,
         gps_violation_detected: !isValid,
@@ -361,19 +410,19 @@ export default function JobDetail() {
       }
 
       const { error } = await supabase
-        .from('service_jobs')
+        .from("service_jobs")
         .update(updates)
-        .eq('id', job.id);
+        .eq("id", job.id);
 
       if (error) throw error;
 
       await auditLog({
-        action: 'status_change',
-        entityType: 'job',
+        action: "status_change",
+        entityType: "job",
         entityId: job.id,
         oldData: { status: job.status },
-        newData: { 
-          status: 'in_progress', 
+        newData: {
+          status: "in_progress",
           checkin_gps_valid: isValid,
           checkin_latitude: latitude,
           checkin_longitude: longitude,
@@ -382,64 +431,77 @@ export default function JobDetail() {
       });
 
       toast({
-        title: isValid ? 'Checked In Successfully' : 'Checked In (GPS Warning)',
-        description: isValid 
-          ? `Your location has been verified. Job is now in progress.${photos.length > 0 ? ` ${photos.length} photo(s) saved.` : ''}` 
-          : 'Job started, but GPS location does not match service address.',
-        variant: isValid ? 'default' : 'destructive',
+        title: isValid ? "Checked In Successfully" : "Checked In (GPS Warning)",
+        description: isValid
+          ? `Your location has been verified. Job is now in progress.${
+              photos.length > 0 ? ` ${photos.length} photo(s) saved.` : ""
+            }`
+          : "Job started, but GPS location does not match service address.",
+        variant: isValid ? "default" : "destructive",
       });
 
       fetchJob();
     } catch (error) {
-      console.error('Error checking in:', error);
+      console.error("Error checking in:", error);
       toast({
-        variant: 'destructive',
-        title: 'Check-in Failed',
-        description: 'Failed to check in. Please try again.',
+        variant: "destructive",
+        title: "Check-in Failed",
+        description: "Failed to check in. Please try again.",
       });
     }
   };
 
   // GPS Check-out handler for technicians
-  const handleGPSCheckOut = async (latitude: number, longitude: number, isValid: boolean, photos: string[]) => {
+  // Tambahkan ini ke dalam fungsi handleGPSCheckOut di JobDetail.tsx
+
+  const handleGPSCheckOut = async (
+    latitude: number,
+    longitude: number,
+    isValid: boolean,
+    photos: string[]
+  ) => {
     if (!job) return;
-    
+
     try {
       const checkoutTime = new Date();
       let durationMinutes = 0;
-      
+
       if (job.actual_checkin_at) {
         const checkinTime = new Date(job.actual_checkin_at);
-        durationMinutes = Math.round((checkoutTime.getTime() - checkinTime.getTime()) / 60000);
+        durationMinutes = Math.round(
+          (checkoutTime.getTime() - checkinTime.getTime()) / 60000
+        );
       }
 
       const updates: Record<string, any> = {
-        status: 'completed' as JobStatus,
+        status: "completed" as JobStatus,
         actual_checkout_at: checkoutTime.toISOString(),
         actual_duration_minutes: durationMinutes,
         checkout_gps_valid: isValid,
         gps_violation_detected: job.gps_violation_detected || !isValid,
       };
 
-      // Add after photos if any were uploaded
       if (photos.length > 0) {
         updates.after_photos = photos;
       }
 
       const { error } = await supabase
-        .from('service_jobs')
+        .from("service_jobs")
         .update(updates)
-        .eq('id', job.id);
+        .eq("id", job.id);
 
       if (error) throw error;
 
+      // ✅ NEW: Trigger auto-assign setelah checkout
+      await triggerAutoAssignAfterCheckout(job.id, employee?.id || "");
+
       await auditLog({
-        action: 'status_change',
-        entityType: 'job',
+        action: "status_change",
+        entityType: "job",
         entityId: job.id,
         oldData: { status: job.status },
-        newData: { 
-          status: 'completed', 
+        newData: {
+          status: "completed",
           checkout_gps_valid: isValid,
           checkout_latitude: latitude,
           checkout_longitude: longitude,
@@ -449,216 +511,303 @@ export default function JobDetail() {
       });
 
       toast({
-        title: isValid ? 'Job Completed' : 'Job Completed (GPS Warning)',
-        description: isValid 
-          ? `Job completed successfully. Duration: ${durationMinutes} minutes.${photos.length > 0 ? ` ${photos.length} photo(s) saved.` : ''}` 
+        title: isValid ? "Job Completed" : "Job Completed (GPS Warning)",
+        description: isValid
+          ? `Job completed successfully. Duration: ${durationMinutes} minutes.${
+              photos.length > 0 ? ` ${photos.length} photo(s) saved.` : ""
+            }`
           : `Job completed, but GPS location does not match service address.`,
-        variant: isValid ? 'default' : 'destructive',
+        variant: isValid ? "default" : "destructive",
       });
 
       fetchJob();
     } catch (error) {
-      console.error('Error checking out:', error);
+      console.error("Error checking out:", error);
       toast({
-        variant: 'destructive',
-        title: 'Check-out Failed',
-        description: 'Failed to check out. Please try again.',
+        variant: "destructive",
+        title: "Check-out Failed",
+        description: "Failed to check out. Please try again.",
       });
     }
   };
 
+  // ✅ NEW: Function untuk trigger auto-assign
+  const triggerAutoAssignAfterCheckout = async (
+    completedJobId: string,
+    technicianId: string
+  ) => {
+    try {
+      console.log("Triggering auto-assign for technician:", technicianId);
+
+      const response = await supabase.functions.invoke(
+        "auto-assign-on-checkout",
+        {
+          body: {
+            completedJobId,
+            technicianId,
+          },
+        }
+      );
+
+      if (response.error) {
+        console.error("Auto-assign error:", response.error);
+        return;
+      }
+
+      const data = response.data as any;
+      console.log("Auto-assign result:", data);
+
+      // Show toast jika ada jobs yang di-assign
+      if (data.assignedJobs && data.assignedJobs.length > 0) {
+        toast({
+          title: "🎉 Jobs Auto-Assigned",
+          description: `${data.assignedJobs.length} job(s) sudah di-assign ke teknisi lain. Admin akan di-notifikasi untuk approval.`,
+          variant: "default",
+        });
+      }
+    } catch (error) {
+      console.error("Error triggering auto-assign:", error);
+      // Don't show error toast karena ini background process
+      // Jika gagal, admin bisa manual assign nanti
+    }
+  };
+
   const addPart = () => {
-    const product = products.find(p => p.id === selectedProduct);
+    const product = products.find((p) => p.id === selectedProduct);
     if (product && partQuantity) {
-      setUsedParts(prev => [...prev, { product, quantity: parseInt(partQuantity) }]);
-      setSelectedProduct('');
-      setPartQuantity('1');
+      setUsedParts((prev) => [
+        ...prev,
+        { product, quantity: parseInt(partQuantity) },
+      ]);
+      setSelectedProduct("");
+      setPartQuantity("1");
     }
   };
 
   const removePart = (index: number) => {
-    setUsedParts(prev => prev.filter((_, i) => i !== index));
+    setUsedParts((prev) => prev.filter((_, i) => i !== index));
   };
 
   const calculatePartsTotal = () => {
-    return usedParts.reduce((sum, item) => sum + (item.product.sell_price * item.quantity), 0);
+    return usedParts.reduce(
+      (sum, item) => sum + item.product.sell_price * item.quantity,
+      0
+    );
   };
 
   const getStatusBadge = (status: string) => {
     const statusConfig: Record<string, { label: string; className: string }> = {
-      pending_assignment: { label: 'Pending Assignment', className: 'badge-status-pending' },
-      pending_approval: { label: 'Needs Approval', className: 'badge-status-pending' },
-      approved: { label: 'Approved', className: 'badge-status-approved' },
-      in_progress: { label: 'In Progress', className: 'badge-status-progress' },
-      completed: { label: 'Completed', className: 'badge-status-completed' },
-      completed_paid: { label: 'Paid', className: 'badge-status-completed' },
-      cancelled: { label: 'Cancelled', className: 'badge-status-cancelled' },
+      pending_assignment: {
+        label: "Pending Assignment",
+        className: "badge-status-pending",
+      },
+      pending_approval: {
+        label: "Needs Approval",
+        className: "badge-status-pending",
+      },
+      approved: { label: "Approved", className: "badge-status-approved" },
+      in_progress: { label: "In Progress", className: "badge-status-progress" },
+      completed: { label: "Completed", className: "badge-status-completed" },
+      completed_paid: { label: "Paid", className: "badge-status-completed" },
+      cancelled: { label: "Cancelled", className: "badge-status-cancelled" },
     };
-    const config = statusConfig[status] || { label: status, className: '' };
-    return <Badge variant="outline" className={config.className}>{config.label}</Badge>;
+    const config = statusConfig[status] || { label: status, className: "" };
+    return (
+      <Badge variant="outline" className={config.className}>
+        {config.label}
+      </Badge>
+    );
   };
 
   const getPriorityBadge = (priority: string) => {
-    const priorityConfig: Record<string, { label: string; className: string }> = {
-      low: { label: 'Low', className: 'badge-priority-low' },
-      normal: { label: 'Normal', className: 'badge-priority-normal' },
-      high: { label: 'High', className: 'badge-priority-high' },
-      urgent: { label: 'Urgent', className: 'badge-priority-urgent' },
+    const priorityConfig: Record<string, { label: string; className: string }> =
+      {
+        low: { label: "Low", className: "badge-priority-low" },
+        normal: { label: "Normal", className: "badge-priority-normal" },
+        high: { label: "High", className: "badge-priority-high" },
+        urgent: { label: "Urgent", className: "badge-priority-urgent" },
+      };
+    const config = priorityConfig[priority] || {
+      label: priority,
+      className: "",
     };
-    const config = priorityConfig[priority] || { label: priority, className: '' };
     return <Badge className={config.className}>{config.label}</Badge>;
   };
 
   const getPaymentBadge = (status: PaymentStatus | null) => {
     if (!status) return null;
-    const config: Record<PaymentStatus, { label: string; className: string }> = {
-      pending: { label: 'Pending', className: 'bg-amber-100 text-amber-800' },
-      paid: { label: 'Paid', className: 'bg-emerald-100 text-emerald-800' },
-      partial: { label: 'Partial', className: 'bg-blue-100 text-blue-800' },
-      overdue: { label: 'Overdue', className: 'bg-red-100 text-red-800' },
-    };
+    const config: Record<PaymentStatus, { label: string; className: string }> =
+      {
+        pending: { label: "Pending", className: "bg-amber-100 text-amber-800" },
+        paid: { label: "Paid", className: "bg-emerald-100 text-emerald-800" },
+        partial: { label: "Partial", className: "bg-blue-100 text-blue-800" },
+        overdue: { label: "Overdue", className: "bg-red-100 text-red-800" },
+      };
     const { label, className } = config[status];
     return <Badge className={className}>{label}</Badge>;
   };
 
   const formatCurrency = (amount: number | null) => {
-    if (amount === null) return '-';
-    return new Intl.NumberFormat('id-ID', {
-      style: 'currency',
-      currency: 'IDR',
+    if (amount === null) return "-";
+    return new Intl.NumberFormat("id-ID", {
+      style: "currency",
+      currency: "IDR",
       minimumFractionDigits: 0,
     }).format(amount);
   };
 
   const buildTimeline = (): TimelineEvent[] => {
     if (!job) return [];
-    
+
     const events: TimelineEvent[] = [];
-    
+
     // Job created
     events.push({
-      id: 'created',
+      id: "created",
       timestamp: job.created_at,
-      type: 'created',
-      title: 'Job Created',
+      type: "created",
+      title: "Job Created",
       description: `Service request "${job.title}" was created`,
       icon: <ClipboardList className="h-4 w-4" />,
-      color: 'bg-blue-500',
+      color: "bg-blue-500",
     });
 
     // Technician assigned
     if (job.technician) {
       events.push({
-        id: 'assigned',
+        id: "assigned",
         timestamp: job.created_at, // Would need separate timestamp in real scenario
-        type: 'assigned',
-        title: 'Technician Assigned',
+        type: "assigned",
+        title: "Technician Assigned",
         description: `${job.technician.name} was assigned to this job`,
         icon: <User className="h-4 w-4" />,
-        color: 'bg-purple-500',
+        color: "bg-purple-500",
       });
     }
 
     // Approved
-    if (['approved', 'in_progress', 'completed', 'completed_paid'].includes(job.status)) {
+    if (
+      ["approved", "in_progress", "completed", "completed_paid"].includes(
+        job.status
+      )
+    ) {
       events.push({
-        id: 'approved',
+        id: "approved",
         timestamp: job.updated_at,
-        type: 'approved',
-        title: 'Job Approved',
-        description: 'Job was approved for execution',
+        type: "approved",
+        title: "Job Approved",
+        description: "Job was approved for execution",
         icon: <CheckCircle className="h-4 w-4" />,
-        color: 'bg-sky-500',
+        color: "bg-sky-500",
       });
     }
 
     // Check-in
     if (job.actual_checkin_at) {
       events.push({
-        id: 'checkin',
+        id: "checkin",
         timestamp: job.actual_checkin_at,
-        type: 'checkin',
-        title: 'Technician Checked In',
-        description: job.checkin_gps_valid 
-          ? 'GPS location verified at service address' 
-          : 'GPS location could not be verified',
+        type: "checkin",
+        title: "Technician Checked In",
+        description: job.checkin_gps_valid
+          ? "GPS location verified at service address"
+          : "GPS location could not be verified",
         icon: <Navigation className="h-4 w-4" />,
-        color: job.checkin_gps_valid ? 'bg-emerald-500' : 'bg-amber-500',
+        color: job.checkin_gps_valid ? "bg-emerald-500" : "bg-amber-500",
       });
     }
 
     // Check-out / Completed
     if (job.actual_checkout_at) {
       events.push({
-        id: 'checkout',
+        id: "checkout",
         timestamp: job.actual_checkout_at,
-        type: 'checkout',
-        title: 'Job Completed',
+        type: "checkout",
+        title: "Job Completed",
         description: `Duration: ${job.actual_duration_minutes} minutes`,
         icon: <CheckCircle className="h-4 w-4" />,
-        color: 'bg-emerald-500',
+        color: "bg-emerald-500",
       });
     }
 
     // Payment
-    if (job.status === 'completed_paid') {
+    if (job.status === "completed_paid") {
       events.push({
-        id: 'paid',
+        id: "paid",
         timestamp: job.updated_at,
-        type: 'paid',
-        title: 'Payment Received',
+        type: "paid",
+        title: "Payment Received",
         description: formatCurrency(job.total_cost),
         icon: <DollarSign className="h-4 w-4" />,
-        color: 'bg-emerald-600',
+        color: "bg-emerald-600",
       });
     }
 
     // Cancelled
-    if (job.status === 'cancelled') {
+    if (job.status === "cancelled") {
       events.push({
-        id: 'cancelled',
+        id: "cancelled",
         timestamp: job.updated_at,
-        type: 'cancelled',
-        title: 'Job Cancelled',
+        type: "cancelled",
+        title: "Job Cancelled",
         icon: <XCircle className="h-4 w-4" />,
-        color: 'bg-gray-500',
+        color: "bg-gray-500",
       });
     }
 
-    return events.sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime());
+    return events.sort(
+      (a, b) =>
+        new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime()
+    );
   };
 
-
-  const getNextActions = (): { label: string; status: JobStatus; variant: 'default' | 'outline' | 'destructive'; isPayment?: boolean }[] => {
+  const getNextActions = (): {
+    label: string;
+    status: JobStatus;
+    variant: "default" | "outline" | "destructive";
+    isPayment?: boolean;
+  }[] => {
     if (!job) return [];
-    
+
     // Cashier only sees payment-related actions for completed jobs
     if (isCashier) {
-      if (job.status === 'completed') {
+      if (job.status === "completed") {
         return [
-          { label: 'Process Payment', status: 'completed_paid', variant: 'default', isPayment: true },
+          {
+            label: "Process Payment",
+            status: "completed_paid",
+            variant: "default",
+            isPayment: true,
+          },
         ];
       }
       return [];
     }
-    
+
     switch (job.status) {
-      case 'pending_approval':
+      case "pending_approval":
         return [
-          { label: 'Approve', status: 'approved', variant: 'default' },
-          { label: 'Reject', status: 'cancelled', variant: 'destructive' },
+          { label: "Approve", status: "approved", variant: "default" },
+          { label: "Reject", status: "cancelled", variant: "destructive" },
         ];
-      case 'approved':
+      case "approved":
         return [
-          { label: 'Start Job', status: 'in_progress', variant: 'default' },
+          { label: "Start Job", status: "in_progress", variant: "default" },
         ];
-      case 'in_progress':
+      case "in_progress":
         return [
-          { label: 'Complete Job', status: 'completed', variant: 'default' },
+          { label: "Complete Job", status: "completed", variant: "default" },
         ];
-      case 'completed':
-        return canProcessPayment 
-          ? [{ label: 'Mark as Paid', status: 'completed_paid', variant: 'default', isPayment: true }]
+      case "completed":
+        return canProcessPayment
+          ? [
+              {
+                label: "Mark as Paid",
+                status: "completed_paid",
+                variant: "default",
+                isPayment: true,
+              },
+            ]
           : [];
       default:
         return [];
@@ -703,7 +852,9 @@ export default function JobDetail() {
             </Button>
             <div>
               <div className="flex items-center gap-3 flex-wrap">
-                <h1 className="text-2xl font-bold tracking-tight">{job.job_number}</h1>
+                <h1 className="text-2xl font-bold tracking-tight">
+                  {job.job_number}
+                </h1>
                 {getStatusBadge(job.status)}
                 {getPriorityBadge(job.priority)}
                 {job.flagged && (
@@ -716,11 +867,11 @@ export default function JobDetail() {
               <p className="text-lg text-muted-foreground mt-1">{job.title}</p>
             </div>
           </div>
-          
+
           <div className="flex flex-wrap gap-2">
-            {getNextActions().map((action) => (
+            {getNextActions().map((action) =>
               action.isPayment ? (
-                <Button 
+                <Button
                   key={action.status}
                   variant={action.variant}
                   onClick={() => setPaymentDialogOpen(true)}
@@ -730,7 +881,7 @@ export default function JobDetail() {
                   {action.label}
                 </Button>
               ) : (
-                <Button 
+                <Button
                   key={action.status}
                   variant={action.variant}
                   onClick={() => updateJobStatus(action.status)}
@@ -739,10 +890,13 @@ export default function JobDetail() {
                   {action.label}
                 </Button>
               )
-            ))}
-            
+            )}
+
             {/* Payment Dialog */}
-            <Dialog open={paymentDialogOpen} onOpenChange={setPaymentDialogOpen}>
+            <Dialog
+              open={paymentDialogOpen}
+              onOpenChange={setPaymentDialogOpen}
+            >
               <DialogContent className="sm:max-w-md">
                 <DialogHeader>
                   <DialogTitle className="flex items-center gap-2">
@@ -758,7 +912,9 @@ export default function JobDetail() {
                       <span className="font-medium">{job.job_number}</span>
                     </div>
                     <div className="flex justify-between text-sm">
-                      <span className="text-muted-foreground">Service Cost</span>
+                      <span className="text-muted-foreground">
+                        Service Cost
+                      </span>
                       <span>{formatCurrency(job.service_cost)}</span>
                     </div>
                     <div className="flex justify-between text-sm">
@@ -768,14 +924,19 @@ export default function JobDetail() {
                     <Separator />
                     <div className="flex justify-between font-medium">
                       <span>Total Amount</span>
-                      <span className="text-lg text-emerald-600">{formatCurrency(job.total_cost)}</span>
+                      <span className="text-lg text-emerald-600">
+                        {formatCurrency(job.total_cost)}
+                      </span>
                     </div>
                   </div>
 
                   {/* Payment Method */}
                   <div className="space-y-2">
                     <Label>Payment Method</Label>
-                    <Select value={paymentMethod} onValueChange={setPaymentMethod}>
+                    <Select
+                      value={paymentMethod}
+                      onValueChange={setPaymentMethod}
+                    >
                       <SelectTrigger>
                         <SelectValue placeholder="Select payment method" />
                       </SelectTrigger>
@@ -802,14 +963,14 @@ export default function JobDetail() {
 
                   {/* Action Buttons */}
                   <div className="flex gap-2 pt-2">
-                    <Button 
-                      variant="outline" 
+                    <Button
+                      variant="outline"
                       className="flex-1"
                       onClick={() => setPaymentDialogOpen(false)}
                     >
                       Cancel
                     </Button>
-                    <Button 
+                    <Button
                       className="flex-1 bg-emerald-600 hover:bg-emerald-700"
                       onClick={markAsPaid}
                       disabled={processingPayment}
@@ -854,7 +1015,11 @@ export default function JobDetail() {
                         placeholder="Add internal notes about this job..."
                       />
                     </div>
-                    <Button onClick={saveAdminNotes} disabled={updating} className="w-full">
+                    <Button
+                      onClick={saveAdminNotes}
+                      disabled={updating}
+                      className="w-full"
+                    >
                       Save Notes
                     </Button>
                   </div>
@@ -869,44 +1034,46 @@ export default function JobDetail() {
           {/* Left Column - Details */}
           <div className="lg:col-span-2 space-y-6">
             {/* GPS Check-in/out for Technicians */}
-            {isTechnician && (job.status === 'approved' || job.status === 'in_progress') && (
-              <GPSCheckInOut
-                jobId={job.id}
-                jobStatus={job.status}
-                serviceLatitude={job.service_latitude}
-                serviceLongitude={job.service_longitude}
-                serviceAddress={job.service_address}
-                actualCheckinAt={job.actual_checkin_at}
-                actualCheckoutAt={job.actual_checkout_at}
-                checkinGpsValid={job.checkin_gps_valid}
-                checkoutGpsValid={job.checkout_gps_valid}
-                beforePhotos={job.before_photos || []}
-                afterPhotos={job.after_photos || []}
-                onCheckIn={handleGPSCheckIn}
-                onCheckOut={handleGPSCheckOut}
-                disabled={updating}
-              />
-            )}
+            {isTechnician &&
+              (job.status === "approved" || job.status === "in_progress") && (
+                <GPSCheckInOut
+                  jobId={job.id}
+                  jobStatus={job.status}
+                  serviceLatitude={job.service_latitude}
+                  serviceLongitude={job.service_longitude}
+                  serviceAddress={job.service_address}
+                  actualCheckinAt={job.actual_checkin_at}
+                  actualCheckoutAt={job.actual_checkout_at}
+                  checkinGpsValid={job.checkin_gps_valid}
+                  checkoutGpsValid={job.checkout_gps_valid}
+                  beforePhotos={job.before_photos || []}
+                  afterPhotos={job.after_photos || []}
+                  onCheckIn={handleGPSCheckIn}
+                  onCheckOut={handleGPSCheckOut}
+                  disabled={updating}
+                />
+              )}
 
             {/* GPS Verification Summary (for non-technicians viewing completed jobs) */}
-            {!isTechnician && (job.actual_checkin_at || job.actual_checkout_at) && (
-              <GPSCheckInOut
-                jobId={job.id}
-                jobStatus={job.status}
-                serviceLatitude={job.service_latitude}
-                serviceLongitude={job.service_longitude}
-                serviceAddress={job.service_address}
-                actualCheckinAt={job.actual_checkin_at}
-                actualCheckoutAt={job.actual_checkout_at}
-                checkinGpsValid={job.checkin_gps_valid}
-                checkoutGpsValid={job.checkout_gps_valid}
-                beforePhotos={job.before_photos || []}
-                afterPhotos={job.after_photos || []}
-                onCheckIn={handleGPSCheckIn}
-                onCheckOut={handleGPSCheckOut}
-                disabled={true}
-              />
-            )}
+            {!isTechnician &&
+              (job.actual_checkin_at || job.actual_checkout_at) && (
+                <GPSCheckInOut
+                  jobId={job.id}
+                  jobStatus={job.status}
+                  serviceLatitude={job.service_latitude}
+                  serviceLongitude={job.service_longitude}
+                  serviceAddress={job.service_address}
+                  actualCheckinAt={job.actual_checkin_at}
+                  actualCheckoutAt={job.actual_checkout_at}
+                  checkinGpsValid={job.checkin_gps_valid}
+                  checkoutGpsValid={job.checkout_gps_valid}
+                  beforePhotos={job.before_photos || []}
+                  afterPhotos={job.after_photos || []}
+                  onCheckIn={handleGPSCheckIn}
+                  onCheckOut={handleGPSCheckOut}
+                  disabled={true}
+                />
+              )}
 
             <Tabs defaultValue="overview" className="w-full">
               <TabsList className="grid w-full grid-cols-5">
@@ -936,7 +1103,9 @@ export default function JobDetail() {
                 {/* Schedule & Duration */}
                 <Card>
                   <CardHeader>
-                    <CardTitle className="text-base">Schedule & Duration</CardTitle>
+                    <CardTitle className="text-base">
+                      Schedule & Duration
+                    </CardTitle>
                   </CardHeader>
                   <CardContent className="space-y-4">
                     <div className="grid grid-cols-2 gap-4">
@@ -945,20 +1114,22 @@ export default function JobDetail() {
                         <div>
                           <p className="text-sm font-medium">Scheduled Date</p>
                           <p className="text-sm text-muted-foreground">
-                            {job.scheduled_date 
-                              ? format(new Date(job.scheduled_date), 'PPP')
-                              : 'Not scheduled'}
+                            {job.scheduled_date
+                              ? format(new Date(job.scheduled_date), "PPP")
+                              : "Not scheduled"}
                           </p>
                         </div>
                       </div>
                       <div className="flex items-center gap-3">
                         <Timer className="h-5 w-5 text-muted-foreground" />
                         <div>
-                          <p className="text-sm font-medium">Estimated Duration</p>
+                          <p className="text-sm font-medium">
+                            Estimated Duration
+                          </p>
                           <p className="text-sm text-muted-foreground">
-                            {job.estimated_duration_minutes 
+                            {job.estimated_duration_minutes
                               ? `${job.estimated_duration_minutes} minutes`
-                              : 'Not set'}
+                              : "Not set"}
                           </p>
                         </div>
                       </div>
@@ -971,9 +1142,11 @@ export default function JobDetail() {
                           <div className="flex items-center gap-3">
                             <Play className="h-5 w-5 text-emerald-600" />
                             <div>
-                              <p className="text-sm font-medium">Check-in Time</p>
+                              <p className="text-sm font-medium">
+                                Check-in Time
+                              </p>
                               <p className="text-sm text-muted-foreground">
-                                {format(new Date(job.actual_checkin_at), 'PPp')}
+                                {format(new Date(job.actual_checkin_at), "PPp")}
                               </p>
                             </div>
                           </div>
@@ -981,9 +1154,14 @@ export default function JobDetail() {
                             <div className="flex items-center gap-3">
                               <Pause className="h-5 w-5 text-blue-600" />
                               <div>
-                                <p className="text-sm font-medium">Check-out Time</p>
+                                <p className="text-sm font-medium">
+                                  Check-out Time
+                                </p>
                                 <p className="text-sm text-muted-foreground">
-                                  {format(new Date(job.actual_checkout_at), 'PPp')}
+                                  {format(
+                                    new Date(job.actual_checkout_at),
+                                    "PPp"
+                                  )}
                                 </p>
                               </div>
                             </div>
@@ -992,14 +1170,27 @@ export default function JobDetail() {
                         {job.actual_duration_minutes && (
                           <div className="rounded-lg bg-muted p-3">
                             <p className="text-sm">
-                              <span className="font-medium">Actual Duration:</span>{' '}
+                              <span className="font-medium">
+                                Actual Duration:
+                              </span>{" "}
                               {job.actual_duration_minutes} minutes
                               {job.estimated_duration_minutes && (
-                                <span className={job.actual_duration_minutes > job.estimated_duration_minutes 
-                                  ? 'text-amber-600 ml-2' 
-                                  : 'text-emerald-600 ml-2'}>
-                                  ({job.actual_duration_minutes > job.estimated_duration_minutes ? '+' : ''}
-                                  {job.actual_duration_minutes - job.estimated_duration_minutes} min from estimate)
+                                <span
+                                  className={
+                                    job.actual_duration_minutes >
+                                    job.estimated_duration_minutes
+                                      ? "text-amber-600 ml-2"
+                                      : "text-emerald-600 ml-2"
+                                  }
+                                >
+                                  (
+                                  {job.actual_duration_minutes >
+                                  job.estimated_duration_minutes
+                                    ? "+"
+                                    : ""}
+                                  {job.actual_duration_minutes -
+                                    job.estimated_duration_minutes}{" "}
+                                  min from estimate)
                                 </span>
                               )}
                             </p>
@@ -1056,16 +1247,20 @@ export default function JobDetail() {
                         <div className="rounded-lg bg-red-50 border border-red-200 p-3 mt-2">
                           <div className="flex items-center gap-2 text-red-800">
                             <AlertTriangle className="h-4 w-4" />
-                            <span className="text-sm font-medium">GPS Violation Detected</span>
+                            <span className="text-sm font-medium">
+                              GPS Violation Detected
+                            </span>
                           </div>
                           <p className="text-xs text-red-600 mt-1">
-                            Location did not match the service address during check-in or check-out.
+                            Location did not match the service address during
+                            check-in or check-out.
                           </p>
                         </div>
                       )}
                       {job.service_latitude && job.service_longitude && (
                         <div className="mt-2 text-xs text-muted-foreground">
-                          Coordinates: {job.service_latitude.toFixed(6)}, {job.service_longitude.toFixed(6)}
+                          Coordinates: {job.service_latitude.toFixed(6)},{" "}
+                          {job.service_longitude.toFixed(6)}
                         </div>
                       )}
                     </div>
@@ -1076,7 +1271,9 @@ export default function JobDetail() {
                 {job.technician_notes && (
                   <Card>
                     <CardHeader>
-                      <CardTitle className="text-base">Technician Notes</CardTitle>
+                      <CardTitle className="text-base">
+                        Technician Notes
+                      </CardTitle>
                     </CardHeader>
                     <CardContent>
                       <p className="text-sm text-muted-foreground whitespace-pre-wrap">
@@ -1108,7 +1305,9 @@ export default function JobDetail() {
                   serviceLongitude={job.service_longitude}
                   serviceAddress={job.service_address}
                   technicianName={job.technician?.name}
-                  showTechnicianLocation={isTechnician && job.status === 'in_progress'}
+                  showTechnicianLocation={
+                    isTechnician && job.status === "in_progress"
+                  }
                 />
               </TabsContent>
 
@@ -1117,15 +1316,22 @@ export default function JobDetail() {
                 <Card>
                   <CardHeader>
                     <CardTitle className="text-base">Job Timeline</CardTitle>
-                    <CardDescription>Complete history of this service job</CardDescription>
+                    <CardDescription>
+                      Complete history of this service job
+                    </CardDescription>
                   </CardHeader>
                   <CardContent>
                     <div className="relative">
                       {timeline.map((event, index) => (
-                        <div key={event.id} className="flex gap-4 pb-8 last:pb-0">
+                        <div
+                          key={event.id}
+                          className="flex gap-4 pb-8 last:pb-0"
+                        >
                           {/* Timeline line */}
                           <div className="flex flex-col items-center">
-                            <div className={`flex h-8 w-8 items-center justify-center rounded-full text-white ${event.color}`}>
+                            <div
+                              className={`flex h-8 w-8 items-center justify-center rounded-full text-white ${event.color}`}
+                            >
                               {event.icon}
                             </div>
                             {index < timeline.length - 1 && (
@@ -1141,9 +1347,11 @@ export default function JobDetail() {
                               </p>
                             )}
                             <p className="text-xs text-muted-foreground mt-1">
-                              {format(new Date(event.timestamp), 'PPp')}
+                              {format(new Date(event.timestamp), "PPp")}
                               <span className="mx-1">·</span>
-                              {formatDistanceToNow(new Date(event.timestamp), { addSuffix: true })}
+                              {formatDistanceToNow(new Date(event.timestamp), {
+                                addSuffix: true,
+                              })}
                             </p>
                           </div>
                         </div>
@@ -1172,9 +1380,14 @@ export default function JobDetail() {
                         <Package className="h-5 w-5" />
                         Parts Used
                       </CardTitle>
-                      <CardDescription>Parts and materials used for this job</CardDescription>
+                      <CardDescription>
+                        Parts and materials used for this job
+                      </CardDescription>
                     </div>
-                    <Dialog open={partsDialogOpen} onOpenChange={setPartsDialogOpen}>
+                    <Dialog
+                      open={partsDialogOpen}
+                      onOpenChange={setPartsDialogOpen}
+                    >
                       <DialogTrigger asChild>
                         <Button size="sm">
                           <Plus className="mr-2 h-4 w-4" />
@@ -1188,14 +1401,21 @@ export default function JobDetail() {
                         <div className="space-y-4">
                           <div className="space-y-2">
                             <Label>Product</Label>
-                            <Select value={selectedProduct} onValueChange={setSelectedProduct}>
+                            <Select
+                              value={selectedProduct}
+                              onValueChange={setSelectedProduct}
+                            >
                               <SelectTrigger>
                                 <SelectValue placeholder="Select a product" />
                               </SelectTrigger>
                               <SelectContent>
                                 {products.map((product) => (
-                                  <SelectItem key={product.id} value={product.id}>
-                                    {product.name} ({product.sku}) - {formatCurrency(product.sell_price)}
+                                  <SelectItem
+                                    key={product.id}
+                                    value={product.id}
+                                  >
+                                    {product.name} ({product.sku}) -{" "}
+                                    {formatCurrency(product.sell_price)}
                                   </SelectItem>
                                 ))}
                               </SelectContent>
@@ -1210,7 +1430,11 @@ export default function JobDetail() {
                               onChange={(e) => setPartQuantity(e.target.value)}
                             />
                           </div>
-                          <Button onClick={addPart} disabled={!selectedProduct} className="w-full">
+                          <Button
+                            onClick={addPart}
+                            disabled={!selectedProduct}
+                            className="w-full"
+                          >
                             Add to List
                           </Button>
                         </div>
@@ -1221,19 +1445,25 @@ export default function JobDetail() {
                     {usedParts.length > 0 ? (
                       <div className="space-y-3">
                         {usedParts.map((item, index) => (
-                          <div key={index} className="flex items-center justify-between p-3 rounded-lg bg-muted">
+                          <div
+                            key={index}
+                            className="flex items-center justify-between p-3 rounded-lg bg-muted"
+                          >
                             <div>
                               <p className="font-medium">{item.product.name}</p>
                               <p className="text-sm text-muted-foreground">
-                                {formatCurrency(item.product.sell_price)} × {item.quantity}
+                                {formatCurrency(item.product.sell_price)} ×{" "}
+                                {item.quantity}
                               </p>
                             </div>
                             <div className="flex items-center gap-3">
                               <span className="font-medium">
-                                {formatCurrency(item.product.sell_price * item.quantity)}
+                                {formatCurrency(
+                                  item.product.sell_price * item.quantity
+                                )}
                               </span>
-                              <Button 
-                                variant="ghost" 
+                              <Button
+                                variant="ghost"
                                 size="icon"
                                 onClick={() => removePart(index)}
                               >
@@ -1245,13 +1475,17 @@ export default function JobDetail() {
                         <Separator />
                         <div className="flex items-center justify-between pt-2">
                           <span className="font-medium">Total Parts Cost</span>
-                          <span className="text-lg font-bold">{formatCurrency(calculatePartsTotal())}</span>
+                          <span className="text-lg font-bold">
+                            {formatCurrency(calculatePartsTotal())}
+                          </span>
                         </div>
                       </div>
                     ) : (
                       <div className="text-center py-8">
                         <Package className="h-12 w-12 mx-auto text-muted-foreground/50" />
-                        <p className="mt-2 text-sm text-muted-foreground">No parts recorded for this job</p>
+                        <p className="mt-2 text-sm text-muted-foreground">
+                          No parts recorded for this job
+                        </p>
                       </div>
                     )}
                   </CardContent>
@@ -1273,13 +1507,15 @@ export default function JobDetail() {
                   <div>
                     <p className="font-medium">{job.customer.name}</p>
                     {job.customer.email && (
-                      <p className="text-sm text-muted-foreground">{job.customer.email}</p>
+                      <p className="text-sm text-muted-foreground">
+                        {job.customer.email}
+                      </p>
                     )}
                   </div>
                 </div>
                 <div className="flex items-center gap-3">
                   <Phone className="h-5 w-5 text-muted-foreground" />
-                  <a 
+                  <a
                     href={`tel:${job.customer.phone}`}
                     className="text-sm text-primary hover:underline"
                   >
@@ -1289,7 +1525,9 @@ export default function JobDetail() {
                 {job.service_address && (
                   <div className="flex items-start gap-3">
                     <MapPin className="h-5 w-5 text-muted-foreground mt-0.5" />
-                    <p className="text-sm text-muted-foreground">{job.service_address}</p>
+                    <p className="text-sm text-muted-foreground">
+                      {job.service_address}
+                    </p>
                   </div>
                 )}
               </CardContent>
@@ -1307,13 +1545,15 @@ export default function JobDetail() {
                       <Wrench className="h-5 w-5 text-muted-foreground" />
                       <div>
                         <p className="font-medium">{job.technician.name}</p>
-                        <p className="text-sm text-muted-foreground">{job.technician.email}</p>
+                        <p className="text-sm text-muted-foreground">
+                          {job.technician.email}
+                        </p>
                       </div>
                     </div>
                     {job.technician.phone && (
                       <div className="flex items-center gap-3">
                         <Phone className="h-5 w-5 text-muted-foreground" />
-                        <a 
+                        <a
                           href={`tel:${job.technician.phone}`}
                           className="text-sm text-primary hover:underline"
                         >
@@ -1323,7 +1563,9 @@ export default function JobDetail() {
                     )}
                   </div>
                 ) : (
-                  <p className="text-sm text-muted-foreground italic">No technician assigned</p>
+                  <p className="text-sm text-muted-foreground italic">
+                    No technician assigned
+                  </p>
                 )}
               </CardContent>
             </Card>
@@ -1337,29 +1579,47 @@ export default function JobDetail() {
                 <CardContent className="space-y-2">
                   <div className="flex items-center justify-between">
                     <span className="text-sm text-muted-foreground">Type</span>
-                    <span className="text-sm font-medium">{job.unit.unit_type}</span>
+                    <span className="text-sm font-medium">
+                      {job.unit.unit_type}
+                    </span>
                   </div>
                   {job.unit.brand && (
                     <div className="flex items-center justify-between">
-                      <span className="text-sm text-muted-foreground">Brand</span>
-                      <span className="text-sm font-medium">{job.unit.brand}</span>
+                      <span className="text-sm text-muted-foreground">
+                        Brand
+                      </span>
+                      <span className="text-sm font-medium">
+                        {job.unit.brand}
+                      </span>
                     </div>
                   )}
                   {job.unit.model && (
                     <div className="flex items-center justify-between">
-                      <span className="text-sm text-muted-foreground">Model</span>
-                      <span className="text-sm font-medium">{job.unit.model}</span>
+                      <span className="text-sm text-muted-foreground">
+                        Model
+                      </span>
+                      <span className="text-sm font-medium">
+                        {job.unit.model}
+                      </span>
                     </div>
                   )}
                   {job.unit.serial_number && (
                     <div className="flex items-center justify-between">
-                      <span className="text-sm text-muted-foreground">Serial</span>
-                      <span className="text-sm font-mono">{job.unit.serial_number}</span>
+                      <span className="text-sm text-muted-foreground">
+                        Serial
+                      </span>
+                      <span className="text-sm font-mono">
+                        {job.unit.serial_number}
+                      </span>
                     </div>
                   )}
                   <div className="flex items-center justify-between">
-                    <span className="text-sm text-muted-foreground">QR Code</span>
-                    <span className="text-sm font-mono">{job.unit.qr_code}</span>
+                    <span className="text-sm text-muted-foreground">
+                      QR Code
+                    </span>
+                    <span className="text-sm font-mono">
+                      {job.unit.qr_code}
+                    </span>
                   </div>
                 </CardContent>
               </Card>
@@ -1375,17 +1635,27 @@ export default function JobDetail() {
               </CardHeader>
               <CardContent className="space-y-3">
                 <div className="flex items-center justify-between">
-                  <span className="text-sm text-muted-foreground">Service Cost</span>
-                  <span className="text-sm font-medium">{formatCurrency(job.service_cost)}</span>
+                  <span className="text-sm text-muted-foreground">
+                    Service Cost
+                  </span>
+                  <span className="text-sm font-medium">
+                    {formatCurrency(job.service_cost)}
+                  </span>
                 </div>
                 <div className="flex items-center justify-between">
-                  <span className="text-sm text-muted-foreground">Parts Cost</span>
-                  <span className="text-sm font-medium">{formatCurrency(job.parts_cost)}</span>
+                  <span className="text-sm text-muted-foreground">
+                    Parts Cost
+                  </span>
+                  <span className="text-sm font-medium">
+                    {formatCurrency(job.parts_cost)}
+                  </span>
                 </div>
                 <Separator />
                 <div className="flex items-center justify-between">
                   <span className="font-medium">Total</span>
-                  <span className="text-lg font-bold text-primary">{formatCurrency(job.total_cost)}</span>
+                  <span className="text-lg font-bold text-primary">
+                    {formatCurrency(job.total_cost)}
+                  </span>
                 </div>
               </CardContent>
             </Card>
@@ -1395,11 +1665,15 @@ export default function JobDetail() {
               <CardContent className="pt-6 space-y-2 text-sm">
                 <div className="flex items-center justify-between text-muted-foreground">
                   <span>Created</span>
-                  <span>{format(new Date(job.created_at), 'PP')}</span>
+                  <span>{format(new Date(job.created_at), "PP")}</span>
                 </div>
                 <div className="flex items-center justify-between text-muted-foreground">
                   <span>Last Updated</span>
-                  <span>{formatDistanceToNow(new Date(job.updated_at), { addSuffix: true })}</span>
+                  <span>
+                    {formatDistanceToNow(new Date(job.updated_at), {
+                      addSuffix: true,
+                    })}
+                  </span>
                 </div>
               </CardContent>
             </Card>
