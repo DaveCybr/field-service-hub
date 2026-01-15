@@ -5,12 +5,21 @@ type SetupCheckResponse = { needsSetup?: boolean };
 
 const CACHE_KEY = "initial_setup_needs_setup";
 
-export function useInitialSetup() {
-  const [needsSetup, setNeedsSetup] = useState<boolean | null>(() => {
+function getCachedValue(): boolean | null {
+  try {
     const cached = sessionStorage.getItem(CACHE_KEY);
-    return cached === null ? null : cached === "true";
-  });
-  const [loading, setLoading] = useState(() => needsSetup === null);
+    if (cached === "true") return true;
+    if (cached === "false") return false;
+    return null;
+  } catch {
+    return null;
+  }
+}
+
+export function useInitialSetup() {
+  const cachedValue = getCachedValue();
+  const [needsSetup, setNeedsSetup] = useState<boolean | null>(cachedValue);
+  const [loading, setLoading] = useState(cachedValue === null);
   const mountedRef = useRef(true);
 
   useEffect(() => {
@@ -21,10 +30,18 @@ export function useInitialSetup() {
   }, []);
 
   useEffect(() => {
+    // Skip if we already have a cached value
+    if (cachedValue !== null) {
+      return;
+    }
+
     const checkSetup = async () => {
-      // Always stop spinner after a short grace period to avoid “loading forever” UX.
+      // Hard stop after 4s to prevent infinite loading
       const hardStop = window.setTimeout(() => {
-        if (mountedRef.current) setLoading(false);
+        if (mountedRef.current) {
+          setNeedsSetup(false);
+          setLoading(false);
+        }
       }, 4000);
 
       try {
@@ -36,7 +53,12 @@ export function useInitialSetup() {
         if (error) throw error;
 
         const value = data?.needsSetup ?? false;
-        sessionStorage.setItem(CACHE_KEY, String(value));
+        
+        try {
+          sessionStorage.setItem(CACHE_KEY, String(value));
+        } catch {
+          // Ignore storage errors
+        }
 
         if (mountedRef.current) {
           setNeedsSetup(value);
@@ -44,7 +66,6 @@ export function useInitialSetup() {
         }
       } catch (err) {
         console.error("Error checking setup:", err);
-        // Fail-open to prevent blocking the app.
         if (mountedRef.current) {
           setNeedsSetup(false);
           setLoading(false);
@@ -55,8 +76,7 @@ export function useInitialSetup() {
     };
 
     checkSetup();
-  }, []);
+  }, [cachedValue]);
 
   return { needsSetup, loading };
 }
-
