@@ -1,6 +1,3 @@
-// ============================================
-// FILE 4: src/App.tsx (UPDATED)
-// ============================================
 import { Toaster } from "@/components/ui/toaster";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
@@ -13,9 +10,15 @@ import { useInitialSetup } from "@/hooks/useInitialSetup";
 import Auth from "./pages/Auth";
 import InitialSetup from "./pages/InitialSetup";
 import Dashboard from "./pages/Dashboard";
+// OLD: Jobs pages (deprecated - will be removed after testing)
 import Jobs from "./pages/Jobs";
 import NewJob from "./pages/NewJob";
 import JobDetail from "./pages/JobDetail";
+// NEW: Invoice pages
+import Invoices from "./pages/Invoices";
+// import NewInvoice from "./pages/NewInvoice"; // TODO: Create this
+// import InvoiceDetail from "./pages/InvoiceDetail"; // TODO: Create this
+
 import Technicians from "./pages/Technicians";
 import Customers from "./pages/Customers";
 import Units from "./pages/Units";
@@ -180,6 +183,48 @@ function StaffRoutes() {
           </SetupRoute>
         }
       />
+
+      {/* ========================================= */}
+      {/* NEW: Invoice Routes (New Structure)      */}
+      {/* ========================================= */}
+      <Route
+        path="/invoices"
+        element={
+          <SetupRoute>
+            <ProtectedRoute>
+              <Invoices />
+            </ProtectedRoute>
+          </SetupRoute>
+        }
+      />
+      {/* TODO: Uncomment after creating these pages */}
+      {/* <Route
+        path="/invoices/new"
+        element={
+          <SetupRoute>
+            <RoleProtectedRoute
+              allowedRoles={["superadmin", "admin", "manager", "cashier"]}
+            >
+              <NewInvoice />
+            </RoleProtectedRoute>
+          </SetupRoute>
+        }
+      />
+      <Route
+        path="/invoices/:id"
+        element={
+          <SetupRoute>
+            <ProtectedRoute>
+              <InvoiceDetail />
+            </ProtectedRoute>
+          </SetupRoute>
+        }
+      /> */}
+
+      {/* ========================================= */}
+      {/* OLD: Jobs Routes (DEPRECATED)            */}
+      {/* Will be removed after Invoices is stable */}
+      {/* ========================================= */}
       <Route
         path="/jobs"
         element={
@@ -212,6 +257,8 @@ function StaffRoutes() {
           </SetupRoute>
         }
       />
+
+      {/* Other Routes */}
       <Route
         path="/technicians"
         element={

@@ -44,6 +44,7 @@ import { supabase } from "@/integrations/supabase/client";
 const adminNavigation = [
   { name: "Dashboard", href: "/dashboard", icon: LayoutDashboard },
   { name: "Service Jobs", href: "/jobs", icon: Wrench },
+  { name: "Invoices", href: "/invoices", icon: FileText },
   { name: "Technicians", href: "/technicians", icon: Users },
   { name: "Customers", href: "/customers", icon: UserCircle },
   { name: "Units", href: "/units", icon: QrCode },
