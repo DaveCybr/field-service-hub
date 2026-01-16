@@ -29,6 +29,7 @@ import {
 import { format } from "date-fns";
 import { formatCurrency } from "@/lib/utils/currency";
 import { getStatusBadge, getPaymentBadge } from "@/lib/utils/badges";
+import { BulkExport } from "./BulkExport";
 
 export interface Invoice {
   id: string;
@@ -153,13 +154,10 @@ export function InvoiceTable({
             {selectedIds.length} selected
           </span>
           <Button size="sm" variant="outline">
-            <Printer className="h-4 w-4 mr-2" />
-            Print Selected
-          </Button>
-          <Button size="sm" variant="outline">
             <Mail className="h-4 w-4 mr-2" />
             Email Selected
           </Button>
+          <BulkExport selectedIds={selectedIds} allInvoices={sortedInvoices} />
         </div>
       )}
 

@@ -7,6 +7,7 @@ import { InvoiceFiltersBar } from "@/components/invoices/InvoiceFiltersBar";
 import { InvoiceTable, Invoice } from "@/components/invoices/InvoiceTable";
 import { Card } from "@/components/ui/card";
 import { isWithinInterval } from "date-fns";
+import { BulkExport } from "./BulkExport";
 
 export function InvoiceList() {
   const { toast } = useToast();
