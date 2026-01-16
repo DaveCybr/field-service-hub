@@ -240,6 +240,275 @@ export type Database = {
           },
         ]
       }
+      invoice_items: {
+        Row: {
+          created_at: string
+          description: string | null
+          discount: number
+          id: string
+          invoice_id: string
+          product_id: string | null
+          product_name: string
+          product_sku: string | null
+          quantity: number
+          register_as_unit: boolean | null
+          registered_unit_id: string | null
+          total_price: number
+          unit_price: number
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          description?: string | null
+          discount?: number
+          id?: string
+          invoice_id: string
+          product_id?: string | null
+          product_name: string
+          product_sku?: string | null
+          quantity?: number
+          register_as_unit?: boolean | null
+          registered_unit_id?: string | null
+          total_price: number
+          unit_price: number
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          description?: string | null
+          discount?: number
+          id?: string
+          invoice_id?: string
+          product_id?: string | null
+          product_name?: string
+          product_sku?: string | null
+          quantity?: number
+          register_as_unit?: boolean | null
+          registered_unit_id?: string | null
+          total_price?: number
+          unit_price?: number
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "invoice_items_invoice_id_fkey"
+            columns: ["invoice_id"]
+            isOneToOne: false
+            referencedRelation: "invoices"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "invoice_items_product_id_fkey"
+            columns: ["product_id"]
+            isOneToOne: false
+            referencedRelation: "products"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "invoice_items_registered_unit_id_fkey"
+            columns: ["registered_unit_id"]
+            isOneToOne: false
+            referencedRelation: "units"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      invoice_services: {
+        Row: {
+          actual_checkin_at: string | null
+          actual_checkout_at: string | null
+          actual_duration_minutes: number | null
+          admin_notes: string | null
+          after_photos: string[] | null
+          assigned_technician_id: string | null
+          before_photos: string[] | null
+          checkin_gps_valid: boolean | null
+          checkout_gps_valid: boolean | null
+          created_at: string
+          description: string | null
+          estimated_duration_minutes: number | null
+          gps_violation_detected: boolean | null
+          id: string
+          invoice_id: string
+          parts_cost: number
+          priority: string
+          required_skills: string[] | null
+          scheduled_date: string | null
+          service_address: string | null
+          service_cost: number
+          service_latitude: number | null
+          service_longitude: number | null
+          status: string
+          technician_notes: string | null
+          title: string
+          total_cost: number
+          unit_id: string | null
+          updated_at: string
+        }
+        Insert: {
+          actual_checkin_at?: string | null
+          actual_checkout_at?: string | null
+          actual_duration_minutes?: number | null
+          admin_notes?: string | null
+          after_photos?: string[] | null
+          assigned_technician_id?: string | null
+          before_photos?: string[] | null
+          checkin_gps_valid?: boolean | null
+          checkout_gps_valid?: boolean | null
+          created_at?: string
+          description?: string | null
+          estimated_duration_minutes?: number | null
+          gps_violation_detected?: boolean | null
+          id?: string
+          invoice_id: string
+          parts_cost?: number
+          priority?: string
+          required_skills?: string[] | null
+          scheduled_date?: string | null
+          service_address?: string | null
+          service_cost?: number
+          service_latitude?: number | null
+          service_longitude?: number | null
+          status?: string
+          technician_notes?: string | null
+          title: string
+          total_cost?: number
+          unit_id?: string | null
+          updated_at?: string
+        }
+        Update: {
+          actual_checkin_at?: string | null
+          actual_checkout_at?: string | null
+          actual_duration_minutes?: number | null
+          admin_notes?: string | null
+          after_photos?: string[] | null
+          assigned_technician_id?: string | null
+          before_photos?: string[] | null
+          checkin_gps_valid?: boolean | null
+          checkout_gps_valid?: boolean | null
+          created_at?: string
+          description?: string | null
+          estimated_duration_minutes?: number | null
+          gps_violation_detected?: boolean | null
+          id?: string
+          invoice_id?: string
+          parts_cost?: number
+          priority?: string
+          required_skills?: string[] | null
+          scheduled_date?: string | null
+          service_address?: string | null
+          service_cost?: number
+          service_latitude?: number | null
+          service_longitude?: number | null
+          status?: string
+          technician_notes?: string | null
+          title?: string
+          total_cost?: number
+          unit_id?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "invoice_services_assigned_technician_id_fkey"
+            columns: ["assigned_technician_id"]
+            isOneToOne: false
+            referencedRelation: "employees"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "invoice_services_invoice_id_fkey"
+            columns: ["invoice_id"]
+            isOneToOne: false
+            referencedRelation: "invoices"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "invoice_services_unit_id_fkey"
+            columns: ["unit_id"]
+            isOneToOne: false
+            referencedRelation: "units"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      invoices: {
+        Row: {
+          admin_notes: string | null
+          amount_paid: number
+          created_at: string
+          created_by: string | null
+          customer_id: string
+          discount: number
+          due_date: string | null
+          grand_total: number
+          id: string
+          invoice_date: string
+          invoice_number: string
+          items_total: number
+          notes: string | null
+          payment_status: string
+          services_total: number
+          status: string
+          tax: number
+          updated_at: string
+        }
+        Insert: {
+          admin_notes?: string | null
+          amount_paid?: number
+          created_at?: string
+          created_by?: string | null
+          customer_id: string
+          discount?: number
+          due_date?: string | null
+          grand_total?: number
+          id?: string
+          invoice_date?: string
+          invoice_number: string
+          items_total?: number
+          notes?: string | null
+          payment_status?: string
+          services_total?: number
+          status?: string
+          tax?: number
+          updated_at?: string
+        }
+        Update: {
+          admin_notes?: string | null
+          amount_paid?: number
+          created_at?: string
+          created_by?: string | null
+          customer_id?: string
+          discount?: number
+          due_date?: string | null
+          grand_total?: number
+          id?: string
+          invoice_date?: string
+          invoice_number?: string
+          items_total?: number
+          notes?: string | null
+          payment_status?: string
+          services_total?: number
+          status?: string
+          tax?: number
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "invoices_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "employees"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "invoices_customer_id_fkey"
+            columns: ["customer_id"]
+            isOneToOne: false
+            referencedRelation: "customers"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       products: {
         Row: {
           category: Database["public"]["Enums"]["product_category"]
@@ -317,146 +586,6 @@ export type Database = {
           user_id?: string
         }
         Relationships: []
-      }
-      service_jobs: {
-        Row: {
-          actual_checkin_at: string | null
-          actual_checkout_at: string | null
-          actual_duration_minutes: number | null
-          admin_notes: string | null
-          after_photos: string[] | null
-          assigned_technician_id: string | null
-          before_photos: string[] | null
-          checkin_gps_valid: boolean | null
-          checkout_gps_valid: boolean | null
-          checkout_without_payment_approved: boolean | null
-          created_at: string
-          created_by: string | null
-          customer_id: string
-          description: string | null
-          estimated_duration_minutes: number | null
-          flagged: boolean | null
-          gps_violation_detected: boolean | null
-          id: string
-          job_number: string
-          parts_cost: number | null
-          payment_status: Database["public"]["Enums"]["payment_status"] | null
-          priority: Database["public"]["Enums"]["job_priority"]
-          required_skills: string[] | null
-          scheduled_date: string | null
-          service_address: string | null
-          service_cost: number | null
-          service_latitude: number | null
-          service_longitude: number | null
-          status: Database["public"]["Enums"]["job_status"]
-          technician_notes: string | null
-          title: string
-          total_cost: number | null
-          unit_id: string | null
-          updated_at: string
-        }
-        Insert: {
-          actual_checkin_at?: string | null
-          actual_checkout_at?: string | null
-          actual_duration_minutes?: number | null
-          admin_notes?: string | null
-          after_photos?: string[] | null
-          assigned_technician_id?: string | null
-          before_photos?: string[] | null
-          checkin_gps_valid?: boolean | null
-          checkout_gps_valid?: boolean | null
-          checkout_without_payment_approved?: boolean | null
-          created_at?: string
-          created_by?: string | null
-          customer_id: string
-          description?: string | null
-          estimated_duration_minutes?: number | null
-          flagged?: boolean | null
-          gps_violation_detected?: boolean | null
-          id?: string
-          job_number: string
-          parts_cost?: number | null
-          payment_status?: Database["public"]["Enums"]["payment_status"] | null
-          priority?: Database["public"]["Enums"]["job_priority"]
-          required_skills?: string[] | null
-          scheduled_date?: string | null
-          service_address?: string | null
-          service_cost?: number | null
-          service_latitude?: number | null
-          service_longitude?: number | null
-          status?: Database["public"]["Enums"]["job_status"]
-          technician_notes?: string | null
-          title: string
-          total_cost?: number | null
-          unit_id?: string | null
-          updated_at?: string
-        }
-        Update: {
-          actual_checkin_at?: string | null
-          actual_checkout_at?: string | null
-          actual_duration_minutes?: number | null
-          admin_notes?: string | null
-          after_photos?: string[] | null
-          assigned_technician_id?: string | null
-          before_photos?: string[] | null
-          checkin_gps_valid?: boolean | null
-          checkout_gps_valid?: boolean | null
-          checkout_without_payment_approved?: boolean | null
-          created_at?: string
-          created_by?: string | null
-          customer_id?: string
-          description?: string | null
-          estimated_duration_minutes?: number | null
-          flagged?: boolean | null
-          gps_violation_detected?: boolean | null
-          id?: string
-          job_number?: string
-          parts_cost?: number | null
-          payment_status?: Database["public"]["Enums"]["payment_status"] | null
-          priority?: Database["public"]["Enums"]["job_priority"]
-          required_skills?: string[] | null
-          scheduled_date?: string | null
-          service_address?: string | null
-          service_cost?: number | null
-          service_latitude?: number | null
-          service_longitude?: number | null
-          status?: Database["public"]["Enums"]["job_status"]
-          technician_notes?: string | null
-          title?: string
-          total_cost?: number | null
-          unit_id?: string | null
-          updated_at?: string
-        }
-        Relationships: [
-          {
-            foreignKeyName: "service_jobs_assigned_technician_id_fkey"
-            columns: ["assigned_technician_id"]
-            isOneToOne: false
-            referencedRelation: "employees"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "service_jobs_created_by_fkey"
-            columns: ["created_by"]
-            isOneToOne: false
-            referencedRelation: "employees"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "service_jobs_customer_id_fkey"
-            columns: ["customer_id"]
-            isOneToOne: false
-            referencedRelation: "customers"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "service_jobs_unit_id_fkey"
-            columns: ["unit_id"]
-            isOneToOne: false
-            referencedRelation: "units"
-            referencedColumns: ["id"]
-          },
-        ]
       }
       stock_alerts: {
         Row: {
@@ -708,6 +837,7 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      generate_invoice_number: { Args: never; Returns: string }
       generate_job_number: { Args: never; Returns: string }
       generate_sku: { Args: { category_prefix: string }; Returns: string }
       get_employee_id: { Args: { _user_id: string }; Returns: string }
