@@ -1,41 +1,28 @@
-import { useState, useEffect, useCallback, useRef } from "react";
-import L from "leaflet";
-import "leaflet/dist/leaflet.css";
+import { useState, useEffect, useRef } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import {
-  MapPin,
-  Navigation,
-  Loader2,
-  Search,
-  LocateFixed,
-  MapPinOff,
-} from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
+import { MapPin, Loader2, X, Search } from "lucide-react";
+import "leaflet/dist/leaflet.css";
+import L from "leaflet";
 
-// Fix for default marker icons in Leaflet with webpack/vite
-delete (L.Icon.Default.prototype as any)._getIconUrl;
-L.Icon.Default.mergeOptions({
-  iconRetinaUrl:
-    "https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-icon-2x.png",
-  iconUrl:
-    "https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-icon.png",
-  shadowUrl:
-    "https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-shadow.png",
-});
+// Fix Leaflet default marker icon issue
+import icon from "leaflet/dist/images/marker-icon.png";
+import iconShadow from "leaflet/dist/images/marker-shadow.png";
+import iconRetina from "leaflet/dist/images/marker-icon-2x.png";
 
-// Custom marker icon
-const locationIcon = new L.Icon({
-  iconUrl:
-    "https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-red.png",
-  shadowUrl:
-    "https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-shadow.png",
+const DefaultIcon = L.icon({
+  iconUrl: icon,
+  iconRetinaUrl: iconRetina,
+  shadowUrl: iconShadow,
   iconSize: [25, 41],
   iconAnchor: [12, 41],
   popupAnchor: [1, -34],
   shadowSize: [41, 41],
 });
+
+L.Marker.prototype.options.icon = DefaultIcon;
 
 interface LocationPickerProps {
   latitude: number | null;
@@ -53,145 +40,158 @@ export function LocationPicker({
   onAddressChange,
 }: LocationPickerProps) {
   const { toast } = useToast();
-  const mapContainer = useRef<HTMLDivElement>(null);
-  const map = useRef<L.Map | null>(null);
-  const markerRef = useRef<L.Marker | null>(null);
-
-  const [gettingLocation, setGettingLocation] = useState(false);
+  const [loading, setLoading] = useState(false);
   const [searching, setSearching] = useState(false);
+  const [showMap, setShowMap] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
-  const [mapInitialized, setMapInitialized] = useState(false);
+  const mapRef = useRef<L.Map | null>(null);
+  const markerRef = useRef<L.Marker | null>(null);
+  const mapContainerRef = useRef<HTMLDivElement>(null);
+
+  // Default to Indonesia (center of Java)
+  const defaultLat = -7.250445;
+  const defaultLng = 112.768845;
 
   // Initialize map
   useEffect(() => {
-    if (!mapContainer.current || mapInitialized) return;
-
-    try {
-      const defaultCenter: [number, number] = [-6.2088, 106.8456]; // Jakarta
-      const center =
-        latitude && longitude
-          ? ([latitude, longitude] as [number, number])
-          : defaultCenter;
-
-      map.current = L.map(mapContainer.current).setView(center, 15);
+    if (showMap && mapContainerRef.current && !mapRef.current) {
+      const map = L.map(mapContainerRef.current).setView(
+        [latitude || defaultLat, longitude || defaultLng],
+        latitude ? 15 : 10
+      );
 
       L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
         attribution:
           '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
         maxZoom: 19,
-      }).addTo(map.current);
+      }).addTo(map);
 
-      // Add click handler to map
-      map.current.on("click", (e: L.LeafletMouseEvent) => {
-        handleMapClick(e.latlng.lat, e.latlng.lng);
-      });
-
-      // Add initial marker if location exists
+      // Add marker if coordinates exist
       if (latitude && longitude) {
-        markerRef.current = L.marker([latitude, longitude], {
-          icon: locationIcon,
-        }).addTo(map.current);
+        const marker = L.marker([latitude, longitude], {
+          draggable: true,
+        }).addTo(map);
+
+        marker.on("dragend", async (e) => {
+          const position = e.target.getLatLng();
+          onLocationChange(position.lat, position.lng);
+          await reverseGeocode(position.lat, position.lng);
+        });
+
+        markerRef.current = marker;
       }
 
-      setMapInitialized(true);
-    } catch (error) {
-      console.error("Error initializing map:", error);
-      toast({
-        variant: "destructive",
-        title: "Map Error",
-        description: "Failed to initialize map",
+      // Add click handler to add/move marker
+      map.on("click", async (e) => {
+        const { lat, lng } = e.latlng;
+
+        if (markerRef.current) {
+          markerRef.current.setLatLng([lat, lng]);
+        } else {
+          const marker = L.marker([lat, lng], {
+            draggable: true,
+          }).addTo(map);
+
+          marker.on("dragend", async (event) => {
+            const position = event.target.getLatLng();
+            onLocationChange(position.lat, position.lng);
+            await reverseGeocode(position.lat, position.lng);
+          });
+
+          markerRef.current = marker;
+        }
+
+        onLocationChange(lat, lng);
+        await reverseGeocode(lat, lng);
       });
+
+      mapRef.current = map;
     }
 
     return () => {
-      if (map.current) {
-        map.current.remove();
-        map.current = null;
-      }
-    };
-  }, []);
-
-  // Update marker when location changes
-  useEffect(() => {
-    if (!map.current || !mapInitialized) return;
-
-    if (latitude && longitude) {
-      // Remove old marker
-      if (markerRef.current) {
-        markerRef.current.remove();
-      }
-
-      // Add new marker
-      markerRef.current = L.marker([latitude, longitude], {
-        icon: locationIcon,
-      }).addTo(map.current);
-
-      // Center map to new location
-      map.current.setView([latitude, longitude], 17);
-    } else {
-      // Remove marker if no location
-      if (markerRef.current) {
-        markerRef.current.remove();
+      if (mapRef.current) {
+        mapRef.current.remove();
+        mapRef.current = null;
         markerRef.current = null;
       }
-    }
-  }, [latitude, longitude, mapInitialized]);
+    };
+  }, [showMap]);
 
-  // Get current location using GPS
-  const getCurrentLocation = useCallback(() => {
+  // Update marker position when coordinates change externally
+  useEffect(() => {
+    if (mapRef.current && markerRef.current && latitude && longitude) {
+      markerRef.current.setLatLng([latitude, longitude]);
+      mapRef.current.setView([latitude, longitude], 15);
+    }
+  }, [latitude, longitude]);
+
+  const reverseGeocode = async (lat: number, lng: number) => {
+    try {
+      const response = await fetch(
+        `https://nominatim.openstreetmap.org/reverse?lat=${lat}&lon=${lng}&format=json`
+      );
+      const data = await response.json();
+
+      if (data.display_name) {
+        onAddressChange(data.display_name);
+      }
+    } catch (error) {
+      console.error("Reverse geocoding error:", error);
+    }
+  };
+
+  const getCurrentLocation = () => {
     if (!navigator.geolocation) {
       toast({
         variant: "destructive",
         title: "Error",
-        description: "Geolocation tidak didukung browser Anda",
+        description: "Geolocation is not supported by your browser",
       });
       return;
     }
 
-    setGettingLocation(true);
-
+    setLoading(true);
     navigator.geolocation.getCurrentPosition(
       async (position) => {
-        const { latitude: lat, longitude: lng } = position.coords;
-        onLocationChange(lat, lng);
+        const lat = position.coords.latitude;
+        const lng = position.coords.longitude;
 
-        // Try to get address from coordinates (reverse geocoding)
-        try {
-          const response = await fetch(
-            `https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}&addressdetails=1`
-          );
-          const data = await response.json();
-          if (data.display_name) {
-            onAddressChange(data.display_name);
+        onLocationChange(lat, lng);
+        await reverseGeocode(lat, lng);
+
+        // Update map if shown
+        if (mapRef.current) {
+          mapRef.current.setView([lat, lng], 15);
+
+          if (markerRef.current) {
+            markerRef.current.setLatLng([lat, lng]);
+          } else {
+            const marker = L.marker([lat, lng], {
+              draggable: true,
+            }).addTo(mapRef.current);
+
+            marker.on("dragend", async (e) => {
+              const position = e.target.getLatLng();
+              onLocationChange(position.lat, position.lng);
+              await reverseGeocode(position.lat, position.lng);
+            });
+
+            markerRef.current = marker;
           }
-        } catch (error) {
-          console.error("Reverse geocoding error:", error);
         }
 
-        setGettingLocation(false);
+        setLoading(false);
         toast({
-          title: "Lokasi ditemukan",
-          description: "Lokasi GPS Anda telah ditandai di peta",
+          title: "Location captured",
+          description: "GPS coordinates saved successfully",
         });
       },
       (error) => {
-        setGettingLocation(false);
-        let message = "Gagal mendapatkan lokasi";
-        switch (error.code) {
-          case error.PERMISSION_DENIED:
-            message = "Izin lokasi ditolak";
-            break;
-          case error.POSITION_UNAVAILABLE:
-            message = "Lokasi tidak tersedia";
-            break;
-          case error.TIMEOUT:
-            message = "Timeout mendapatkan lokasi";
-            break;
-        }
+        setLoading(false);
         toast({
           variant: "destructive",
-          title: "Error GPS",
-          description: message,
+          title: "Error",
+          description: "Failed to get your location: " + error.message,
         });
       },
       {
@@ -200,112 +200,161 @@ export function LocationPicker({
         maximumAge: 0,
       }
     );
-  }, [onLocationChange, onAddressChange, toast]);
+  };
 
-  // Search location by address
-  const searchLocation = useCallback(async () => {
-    const query = searchQuery.trim() || address.trim();
-    if (!query) {
+  const searchLocation = async () => {
+    if (!searchQuery.trim()) {
       toast({
         variant: "destructive",
         title: "Error",
-        description: "Masukkan alamat untuk dicari",
+        description: "Please enter a search query",
       });
       return;
     }
 
     setSearching(true);
-
     try {
       const response = await fetch(
-        `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(
-          query
-        )}&limit=1&countrycodes=id`
+        `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(
+          searchQuery
+        )}&format=json&limit=1`
       );
       const data = await response.json();
 
-      if (data && data.length > 0) {
-        const result = data[0];
-        const lat = parseFloat(result.lat);
-        const lng = parseFloat(result.lon);
+      if (data.length > 0) {
+        const { lat, lon, display_name } = data[0];
+        const latitude = parseFloat(lat);
+        const longitude = parseFloat(lon);
 
-        onLocationChange(lat, lng);
+        onLocationChange(latitude, longitude);
+        onAddressChange(display_name);
 
-        if (result.display_name) {
-          onAddressChange(result.display_name);
+        if (mapRef.current) {
+          mapRef.current.setView([latitude, longitude], 15);
+
+          if (markerRef.current) {
+            markerRef.current.setLatLng([latitude, longitude]);
+          } else {
+            const marker = L.marker([latitude, longitude], {
+              draggable: true,
+            }).addTo(mapRef.current);
+
+            marker.on("dragend", async (e) => {
+              const position = e.target.getLatLng();
+              onLocationChange(position.lat, position.lng);
+              await reverseGeocode(position.lat, position.lng);
+            });
+
+            markerRef.current = marker;
+          }
         }
 
         toast({
-          title: "Lokasi ditemukan",
-          description: "Lokasi telah ditandai di peta",
+          title: "Location found",
+          description: "Address has been set",
         });
       } else {
         toast({
           variant: "destructive",
-          title: "Tidak ditemukan",
-          description:
-            "Alamat tidak ditemukan. Coba dengan alamat yang lebih spesifik.",
+          title: "Not found",
+          description: "Location not found. Try a different search query.",
         });
       }
     } catch (error) {
-      console.error("Geocoding error:", error);
+      console.error("Search error:", error);
       toast({
         variant: "destructive",
         title: "Error",
-        description: "Gagal mencari lokasi",
+        description: "Failed to search location",
       });
     } finally {
       setSearching(false);
     }
-  }, [searchQuery, address, onLocationChange, onAddressChange, toast]);
+  };
 
-  // Handle map click
-  const handleMapClick = useCallback(
-    async (lat: number, lng: number) => {
-      onLocationChange(lat, lng);
-
-      // Reverse geocode to get address
-      try {
-        const response = await fetch(
-          `https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}&addressdetails=1`
-        );
-        const data = await response.json();
-        if (data.display_name) {
-          onAddressChange(data.display_name);
-        }
-      } catch (error) {
-        console.error("Reverse geocoding error:", error);
-      }
-    },
-    [onLocationChange, onAddressChange]
-  );
-
-  // Clear location
-  const clearLocation = useCallback(() => {
+  const clearLocation = () => {
     onLocationChange(null, null);
-  }, [onLocationChange]);
+    onAddressChange("");
+    setSearchQuery("");
+
+    if (markerRef.current && mapRef.current) {
+      mapRef.current.removeLayer(markerRef.current);
+      markerRef.current = null;
+    }
+
+    toast({
+      title: "Location cleared",
+      description: "GPS coordinates removed",
+    });
+  };
+
+  const toggleMap = () => {
+    setShowMap(!showMap);
+  };
 
   return (
-    <div className="space-y-4">
-      {/* Search Bar */}
+    <div className="space-y-3">
+      {/* Action Buttons */}
       <div className="flex gap-2">
-        <div className="flex-1">
-          <Input
-            placeholder="Cari alamat atau klik peta..."
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === "Enter") {
-                e.preventDefault();
-                searchLocation();
-              }
-            }}
-          />
-        </div>
         <Button
           type="button"
           variant="outline"
-          size="icon"
+          onClick={getCurrentLocation}
+          disabled={loading}
+          className="flex-1"
+        >
+          {loading ? (
+            <>
+              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              Getting location...
+            </>
+          ) : (
+            <>
+              <MapPin className="mr-2 h-4 w-4" />
+              Use Current Location
+            </>
+          )}
+        </Button>
+
+        <Button
+          type="button"
+          variant="outline"
+          onClick={toggleMap}
+          className="flex-1"
+        >
+          <MapPin className="mr-2 h-4 w-4" />
+          {showMap ? "Hide Map" : "Show Map"}
+        </Button>
+
+        {latitude && longitude && (
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon"
+            onClick={clearLocation}
+            disabled={loading}
+          >
+            <X className="h-4 w-4" />
+          </Button>
+        )}
+      </div>
+
+      {/* Search Location */}
+      <div className="flex gap-2">
+        <Input
+          placeholder="Search location (e.g., Jember, Jawa Timur)"
+          value={searchQuery}
+          onChange={(e) => setSearchQuery(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") {
+              e.preventDefault();
+              searchLocation();
+            }
+          }}
+        />
+        <Button
+          type="button"
+          variant="secondary"
           onClick={searchLocation}
           disabled={searching}
         >
@@ -315,70 +364,46 @@ export function LocationPicker({
             <Search className="h-4 w-4" />
           )}
         </Button>
-        <Button
-          type="button"
-          variant="outline"
-          size="icon"
-          onClick={getCurrentLocation}
-          disabled={gettingLocation}
-          title="Gunakan lokasi GPS saat ini"
-        >
-          {gettingLocation ? (
-            <Loader2 className="h-4 w-4 animate-spin" />
-          ) : (
-            <LocateFixed className="h-4 w-4" />
-          )}
-        </Button>
       </div>
 
-      {/* Map */}
-      <div className="h-64 rounded-lg overflow-hidden border relative bg-muted">
-        <div ref={mapContainer} style={{ width: "100%", height: "100%" }} />
-
-        {/* Instruction overlay */}
-        {!latitude && !longitude && mapInitialized && (
-          <div className="absolute inset-0 flex items-center justify-center bg-background/50 pointer-events-none">
-            <div className="bg-card px-4 py-2 rounded-lg shadow text-sm text-muted-foreground flex items-center gap-2">
-              <MapPin className="h-4 w-4" />
-              Klik peta untuk memilih lokasi
-            </div>
+      {/* Map Container */}
+      {showMap && (
+        <div className="border rounded-lg overflow-hidden">
+          <div
+            ref={mapContainerRef}
+            className="w-full h-[400px]"
+            style={{ zIndex: 0 }}
+          />
+          <div className="p-3 bg-muted text-xs text-muted-foreground">
+            💡 Click on map to set location, or drag the marker to adjust
           </div>
-        )}
-
-        {!mapInitialized && (
-          <div className="absolute inset-0 flex items-center justify-center bg-muted">
-            <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
-          </div>
-        )}
-      </div>
-
-      {/* Coordinates Display */}
-      {latitude && longitude && (
-        <div className="flex items-center justify-between p-3 bg-muted rounded-lg">
-          <div className="flex items-center gap-2 text-sm">
-            <MapPin className="h-4 w-4 text-red-500" />
-            <span className="font-mono">
-              {latitude.toFixed(6)}, {longitude.toFixed(6)}
-            </span>
-          </div>
-          <Button
-            type="button"
-            variant="ghost"
-            size="sm"
-            onClick={clearLocation}
-            className="text-destructive hover:text-destructive"
-          >
-            <MapPinOff className="h-4 w-4 mr-1" />
-            Hapus
-          </Button>
         </div>
       )}
 
-      {!latitude && !longitude && (
-        <p className="text-sm text-amber-600 flex items-center gap-2">
-          <Navigation className="h-4 w-4" />
-          Pilih lokasi untuk memvalidasi GPS check-in/check-out teknisi
-        </p>
+      {/* Coordinates Display */}
+      {latitude && longitude && (
+        <div className="p-3 rounded-lg bg-muted space-y-2">
+          <div>
+            <p className="font-medium text-sm">GPS Coordinates:</p>
+            <p className="text-xs text-muted-foreground font-mono">
+              Lat: {latitude.toFixed(6)}, Lng: {longitude.toFixed(6)}
+            </p>
+          </div>
+          {address && (
+            <div>
+              <p className="font-medium text-sm">Address:</p>
+              <p className="text-xs text-muted-foreground">{address}</p>
+            </div>
+          )}
+          <a
+            href={`https://www.google.com/maps?q=${latitude},${longitude}`}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-primary hover:underline text-xs inline-flex items-center gap-1"
+          >
+            View on Google Maps →
+          </a>
+        </div>
       )}
     </div>
   );

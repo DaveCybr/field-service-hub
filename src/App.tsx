@@ -10,10 +10,6 @@ import { useInitialSetup } from "@/hooks/useInitialSetup";
 import Auth from "./pages/Auth";
 import InitialSetup from "./pages/InitialSetup";
 import Dashboard from "./pages/Dashboard";
-// OLD: Jobs pages (deprecated - will be removed after testing)
-import Jobs from "./pages/Jobs";
-import NewJob from "./pages/NewJob";
-import JobDetail from "./pages/JobDetail";
 // NEW: Invoice pages
 import Invoices from "./pages/Invoices";
 import NewInvoice from "./pages/NewInvoice"; // TODO: Create this
@@ -216,43 +212,6 @@ function StaffRoutes() {
           <SetupRoute>
             <ProtectedRoute>
               <InvoiceDetail />
-            </ProtectedRoute>
-          </SetupRoute>
-        }
-      />
-
-      {/* ========================================= */}
-      {/* OLD: Jobs Routes (DEPRECATED)            */}
-      {/* Will be removed after Invoices is stable */}
-      {/* ========================================= */}
-      <Route
-        path="/jobs"
-        element={
-          <SetupRoute>
-            <ProtectedRoute>
-              <Jobs />
-            </ProtectedRoute>
-          </SetupRoute>
-        }
-      />
-      <Route
-        path="/jobs/new"
-        element={
-          <SetupRoute>
-            <RoleProtectedRoute
-              allowedRoles={["superadmin", "admin", "manager"]}
-            >
-              <NewJob />
-            </RoleProtectedRoute>
-          </SetupRoute>
-        }
-      />
-      <Route
-        path="/jobs/:id"
-        element={
-          <SetupRoute>
-            <ProtectedRoute>
-              <JobDetail />
             </ProtectedRoute>
           </SetupRoute>
         }
