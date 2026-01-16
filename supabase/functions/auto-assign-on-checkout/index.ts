@@ -13,18 +13,19 @@ interface TechnicianWithSkills {
   skills: string[];
 }
 
-interface PendingJob {
+interface PendingService {
   id: string;
-  job_number: string;
+  invoice_id: string;
   title: string;
   required_skills: string[];
+  invoice_number?: string;
 }
 
 interface NotificationPayload {
-  type: "job_assigned" | "job_requires_approval";
-  jobId: string;
-  jobNumber: string;
-  jobTitle: string;
+  type: "service_assigned" | "service_requires_approval";
+  serviceId: string;
+  invoiceNumber: string;
+  serviceTitle: string;
   technicianId?: string;
   technicianName?: string;
 }
@@ -40,31 +41,37 @@ Deno.serve(async (req) => {
 
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
-    const { completedJobId, technicianId } = await req.json();
+    const { completedServiceId, technicianId } = await req.json();
 
     console.log(
-      `Auto-assign triggered for technician: ${technicianId}, completed job: ${completedJobId}`
+      `Auto-assign triggered for technician: ${technicianId}, completed service: ${completedServiceId}`
     );
 
-    // 1. Fetch all pending jobs (not assigned to anyone)
-    const { data: pendingJobs, error: pendingJobsError } = await supabase
-      .from("service_jobs")
-      .select("id, job_number, title, required_skills")
-      .eq("status", "pending_assignment")
+    // 1. Fetch all pending services (not assigned to anyone)
+    const { data: pendingServices, error: pendingServicesError } = await supabase
+      .from("invoice_services")
+      .select(`
+        id, 
+        invoice_id, 
+        title, 
+        required_skills,
+        invoices!inner (invoice_number)
+      `)
+      .eq("status", "pending")
       .is("assigned_technician_id", null)
-      .order("priority", { ascending: false }) // Prioritas urgent duluan
-      .order("created_at", { ascending: true }); // Kemudian urut by created time
+      .order("priority", { ascending: false })
+      .order("created_at", { ascending: true });
 
-    if (pendingJobsError) {
+    if (pendingServicesError) {
       throw new Error(
-        `Failed to fetch pending jobs: ${pendingJobsError.message}`
+        `Failed to fetch pending services: ${pendingServicesError.message}`
       );
     }
 
-    if (!pendingJobs || pendingJobs.length === 0) {
-      console.log("No pending jobs found");
+    if (!pendingServices || pendingServices.length === 0) {
+      console.log("No pending services found");
       return new Response(
-        JSON.stringify({ success: true, message: "No pending jobs to assign" }),
+        JSON.stringify({ success: true, message: "No pending services to assign" }),
         { headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
@@ -74,7 +81,7 @@ Deno.serve(async (req) => {
       .from("employees")
       .select("id, name, status")
       .eq("role", "technician")
-      .in("status", ["available", "on_job"]); // Bisa assign ke yang on_job (akan jadi queue)
+      .in("status", ["available", "on_job"]);
 
     if (techniciansError) {
       throw new Error(
@@ -113,29 +120,29 @@ Deno.serve(async (req) => {
 
     console.log("Available technicians:", techniciansWithSkills);
 
-    // 6. Track assigned jobs for this round
-    const assignedJobs: Array<{
-      jobId: string;
-      jobNumber: string;
+    // 6. Track assigned services for this round
+    const assignedServices: Array<{
+      serviceId: string;
+      invoiceNumber: string;
       technicianId: string;
       technicianName: string;
     }> = [];
     const notifications: NotificationPayload[] = [];
 
-    // 7. Loop through pending jobs and assign to matching technicians
-    for (const job of pendingJobs) {
-      const requiredSkills = job.required_skills || [];
-      const normalizedRequired = requiredSkills.map((s) => s.toLowerCase());
+    // 7. Loop through pending services and assign to matching technicians
+    for (const service of pendingServices) {
+      const requiredSkills: string[] = service.required_skills || [];
+      const normalizedRequired: string[] = requiredSkills.map((s: string) => s.toLowerCase());
+      const invoiceData = service.invoices as unknown as { invoice_number: string } | { invoice_number: string }[] | null;
+      const invoiceNumber = Array.isArray(invoiceData) ? invoiceData[0]?.invoice_number || "" : invoiceData?.invoice_number || "";
 
       // Find technicians with matching skills
       const matchingTechs = techniciansWithSkills.filter((tech) => {
-        // Jika job tidak butuh skill tertentu, semua teknisi cocok
         if (normalizedRequired.length === 0) {
           return true;
         }
 
-        // Cek apakah teknisi punya minimal 1 skill yang dibutuhkan
-        return normalizedRequired.some((reqSkill) =>
+        return normalizedRequired.some((reqSkill: string) =>
           tech.skills.some(
             (techSkill) =>
               techSkill.includes(reqSkill) || reqSkill.includes(techSkill)
@@ -144,108 +151,64 @@ Deno.serve(async (req) => {
       });
 
       console.log(
-        `Job ${job.job_number}: Found ${matchingTechs.length} matching technicians`
+        `Service ${service.id}: Found ${matchingTechs.length} matching technicians`
       );
 
       if (matchingTechs.length === 0) {
-        console.log(`No matching technician for job ${job.job_number}`);
+        console.log(`No matching technician for service ${service.id}`);
         continue;
       }
 
-      // Random pick dari matching technicians
+      // Random pick from matching technicians
       const selectedTech =
         matchingTechs[Math.floor(Math.random() * matchingTechs.length)];
 
       console.log(
-        `Assigning job ${job.job_number} to technician ${selectedTech.name}`
+        `Assigning service ${service.id} to technician ${selectedTech.name}`
       );
 
-      // Assign job to technician
+      // Assign service to technician
       const { error: updateError } = await supabase
-        .from("service_jobs")
+        .from("invoice_services")
         .update({
           assigned_technician_id: selectedTech.id,
-          status: "pending_approval",
+          status: "assigned",
         })
-        .eq("id", job.id);
+        .eq("id", service.id);
 
       if (updateError) {
-        console.error(`Failed to assign job ${job.job_number}:`, updateError);
+        console.error(`Failed to assign service ${service.id}:`, updateError);
         continue;
       }
 
-      assignedJobs.push({
-        jobId: job.id,
-        jobNumber: job.job_number,
+      assignedServices.push({
+        serviceId: service.id,
+        invoiceNumber,
         technicianId: selectedTech.id,
         technicianName: selectedTech.name,
       });
 
       // Add notifications
       notifications.push({
-        type: "job_assigned",
-        jobId: job.id,
-        jobNumber: job.job_number,
-        jobTitle: job.title,
+        type: "service_assigned",
+        serviceId: service.id,
+        invoiceNumber,
+        serviceTitle: service.title,
         technicianId: selectedTech.id,
         technicianName: selectedTech.name,
       });
     }
 
-    // 8. Send notifications if any jobs were assigned
+    // 8. Log notifications (notifications table may not exist)
     if (notifications.length > 0) {
-      // TODO: Send push notifications to admin & technicians
-      // This can be done via:
-      // - Real-time subscription
-      // - Email notification
-      // - Push notification service
       console.log("Notifications to send:", notifications);
-
-      // Broadcast via Realtime (clients listening will get update)
-      for (const notif of notifications) {
-        await supabase
-          .from("notifications") // Jika punya notifications table
-          .insert({
-            type: "job_assigned",
-            user_id: notif.technicianId,
-            title: `Pekerjaan Baru: ${notif.jobNumber}`,
-            message: `Job "${notif.jobTitle}" sudah di-assign ke Anda, tunggu approval admin`,
-            data: { jobId: notif.jobId },
-            read: false,
-          })
-          .catch((err) => console.error("Failed to insert notification:", err));
-      }
-
-      // Also notify admin
-      const { data: admins } = await supabase
-        .from("employees")
-        .select("id")
-        .in("role", ["admin", "manager", "superadmin"]);
-
-      if (admins && admins.length > 0) {
-        for (const admin of admins) {
-          await supabase
-            .from("notifications")
-            .insert({
-              type: "job_requires_approval",
-              user_id: admin.id,
-              title: `${assignedJobs.length} Job(s) Perlu Approval`,
-              message: `${assignedJobs.length} job baru sudah di-assign ke teknisi, silakan review & approve`,
-              data: { jobCount: assignedJobs.length, jobs: assignedJobs },
-              read: false,
-            })
-            .catch((err) =>
-              console.error("Failed to insert admin notification:", err)
-            );
-        }
-      }
     }
 
     return new Response(
       JSON.stringify({
         success: true,
-        message: `Auto-assigned ${assignedJobs.length} job(s)`,
-        assignedJobs,
+        message: `Auto-assigned ${assignedServices.length} service(s)`,
+        assignedServices,
         notifications,
       }),
       { headers: { ...corsHeaders, "Content-Type": "application/json" } }

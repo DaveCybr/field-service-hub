@@ -9,7 +9,6 @@ import {
   Wrench,
   Clock,
   CheckCircle2,
-  AlertCircle,
   ArrowRight,
   Calendar,
   MapPin,
@@ -17,15 +16,16 @@ import {
 import { format } from 'date-fns';
 
 interface TechnicianStats {
-  assignedJobs: number;
+  assignedServices: number;
   inProgress: number;
   completedToday: number;
-  upcomingJobs: number;
+  upcomingServices: number;
 }
 
-interface TechnicianJob {
+interface TechnicianService {
   id: string;
-  job_number: string;
+  invoice_id: string;
+  invoice_number: string;
   title: string;
   status: string;
   priority: string;
@@ -37,12 +37,12 @@ interface TechnicianJob {
 export default function TechnicianDashboard() {
   const { employee } = useAuth();
   const [stats, setStats] = useState<TechnicianStats>({
-    assignedJobs: 0,
+    assignedServices: 0,
     inProgress: 0,
     completedToday: 0,
-    upcomingJobs: 0,
+    upcomingServices: 0,
   });
-  const [myJobs, setMyJobs] = useState<TechnicianJob[]>([]);
+  const [myServices, setMyServices] = useState<TechnicianService[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -57,72 +57,76 @@ export default function TechnicianDashboard() {
     try {
       const today = new Date().toISOString().split('T')[0];
 
-      // Fetch assigned jobs (not completed)
+      // Fetch assigned services (not completed)
       const { count: assignedCount } = await supabase
-        .from('service_jobs')
+        .from('invoice_services')
         .select('*', { count: 'exact', head: true })
         .eq('assigned_technician_id', employee.id)
-        .not('status', 'in', '("completed","completed_paid","cancelled")');
+        .not('status', 'in', '("completed","cancelled")');
 
       // Fetch in progress
       const { count: progressCount } = await supabase
-        .from('service_jobs')
+        .from('invoice_services')
         .select('*', { count: 'exact', head: true })
         .eq('assigned_technician_id', employee.id)
         .eq('status', 'in_progress');
 
       // Fetch completed today
       const { count: completedCount } = await supabase
-        .from('service_jobs')
+        .from('invoice_services')
         .select('*', { count: 'exact', head: true })
         .eq('assigned_technician_id', employee.id)
-        .in('status', ['completed', 'completed_paid'])
+        .eq('status', 'completed')
         .gte('updated_at', `${today}T00:00:00`);
 
-      // Fetch upcoming jobs (scheduled for future)
+      // Fetch upcoming services (scheduled for future)
       const { count: upcomingCount } = await supabase
-        .from('service_jobs')
+        .from('invoice_services')
         .select('*', { count: 'exact', head: true })
         .eq('assigned_technician_id', employee.id)
-        .eq('status', 'approved')
+        .eq('status', 'assigned')
         .gte('scheduled_date', today);
 
       setStats({
-        assignedJobs: assignedCount || 0,
+        assignedServices: assignedCount || 0,
         inProgress: progressCount || 0,
         completedToday: completedCount || 0,
-        upcomingJobs: upcomingCount || 0,
+        upcomingServices: upcomingCount || 0,
       });
 
-      // Fetch my active jobs
-      const { data: jobs } = await supabase
-        .from('service_jobs')
+      // Fetch my active services with invoice info
+      const { data: services } = await supabase
+        .from('invoice_services')
         .select(`
           id,
-          job_number,
+          invoice_id,
           title,
           status,
           priority,
           service_address,
           scheduled_date,
-          customers (name)
+          invoices!inner (invoice_number, customers (name))
         `)
         .eq('assigned_technician_id', employee.id)
-        .not('status', 'in', '("completed","completed_paid","cancelled")')
+        .not('status', 'in', '("completed","cancelled")')
         .order('scheduled_date', { ascending: true })
         .limit(10);
 
-      if (jobs) {
-        setMyJobs(jobs.map(job => ({
-          id: job.id,
-          job_number: job.job_number,
-          title: job.title,
-          status: job.status,
-          priority: job.priority,
-          customer_name: (job.customers as any)?.name || 'Unknown',
-          service_address: job.service_address,
-          scheduled_date: job.scheduled_date,
-        })));
+      if (services) {
+        setMyServices(services.map(svc => {
+          const invoice = svc.invoices as unknown as { invoice_number: string; customers: { name: string } | null };
+          return {
+            id: svc.id,
+            invoice_id: svc.invoice_id,
+            invoice_number: invoice?.invoice_number || '',
+            title: svc.title,
+            status: svc.status,
+            priority: svc.priority,
+            customer_name: invoice?.customers?.name || 'Unknown',
+            service_address: svc.service_address,
+            scheduled_date: svc.scheduled_date,
+          };
+        }));
       }
     } catch (error) {
       console.error('Error fetching technician data:', error);
@@ -133,12 +137,10 @@ export default function TechnicianDashboard() {
 
   const getStatusBadge = (status: string) => {
     const statusConfig: Record<string, { label: string; className: string }> = {
-      pending_assignment: { label: 'Pending', className: 'badge-status-pending' },
-      pending_approval: { label: 'Needs Approval', className: 'badge-status-pending' },
-      approved: { label: 'Approved', className: 'badge-status-approved' },
+      pending: { label: 'Pending', className: 'badge-status-pending' },
+      assigned: { label: 'Assigned', className: 'badge-status-approved' },
       in_progress: { label: 'In Progress', className: 'badge-status-progress' },
       completed: { label: 'Completed', className: 'badge-status-completed' },
-      completed_paid: { label: 'Paid', className: 'badge-status-completed' },
       cancelled: { label: 'Cancelled', className: 'badge-status-cancelled' },
     };
     const config = statusConfig[status] || { label: status, className: '' };
@@ -158,8 +160,8 @@ export default function TechnicianDashboard() {
 
   const statCards = [
     {
-      title: 'Assigned Jobs',
-      value: stats.assignedJobs,
+      title: 'Assigned Services',
+      value: stats.assignedServices,
       icon: Wrench,
       color: 'text-primary',
       bgColor: 'bg-primary/10',
@@ -180,7 +182,7 @@ export default function TechnicianDashboard() {
     },
     {
       title: 'Upcoming',
-      value: stats.upcomingJobs,
+      value: stats.upcomingServices,
       icon: Calendar,
       color: 'text-purple-600',
       bgColor: 'bg-purple-100',
@@ -196,13 +198,13 @@ export default function TechnicianDashboard() {
             Welcome, {employee?.name?.split(' ')[0] || 'Technician'}!
           </h1>
           <p className="text-muted-foreground">
-            Here are your assigned service jobs for today.
+            Here are your assigned service tasks for today.
           </p>
         </div>
         <Button asChild>
-          <Link to="/jobs">
+          <Link to="/my-services">
             <Wrench className="mr-2 h-4 w-4" />
-            View My Jobs
+            View My Services
           </Link>
         </Button>
       </div>
@@ -227,15 +229,15 @@ export default function TechnicianDashboard() {
         ))}
       </div>
 
-      {/* My Jobs */}
+      {/* My Services */}
       <Card>
         <CardHeader className="flex flex-row items-center justify-between">
           <div>
-            <CardTitle className="text-lg">My Active Jobs</CardTitle>
-            <CardDescription>Jobs assigned to you that need attention</CardDescription>
+            <CardTitle className="text-lg">My Active Services</CardTitle>
+            <CardDescription>Services assigned to you that need attention</CardDescription>
           </div>
           <Button variant="outline" asChild>
-            <Link to="/jobs">
+            <Link to="/my-services">
               View All
               <ArrowRight className="ml-2 h-4 w-4" />
             </Link>
@@ -246,44 +248,44 @@ export default function TechnicianDashboard() {
             <div className="flex items-center justify-center py-8">
               <div className="h-8 w-8 animate-spin rounded-full border-4 border-primary border-t-transparent" />
             </div>
-          ) : myJobs.length === 0 ? (
+          ) : myServices.length === 0 ? (
             <div className="text-center py-8">
               <CheckCircle2 className="mx-auto h-12 w-12 text-emerald-500" />
-              <h3 className="mt-4 text-lg font-medium">No active jobs</h3>
+              <h3 className="mt-4 text-lg font-medium">No active services</h3>
               <p className="mt-2 text-sm text-muted-foreground">
-                You don't have any assigned jobs at the moment.
+                You don't have any assigned services at the moment.
               </p>
             </div>
           ) : (
             <div className="space-y-3">
-              {myJobs.map((job) => (
+              {myServices.map((svc) => (
                 <Link
-                  key={job.id}
-                  to={`/jobs/${job.id}`}
+                  key={svc.id}
+                  to={`/invoices/${svc.invoice_id}/service/${svc.id}`}
                   className="flex items-center justify-between p-4 rounded-lg border hover:bg-muted/50 transition-colors"
                 >
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2 flex-wrap">
                       <span className="font-mono text-sm text-muted-foreground">
-                        {job.job_number}
+                        {svc.invoice_number}
                       </span>
-                      {getPriorityBadge(job.priority)}
-                      {getStatusBadge(job.status)}
+                      {getPriorityBadge(svc.priority)}
+                      {getStatusBadge(svc.status)}
                     </div>
-                    <p className="font-medium mt-1 truncate">{job.title}</p>
+                    <p className="font-medium mt-1 truncate">{svc.title}</p>
                     <div className="flex items-center gap-4 mt-1 text-sm text-muted-foreground">
-                      <span>{job.customer_name}</span>
-                      {job.scheduled_date && (
+                      <span>{svc.customer_name}</span>
+                      {svc.scheduled_date && (
                         <span className="flex items-center gap-1">
                           <Calendar className="h-3 w-3" />
-                          {format(new Date(job.scheduled_date), 'MMM d')}
+                          {format(new Date(svc.scheduled_date), 'MMM d')}
                         </span>
                       )}
                     </div>
-                    {job.service_address && (
+                    {svc.service_address && (
                       <p className="flex items-center gap-1 mt-1 text-sm text-muted-foreground">
                         <MapPin className="h-3 w-3" />
-                        <span className="truncate">{job.service_address}</span>
+                        <span className="truncate">{svc.service_address}</span>
                       </p>
                     )}
                   </div>

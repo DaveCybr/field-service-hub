@@ -17,7 +17,7 @@ interface TechnicianScore {
 }
 
 interface AssignmentRequest {
-  jobId?: string;
+  serviceId?: string;
   requiredSkills?: string[];
   priority?: string;
 }
@@ -34,9 +34,9 @@ Deno.serve(async (req) => {
     
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
-    const { jobId, requiredSkills = [], priority = 'normal' }: AssignmentRequest = await req.json();
+    const { serviceId, requiredSkills = [], priority = 'normal' }: AssignmentRequest = await req.json();
     
-    console.log('Auto-assign request:', { jobId, requiredSkills, priority });
+    console.log('Auto-assign request:', { serviceId, requiredSkills, priority });
 
     // Fetch all technicians
     const { data: technicians, error: techError } = await supabase
@@ -77,22 +77,22 @@ Deno.serve(async (req) => {
       skillsMap[skill.technician_id].proficiencies[skill.skill_name.toLowerCase()] = skill.proficiency_level || 'basic';
     });
 
-    // Fetch current job counts (in_progress jobs per technician)
-    const { data: jobCounts, error: jobError } = await supabase
-      .from('service_jobs')
+    // Fetch current service counts (in_progress services per technician)
+    const { data: serviceCounts, error: serviceError } = await supabase
+      .from('invoice_services')
       .select('assigned_technician_id')
-      .in('status', ['approved', 'in_progress'])
+      .in('status', ['assigned', 'in_progress'])
       .in('assigned_technician_id', technicianIds);
 
-    if (jobError) {
-      console.error('Error fetching job counts:', jobError);
+    if (serviceError) {
+      console.error('Error fetching service counts:', serviceError);
     }
 
-    // Count active jobs per technician
-    const activeJobsCount: Record<string, number> = {};
-    jobCounts?.forEach(job => {
-      if (job.assigned_technician_id) {
-        activeJobsCount[job.assigned_technician_id] = (activeJobsCount[job.assigned_technician_id] || 0) + 1;
+    // Count active services per technician
+    const activeServicesCount: Record<string, number> = {};
+    serviceCounts?.forEach(service => {
+      if (service.assigned_technician_id) {
+        activeServicesCount[service.assigned_technician_id] = (activeServicesCount[service.assigned_technician_id] || 0) + 1;
       }
     });
 
@@ -134,7 +134,7 @@ Deno.serve(async (req) => {
           availabilityScore = 35;
           break;
         case 'on_job':
-          availabilityScore = 15; // Can be assigned but currently busy
+          availabilityScore = 15;
           break;
         case 'off_duty':
           availabilityScore = 5;
@@ -146,11 +146,11 @@ Deno.serve(async (req) => {
           availabilityScore = 10;
       }
 
-      // 3. Workload Score (0-25 points) - fewer active jobs = higher score
-      const activeJobs = activeJobsCount[tech.id] || 0;
-      let workloadScore = Math.max(0, 25 - (activeJobs * 5));
+      // 3. Workload Score (0-25 points) - fewer active services = higher score
+      const activeServices = activeServicesCount[tech.id] || 0;
+      const workloadScore = Math.max(0, 25 - (activeServices * 5));
 
-      // Priority boost for urgent jobs - prioritize available technicians more
+      // Priority boost for urgent services - prioritize available technicians more
       if (priority === 'urgent' && tech.status === 'available') {
         availabilityScore += 10;
       } else if (priority === 'high' && tech.status === 'available') {
@@ -182,20 +182,20 @@ Deno.serve(async (req) => {
 
     console.log('Scored technicians:', scoredTechnicians);
 
-    // If jobId provided, auto-assign the top technician
+    // If serviceId provided, auto-assign the top technician
     let assigned = false;
     let assignedTechnician = null;
 
-    if (jobId && eligibleTechnicians.length > 0) {
+    if (serviceId && eligibleTechnicians.length > 0) {
       const bestMatch = eligibleTechnicians[0];
       
       const { error: updateError } = await supabase
-        .from('service_jobs')
+        .from('invoice_services')
         .update({ 
           assigned_technician_id: bestMatch.id,
-          status: 'pending_approval'
+          status: 'assigned'
         })
-        .eq('id', jobId);
+        .eq('id', serviceId);
 
       if (updateError) {
         console.error('Error assigning technician:', updateError);
@@ -204,7 +204,7 @@ Deno.serve(async (req) => {
 
       assigned = true;
       assignedTechnician = bestMatch;
-      console.log('Auto-assigned technician:', bestMatch.name, 'to job:', jobId);
+      console.log('Auto-assigned technician:', bestMatch.name, 'to service:', serviceId);
     }
 
     return new Response(
