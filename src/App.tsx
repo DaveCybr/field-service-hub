@@ -16,8 +16,8 @@ import NewJob from "./pages/NewJob";
 import JobDetail from "./pages/JobDetail";
 // NEW: Invoice pages
 import Invoices from "./pages/Invoices";
-// import NewInvoice from "./pages/NewInvoice"; // TODO: Create this
-// import InvoiceDetail from "./pages/InvoiceDetail"; // TODO: Create this
+import NewInvoice from "./pages/NewInvoice"; // TODO: Create this
+import InvoiceDetail from "./pages/InvoiceDetail"; // TODO: Create this
 
 import Technicians from "./pages/Technicians";
 import Customers from "./pages/Customers";
@@ -198,7 +198,7 @@ function StaffRoutes() {
         }
       />
       {/* TODO: Uncomment after creating these pages */}
-      {/* <Route
+      <Route
         path="/invoices/new"
         element={
           <SetupRoute>
@@ -219,7 +219,7 @@ function StaffRoutes() {
             </ProtectedRoute>
           </SetupRoute>
         }
-      /> */}
+      />
 
       {/* ========================================= */}
       {/* OLD: Jobs Routes (DEPRECATED)            */}
