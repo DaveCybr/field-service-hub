@@ -32,14 +32,13 @@ interface CashierStats {
   totalRevenuePending: number;
 }
 
-interface PaymentJob {
+interface PaymentInvoice {
   id: string;
-  job_number: string;
-  title: string;
+  invoice_number: string;
   status: string;
   payment_status: string;
   customer_name: string;
-  total_cost: number;
+  grand_total: number;
   updated_at: string;
 }
 
@@ -51,8 +50,8 @@ export default function CashierDashboard() {
     totalRevenueToday: 0,
     totalRevenuePending: 0,
   });
-  const [pendingJobs, setPendingJobs] = useState<PaymentJob[]>([]);
-  const [recentPayments, setRecentPayments] = useState<PaymentJob[]>([]);
+  const [pendingInvoices, setPendingInvoices] = useState<PaymentInvoice[]>([]);
+  const [recentPayments, setRecentPayments] = useState<PaymentInvoice[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -65,14 +64,13 @@ export default function CashierDashboard() {
 
       // Fetch pending payments (completed but not paid)
       const { data: pendingData, count: pendingCount } = await supabase
-        .from('service_jobs')
+        .from('invoices')
         .select(`
           id,
-          job_number,
-          title,
+          invoice_number,
           status,
           payment_status,
-          total_cost,
+          grand_total,
           updated_at,
           customers (name)
         `, { count: 'exact' })
@@ -83,32 +81,31 @@ export default function CashierDashboard() {
 
       // Fetch completed & paid today
       const { data: paidTodayData, count: completedCount } = await supabase
-        .from('service_jobs')
+        .from('invoices')
         .select('*', { count: 'exact' })
-        .eq('status', 'completed_paid')
+        .eq('status', 'paid')
         .gte('updated_at', `${today}T00:00:00`)
         .lte('updated_at', `${today}T23:59:59`);
 
       // Calculate today's revenue
-      const todayRevenue = paidTodayData?.reduce((sum, job) => sum + (job.total_cost || 0), 0) || 0;
+      const todayRevenue = paidTodayData?.reduce((sum, inv) => sum + (inv.grand_total || 0), 0) || 0;
 
       // Calculate pending revenue
-      const pendingRevenue = pendingData?.reduce((sum, job) => sum + (job.total_cost || 0), 0) || 0;
+      const pendingRevenue = pendingData?.reduce((sum, inv) => sum + (inv.grand_total || 0), 0) || 0;
 
       // Fetch recent payments
       const { data: recentData } = await supabase
-        .from('service_jobs')
+        .from('invoices')
         .select(`
           id,
-          job_number,
-          title,
+          invoice_number,
           status,
           payment_status,
-          total_cost,
+          grand_total,
           updated_at,
           customers (name)
         `)
-        .eq('status', 'completed_paid')
+        .eq('status', 'paid')
         .order('updated_at', { ascending: false })
         .limit(5);
 
@@ -120,28 +117,26 @@ export default function CashierDashboard() {
       });
 
       if (pendingData) {
-        setPendingJobs(pendingData.map(job => ({
-          id: job.id,
-          job_number: job.job_number,
-          title: job.title,
-          status: job.status,
-          payment_status: job.payment_status || 'pending',
-          customer_name: (job.customers as any)?.name || 'Unknown',
-          total_cost: job.total_cost || 0,
-          updated_at: job.updated_at,
+        setPendingInvoices(pendingData.map(inv => ({
+          id: inv.id,
+          invoice_number: inv.invoice_number,
+          status: inv.status,
+          payment_status: inv.payment_status || 'unpaid',
+          customer_name: (inv.customers as { name: string } | null)?.name || 'Unknown',
+          grand_total: inv.grand_total || 0,
+          updated_at: inv.updated_at,
         })));
       }
 
       if (recentData) {
-        setRecentPayments(recentData.map(job => ({
-          id: job.id,
-          job_number: job.job_number,
-          title: job.title,
-          status: job.status,
-          payment_status: job.payment_status || 'paid',
-          customer_name: (job.customers as any)?.name || 'Unknown',
-          total_cost: job.total_cost || 0,
-          updated_at: job.updated_at,
+        setRecentPayments(recentData.map(inv => ({
+          id: inv.id,
+          invoice_number: inv.invoice_number,
+          status: inv.status,
+          payment_status: inv.payment_status || 'paid',
+          customer_name: (inv.customers as { name: string } | null)?.name || 'Unknown',
+          grand_total: inv.grand_total || 0,
+          updated_at: inv.updated_at,
         })));
       }
     } catch (error) {
@@ -161,10 +156,9 @@ export default function CashierDashboard() {
 
   const getPaymentStatusBadge = (status: string) => {
     const statusConfig: Record<string, { label: string; className: string }> = {
-      pending: { label: 'Pending', className: 'bg-amber-100 text-amber-800 border-amber-200' },
+      unpaid: { label: 'Unpaid', className: 'bg-amber-100 text-amber-800 border-amber-200' },
       partial: { label: 'Partial', className: 'bg-blue-100 text-blue-800 border-blue-200' },
       paid: { label: 'Paid', className: 'bg-emerald-100 text-emerald-800 border-emerald-200' },
-      overdue: { label: 'Overdue', className: 'bg-red-100 text-red-800 border-red-200' },
     };
     const config = statusConfig[status] || { label: status, className: '' };
     return <Badge variant="outline" className={config.className}>{config.label}</Badge>;
@@ -212,11 +206,11 @@ export default function CashierDashboard() {
             Welcome, {employee?.name?.split(' ')[0] || 'Cashier'}!
           </h1>
           <p className="text-muted-foreground">
-            Manage payments and track revenue for completed service jobs.
+            Manage payments and track revenue for completed invoices.
           </p>
         </div>
         <Button asChild>
-          <Link to="/jobs">
+          <Link to="/invoices">
             <CreditCard className="mr-2 h-4 w-4" />
             Process Payments
           </Link>
@@ -253,10 +247,10 @@ export default function CashierDashboard() {
               <DollarSign className="h-5 w-5 text-amber-600" />
               Pending Payments
             </CardTitle>
-            <CardDescription>Jobs awaiting payment processing</CardDescription>
+            <CardDescription>Invoices awaiting payment processing</CardDescription>
           </div>
           <Button variant="outline" asChild>
-            <Link to="/jobs">
+            <Link to="/invoices">
               View All
               <ArrowRight className="ml-2 h-4 w-4" />
             </Link>
@@ -267,7 +261,7 @@ export default function CashierDashboard() {
             <div className="flex items-center justify-center py-8">
               <div className="h-8 w-8 animate-spin rounded-full border-4 border-primary border-t-transparent" />
             </div>
-          ) : pendingJobs.length === 0 ? (
+          ) : pendingInvoices.length === 0 ? (
             <div className="text-center py-8">
               <CheckCircle2 className="mx-auto h-12 w-12 text-emerald-500" />
               <h3 className="mt-4 text-lg font-medium">All caught up!</h3>
@@ -280,33 +274,29 @@ export default function CashierDashboard() {
               <Table>
                 <TableHeader>
                   <TableRow>
-                    <TableHead>Job #</TableHead>
+                    <TableHead>Invoice #</TableHead>
                     <TableHead>Customer</TableHead>
-                    <TableHead>Title</TableHead>
                     <TableHead>Payment Status</TableHead>
                     <TableHead className="text-right">Amount</TableHead>
                     <TableHead className="text-right">Action</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {pendingJobs.map((job) => (
-                    <TableRow key={job.id}>
+                  {pendingInvoices.map((inv) => (
+                    <TableRow key={inv.id}>
                       <TableCell className="font-mono text-sm">
-                        {job.job_number}
+                        {inv.invoice_number}
                       </TableCell>
-                      <TableCell>{job.customer_name}</TableCell>
-                      <TableCell className="max-w-[200px] truncate">
-                        {job.title}
-                      </TableCell>
+                      <TableCell>{inv.customer_name}</TableCell>
                       <TableCell>
-                        {getPaymentStatusBadge(job.payment_status)}
+                        {getPaymentStatusBadge(inv.payment_status)}
                       </TableCell>
                       <TableCell className="text-right font-medium">
-                        {formatCurrency(job.total_cost)}
+                        {formatCurrency(inv.grand_total)}
                       </TableCell>
                       <TableCell className="text-right">
                         <Button size="sm" asChild>
-                          <Link to={`/jobs/${job.id}`}>
+                          <Link to={`/invoices/${inv.id}`}>
                             Process
                           </Link>
                         </Button>
@@ -344,27 +334,27 @@ export default function CashierDashboard() {
             </div>
           ) : (
             <div className="space-y-3">
-              {recentPayments.map((job) => (
+              {recentPayments.map((inv) => (
                 <Link
-                  key={job.id}
-                  to={`/jobs/${job.id}`}
+                  key={inv.id}
+                  to={`/invoices/${inv.id}`}
                   className="flex items-center justify-between p-4 rounded-lg border hover:bg-muted/50 transition-colors"
                 >
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2">
                       <span className="font-mono text-sm text-muted-foreground">
-                        {job.job_number}
+                        {inv.invoice_number}
                       </span>
-                      {getPaymentStatusBadge(job.payment_status)}
+                      {getPaymentStatusBadge(inv.payment_status)}
                     </div>
-                    <p className="font-medium mt-1 truncate">{job.customer_name}</p>
+                    <p className="font-medium mt-1 truncate">{inv.customer_name}</p>
                     <p className="text-sm text-muted-foreground">
-                      {format(new Date(job.updated_at), 'MMM d, yyyy HH:mm')}
+                      {format(new Date(inv.updated_at), 'MMM d, yyyy HH:mm')}
                     </p>
                   </div>
                   <div className="ml-4 text-right">
                     <p className="font-bold text-emerald-600">
-                      {formatCurrency(job.total_cost)}
+                      {formatCurrency(inv.grand_total)}
                     </p>
                   </div>
                 </Link>
