@@ -33,6 +33,7 @@ import CustomerDashboard from "./pages/portal/CustomerDashboard";
 import CustomerJobs from "./pages/portal/CustomerJobs";
 import CustomerJobDetail from "./pages/portal/CustomerJobDetail";
 import CustomerHistory from "./pages/portal/CustomerHistory";
+import EditInvoice from "./pages/EditInvoice";
 
 const queryClient = new QueryClient();
 
@@ -213,6 +214,19 @@ function StaffRoutes() {
             <ProtectedRoute>
               <InvoiceDetail />
             </ProtectedRoute>
+          </SetupRoute>
+        }
+      />
+
+      <Route
+        path="/invoices/:id/edit"
+        element={
+          <SetupRoute>
+            <RoleProtectedRoute
+              allowedRoles={["superadmin", "admin", "manager"]}
+            >
+              <EditInvoice />
+            </RoleProtectedRoute>
           </SetupRoute>
         }
       />
