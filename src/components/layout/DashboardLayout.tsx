@@ -35,6 +35,7 @@ import { LanguageSwitcher } from "@/components/LanguageSwitcher";
 
 interface DashboardLayoutProps {
   children: ReactNode;
+  className?: string;
 }
 
 import { CreditCard } from "lucide-react";
@@ -70,7 +71,10 @@ const superadminExtras = [
   { name: "Audit Logs", href: "/audit-logs", icon: ScrollText },
 ];
 
-export default function DashboardLayout({ children }: DashboardLayoutProps) {
+export default function DashboardLayout({
+  children,
+  className,
+}: DashboardLayoutProps) {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const { employee, isSuperadmin, isAdmin, userRole, signOut, user } =
     useAuth();
@@ -140,7 +144,7 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
   };
 
   return (
-    <div className="min-h-screen bg-background">
+    <div className={cn("min-h-screen bg-background", className)}>
       {/* Mobile sidebar overlay */}
       {sidebarOpen && (
         <div

@@ -24,6 +24,7 @@ import { PaymentTab } from "@/components/invoices/detail/PaymentTab";
 import { useInvoiceDetail } from "@/hooks/invoices/useInvoiceDetail";
 import { TimelineTab } from "@/components/invoices/detail/TimelineTab";
 import { DocumentsTab } from "@/components/invoices/detail/DocumentsTab";
+import { InvoicePrintTemplate } from "@/components/invoices/InvoicePrintTemplate";
 
 export default function InvoiceDetail() {
   const { id } = useParams<{ id: string }>();
@@ -72,96 +73,109 @@ export default function InvoiceDetail() {
   );
 
   return (
-    <DashboardLayout>
-      <div className="space-y-6 animate-fade-in">
-        {/* Header */}
-        <InvoiceHeader
-          invoice={invoice}
-          canEdit={canEdit}
-          onStatusChange={async (newStatus) => {
-            try {
-              const { error } = await supabase
-                .from("invoices")
-                .update({ status: newStatus })
-                .eq("id", invoice.id);
+    <>
+      {/* Print Template - only visible when printing */}
+      <InvoicePrintTemplate
+        invoice={invoice}
+        services={services}
+        items={items}
+        companyInfo={{
+          name: "Your Company Name",
+          address: "123 Business St, City, Country",
+          phone: "+62 123-4567-890",
+          email: "info@yourcompany.com",
+          logo: "/logo.png", // Optional
+        }}
+      />
 
-              if (error) throw error;
+      {/* Main Content */}
+      <DashboardLayout>
+        <div className="space-y-6 animate-fade-in">
+          {/* Header */}
+          <InvoiceHeader
+            invoice={invoice}
+            canEdit={canEdit}
+            onStatusChange={async (newStatus) => {
+              try {
+                const { error } = await supabase
+                  .from("invoices")
+                  .update({ status: newStatus })
+                  .eq("id", invoice.id);
 
-              await auditLog({
-                action: "status_change",
-                entityType: "invoice",
-                entityId: invoice.id,
-                oldData: { status: invoice.status },
-                newData: { status: newStatus },
-              });
+                if (error) throw error;
 
-              toast({
-                title: "Status Updated",
-                description: `Invoice status changed to ${newStatus}`,
-              });
+                await auditLog({
+                  action: "status_change",
+                  entityType: "invoice",
+                  entityId: invoice.id,
+                  oldData: { status: invoice.status },
+                  newData: { status: newStatus },
+                });
 
-              refetch();
-            } catch (error: any) {
-              toast({
-                variant: "destructive",
-                title: "Error",
-                description: error.message || "Failed to update status",
-              });
-            }
-          }}
-          onPrint={handlePrint}
-        />
+                toast({
+                  title: "Status Updated",
+                  description: `Invoice status changed to ${newStatus}`,
+                });
 
-        {/* Tabs */}
-        <Tabs defaultValue="summary" className="w-full">
-          <TabsList className="grid w-full grid-cols-6">
-            <TabsTrigger value="summary">Summary</TabsTrigger>
-            <TabsTrigger value="services">
-              Services ({services.length})
-            </TabsTrigger>
-            <TabsTrigger value="products">
-              Products ({items.length})
-            </TabsTrigger>
-            <TabsTrigger value="payment">Payment</TabsTrigger>
-            <TabsTrigger value="timeline">Timeline</TabsTrigger>
-            <TabsTrigger value="documents">Documents</TabsTrigger>
-          </TabsList>
+                refetch();
+              } catch (error: any) {
+                toast({
+                  variant: "destructive",
+                  title: "Error",
+                  description: error.message || "Failed to update status",
+                });
+              }
+            }}
+            onPrint={handlePrint}
+          />
 
-          {/* Summary Tab */}
-          <TabsContent value="summary">
-            <InvoiceSummaryTab invoice={invoice} />
-          </TabsContent>
+          {/* Tabs */}
+          <Tabs defaultValue="summary" className="w-full">
+            <TabsList className="grid w-full grid-cols-6">
+              <TabsTrigger value="summary">Summary</TabsTrigger>
+              <TabsTrigger value="services">
+                Services ({services.length})
+              </TabsTrigger>
+              <TabsTrigger value="products">
+                Products ({items.length})
+              </TabsTrigger>
+              <TabsTrigger value="payment">Payment</TabsTrigger>
+              <TabsTrigger value="timeline">Timeline</TabsTrigger>
+              <TabsTrigger value="documents">Documents</TabsTrigger>
+            </TabsList>
 
-          {/* Services Tab */}
-          <TabsContent value="services">
-            <ServicesTab
-              services={services}
-              // canEdit={canEdit}
-              // onUpdate={refetch}
-            />
-          </TabsContent>
+            {/* Summary Tab */}
+            <TabsContent value="summary">
+              <InvoiceSummaryTab invoice={invoice} />
+            </TabsContent>
 
-          {/* Products Tab */}
-          <TabsContent value="products">
-            <ProductsTab items={items} />
-          </TabsContent>
+            {/* Services Tab */}
+            <TabsContent value="services">
+              <ServicesTab services={services} />
+            </TabsContent>
 
-          {/* Payment Tab */}
-          <TabsContent value="payment">
-            <PaymentTab invoice={invoice} onPaymentRecorded={refetch} />
-          </TabsContent>
+            {/* Products Tab */}
+            <TabsContent value="products">
+              <ProductsTab items={items} />
+            </TabsContent>
 
-          {/* Timeline Tab */}
-          <TabsContent value="timeline">
-            <TimelineTab invoice={invoice} />
-          </TabsContent>
+            {/* Payment Tab */}
+            <TabsContent value="payment">
+              <PaymentTab invoice={invoice} onPaymentRecorded={refetch} />
+            </TabsContent>
 
-          {/* Documents Tab */}
-          <TabsContent value="documents">
-            <DocumentsTab invoice={invoice} />
-          </TabsContent>
-        </Tabs>
-      </div>
-    </DashboardLayout>
+            {/* Timeline Tab */}
+            <TabsContent value="timeline">
+              <TimelineTab invoice={invoice} />
+            </TabsContent>
+
+            {/* Documents Tab */}
+            <TabsContent value="documents">
+              <DocumentsTab invoice={invoice} />
+            </TabsContent>
+          </Tabs>
+        </div>
+      </DashboardLayout>
+    </>
   );
 }
