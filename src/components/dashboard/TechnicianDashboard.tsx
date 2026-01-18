@@ -1,299 +1,485 @@
-import { useEffect, useState } from 'react';
-import { Link } from 'react-router-dom';
-import { supabase } from '@/integrations/supabase/client';
-import { useAuth } from '@/hooks/useAuth';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Button } from '@/components/ui/button';
-import { Badge } from '@/components/ui/badge';
+import { useState, useEffect } from "react";
+import { useNavigate } from "react-router-dom";
+import { supabase } from "@/integrations/supabase/client";
+import { useAuth } from "@/hooks/useAuth";
+import { useToast } from "@/hooks/use-toast";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import {
-  Wrench,
+  Loader2,
+  Briefcase,
   Clock,
   CheckCircle2,
-  ArrowRight,
+  TrendingUp,
   Calendar,
   MapPin,
-} from 'lucide-react';
-import { format } from 'date-fns';
+  AlertCircle,
+} from "lucide-react";
+import { format, isToday, parseISO } from "date-fns";
+import { formatCurrency } from "@/lib/utils/currency";
 
-interface TechnicianStats {
-  assignedServices: number;
-  inProgress: number;
-  completedToday: number;
-  upcomingServices: number;
+interface DashboardStats {
+  todayJobs: number;
+  pendingJobs: number;
+  inProgressJobs: number;
+  completedThisWeek: number;
+  completedThisMonth: number;
+  avgDuration: number;
+  totalRevenue: number;
 }
 
-interface TechnicianService {
+interface TodayJob {
   id: string;
-  invoice_id: string;
-  invoice_number: string;
   title: string;
+  scheduled_date: string;
   status: string;
   priority: string;
-  customer_name: string;
-  service_address: string | null;
-  scheduled_date: string | null;
+  service_address: string;
+  actual_checkin_at: string | null;
+  invoice: {
+    invoice_number: string;
+    customer: {
+      name: string;
+      phone: string;
+    };
+  };
 }
 
 export default function TechnicianDashboard() {
+  const navigate = useNavigate();
   const { employee } = useAuth();
-  const [stats, setStats] = useState<TechnicianStats>({
-    assignedServices: 0,
-    inProgress: 0,
-    completedToday: 0,
-    upcomingServices: 0,
-  });
-  const [myServices, setMyServices] = useState<TechnicianService[]>([]);
+  const { toast } = useToast();
+
   const [loading, setLoading] = useState(true);
+  const [stats, setStats] = useState<DashboardStats>({
+    todayJobs: 0,
+    pendingJobs: 0,
+    inProgressJobs: 0,
+    completedThisWeek: 0,
+    completedThisMonth: 0,
+    avgDuration: 0,
+    totalRevenue: 0,
+  });
+  const [todayJobs, setTodayJobs] = useState<TodayJob[]>([]);
+  const [upcomingJobs, setUpcomingJobs] = useState<TodayJob[]>([]);
 
   useEffect(() => {
     if (employee?.id) {
-      fetchTechnicianData();
+      loadDashboardData();
     }
   }, [employee?.id]);
 
-  const fetchTechnicianData = async () => {
-    if (!employee?.id) return;
-
+  const loadDashboardData = async () => {
     try {
-      const today = new Date().toISOString().split('T')[0];
+      setLoading(true);
 
-      // Fetch assigned services (not completed)
-      const { count: assignedCount } = await supabase
-        .from('invoice_services')
-        .select('*', { count: 'exact', head: true })
-        .eq('assigned_technician_id', employee.id)
-        .not('status', 'in', '("completed","cancelled")');
+      // Load all jobs for stats
+      const { data: allJobs, error: allJobsError } = await supabase
+        .from("invoice_services")
+        .select("*")
+        .eq("assigned_technician_id", employee?.id);
 
-      // Fetch in progress
-      const { count: progressCount } = await supabase
-        .from('invoice_services')
-        .select('*', { count: 'exact', head: true })
-        .eq('assigned_technician_id', employee.id)
-        .eq('status', 'in_progress');
+      if (allJobsError) throw allJobsError;
 
-      // Fetch completed today
-      const { count: completedCount } = await supabase
-        .from('invoice_services')
-        .select('*', { count: 'exact', head: true })
-        .eq('assigned_technician_id', employee.id)
-        .eq('status', 'completed')
-        .gte('updated_at', `${today}T00:00:00`);
+      // Load today's jobs
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      const tomorrow = new Date(today);
+      tomorrow.setDate(tomorrow.getDate() + 1);
 
-      // Fetch upcoming services (scheduled for future)
-      const { count: upcomingCount } = await supabase
-        .from('invoice_services')
-        .select('*', { count: 'exact', head: true })
-        .eq('assigned_technician_id', employee.id)
-        .eq('status', 'assigned')
-        .gte('scheduled_date', today);
+      const { data: todayJobsData, error: todayError } = await supabase
+        .from("invoice_services")
+        .select(
+          `
+          *,
+          invoice:invoices!inner(
+            invoice_number,
+            customer:customers(name, phone)
+          )
+        `
+        )
+        .eq("assigned_technician_id", employee?.id)
+        .gte("scheduled_date", today.toISOString())
+        .lt("scheduled_date", tomorrow.toISOString())
+        .order("scheduled_date", { ascending: true });
+
+      if (todayError) throw todayError;
+
+      // Load upcoming jobs (next 7 days, excluding today)
+      const nextWeek = new Date(today);
+      nextWeek.setDate(nextWeek.getDate() + 7);
+
+      const { data: upcomingJobsData, error: upcomingError } = await supabase
+        .from("invoice_services")
+        .select(
+          `
+          *,
+          invoice:invoices!inner(
+            invoice_number,
+            customer:customers(name, phone)
+          )
+        `
+        )
+        .eq("assigned_technician_id", employee?.id)
+        .gte("scheduled_date", tomorrow.toISOString())
+        .lte("scheduled_date", nextWeek.toISOString())
+        .order("scheduled_date", { ascending: true })
+        .limit(5);
+
+      if (upcomingError) throw upcomingError;
+
+      // Calculate stats
+      const now = new Date();
+      const weekAgo = new Date(now);
+      weekAgo.setDate(weekAgo.getDate() - 7);
+      const monthAgo = new Date(now);
+      monthAgo.setMonth(monthAgo.getMonth() - 1);
+
+      const pendingJobs = allJobs.filter((j) => j.status === "pending").length;
+      const inProgressJobs = allJobs.filter(
+        (j) => j.status === "in_progress"
+      ).length;
+
+      const completedJobs = allJobs.filter((j) => j.status === "completed");
+      const completedThisWeek = completedJobs.filter(
+        (j) => new Date(j.updated_at) >= weekAgo
+      ).length;
+      const completedThisMonth = completedJobs.filter(
+        (j) => new Date(j.updated_at) >= monthAgo
+      ).length;
+
+      // Calculate average duration
+      const jobsWithDuration = completedJobs.filter(
+        (j) => j.actual_duration_minutes
+      );
+      const avgDuration =
+        jobsWithDuration.length > 0
+          ? Math.round(
+              jobsWithDuration.reduce(
+                (sum, j) => sum + (j.actual_duration_minutes || 0),
+                0
+              ) / jobsWithDuration.length
+            )
+          : 0;
+
+      // Calculate revenue (completed jobs)
+      const totalRevenue = completedJobs.reduce(
+        (sum, j) => sum + (j.total_cost || 0),
+        0
+      );
 
       setStats({
-        assignedServices: assignedCount || 0,
-        inProgress: progressCount || 0,
-        completedToday: completedCount || 0,
-        upcomingServices: upcomingCount || 0,
+        todayJobs: todayJobsData.length,
+        pendingJobs,
+        inProgressJobs,
+        completedThisWeek,
+        completedThisMonth,
+        avgDuration,
+        totalRevenue,
       });
 
-      // Fetch my active services with invoice info
-      const { data: services } = await supabase
-        .from('invoice_services')
-        .select(`
-          id,
-          invoice_id,
-          title,
-          status,
-          priority,
-          service_address,
-          scheduled_date,
-          invoices!inner (invoice_number, customers (name))
-        `)
-        .eq('assigned_technician_id', employee.id)
-        .not('status', 'in', '("completed","cancelled")')
-        .order('scheduled_date', { ascending: true })
-        .limit(10);
-
-      if (services) {
-        setMyServices(services.map(svc => {
-          const invoice = svc.invoices as unknown as { invoice_number: string; customers: { name: string } | null };
-          return {
-            id: svc.id,
-            invoice_id: svc.invoice_id,
-            invoice_number: invoice?.invoice_number || '',
-            title: svc.title,
-            status: svc.status,
-            priority: svc.priority,
-            customer_name: invoice?.customers?.name || 'Unknown',
-            service_address: svc.service_address,
-            scheduled_date: svc.scheduled_date,
-          };
-        }));
-      }
-    } catch (error) {
-      console.error('Error fetching technician data:', error);
+      setTodayJobs(todayJobsData || []);
+      setUpcomingJobs(upcomingJobsData || []);
+    } catch (error: any) {
+      console.error("Error loading dashboard:", error);
+      toast({
+        variant: "destructive",
+        title: "Error",
+        description: "Failed to load dashboard data",
+      });
     } finally {
       setLoading(false);
     }
   };
 
   const getStatusBadge = (status: string) => {
-    const statusConfig: Record<string, { label: string; className: string }> = {
-      pending: { label: 'Pending', className: 'badge-status-pending' },
-      assigned: { label: 'Assigned', className: 'badge-status-approved' },
-      in_progress: { label: 'In Progress', className: 'badge-status-progress' },
-      completed: { label: 'Completed', className: 'badge-status-completed' },
-      cancelled: { label: 'Cancelled', className: 'badge-status-cancelled' },
+    const variants: Record<string, any> = {
+      pending: "secondary",
+      in_progress: "default",
+      completed: "outline",
     };
-    const config = statusConfig[status] || { label: status, className: '' };
-    return <Badge variant="outline" className={config.className}>{config.label}</Badge>;
+    return (
+      <Badge variant={variants[status] || "secondary"}>
+        {status.replace("_", " ").toUpperCase()}
+      </Badge>
+    );
   };
 
-  const getPriorityBadge = (priority: string) => {
-    const priorityConfig: Record<string, { label: string; className: string }> = {
-      low: { label: 'Low', className: 'badge-priority-low' },
-      normal: { label: 'Normal', className: 'badge-priority-normal' },
-      high: { label: 'High', className: 'badge-priority-high' },
-      urgent: { label: 'Urgent', className: 'badge-priority-urgent' },
+  const getPriorityColor = (priority: string) => {
+    const colors: Record<string, string> = {
+      low: "text-blue-600",
+      normal: "text-gray-600",
+      high: "text-orange-600",
+      urgent: "text-red-600",
     };
-    const config = priorityConfig[priority] || { label: priority, className: '' };
-    return <Badge className={config.className}>{config.label}</Badge>;
+    return colors[priority] || colors.normal;
   };
 
-  const statCards = [
-    {
-      title: 'Assigned Services',
-      value: stats.assignedServices,
-      icon: Wrench,
-      color: 'text-primary',
-      bgColor: 'bg-primary/10',
-    },
-    {
-      title: 'In Progress',
-      value: stats.inProgress,
-      icon: Clock,
-      color: 'text-blue-600',
-      bgColor: 'bg-blue-100',
-    },
-    {
-      title: 'Completed Today',
-      value: stats.completedToday,
-      icon: CheckCircle2,
-      color: 'text-emerald-600',
-      bgColor: 'bg-emerald-100',
-    },
-    {
-      title: 'Upcoming',
-      value: stats.upcomingServices,
-      icon: Calendar,
-      color: 'text-purple-600',
-      bgColor: 'bg-purple-100',
-    },
-  ];
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center py-24">
+        <Loader2 className="h-8 w-8 animate-spin text-primary" />
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6 animate-fade-in">
-      {/* Welcome Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-bold tracking-tight">
-            Welcome, {employee?.name?.split(' ')[0] || 'Technician'}!
-          </h1>
-          <p className="text-muted-foreground">
-            Here are your assigned service tasks for today.
-          </p>
-        </div>
-        <Button asChild>
-          <Link to="/my-services">
-            <Wrench className="mr-2 h-4 w-4" />
-            View My Services
-          </Link>
-        </Button>
+      {/* Header */}
+      <div>
+        <h1 className="text-2xl font-bold">Dashboard</h1>
+        <p className="text-muted-foreground">Welcome back, {employee?.name}!</p>
       </div>
 
       {/* Stats Grid */}
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        {statCards.map((stat, index) => (
-          <Card key={index} className="stats-card">
-            <div className="stats-card-gradient" />
-            <CardContent className="relative p-6">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm font-medium text-muted-foreground">{stat.title}</p>
-                  <p className="text-3xl font-bold mt-1">{stat.value}</p>
-                </div>
-                <div className={`rounded-lg p-3 ${stat.bgColor}`}>
-                  <stat.icon className={`h-6 w-6 ${stat.color}`} />
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-        ))}
+      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+        {/* Today's Jobs */}
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between pb-2">
+            <CardTitle className="text-sm font-medium">Today's Jobs</CardTitle>
+            <Calendar className="h-4 w-4 text-muted-foreground" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">{stats.todayJobs}</div>
+            <p className="text-xs text-muted-foreground">Scheduled for today</p>
+          </CardContent>
+        </Card>
+
+        {/* Pending Jobs */}
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between pb-2">
+            <CardTitle className="text-sm font-medium">Pending</CardTitle>
+            <Briefcase className="h-4 w-4 text-muted-foreground" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">{stats.pendingJobs}</div>
+            <p className="text-xs text-muted-foreground">
+              Awaiting your action
+            </p>
+          </CardContent>
+        </Card>
+
+        {/* In Progress */}
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between pb-2">
+            <CardTitle className="text-sm font-medium">In Progress</CardTitle>
+            <Clock className="h-4 w-4 text-muted-foreground" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">{stats.inProgressJobs}</div>
+            <p className="text-xs text-muted-foreground">Active jobs</p>
+          </CardContent>
+        </Card>
+
+        {/* Completed This Week */}
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between pb-2">
+            <CardTitle className="text-sm font-medium">This Week</CardTitle>
+            <CheckCircle2 className="h-4 w-4 text-muted-foreground" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">{stats.completedThisWeek}</div>
+            <p className="text-xs text-muted-foreground">Jobs completed</p>
+          </CardContent>
+        </Card>
       </div>
 
-      {/* My Services */}
+      {/* Performance Stats */}
+      <div className="grid gap-4 md:grid-cols-3">
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm font-medium">This Month</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">{stats.completedThisMonth}</div>
+            <p className="text-xs text-muted-foreground">Jobs completed</p>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm font-medium">Avg. Duration</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">{stats.avgDuration}</div>
+            <p className="text-xs text-muted-foreground">Minutes per job</p>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm font-medium">Total Revenue</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">
+              {formatCurrency(stats.totalRevenue)}
+            </div>
+            <p className="text-xs text-muted-foreground">All completed jobs</p>
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* Today's Schedule */}
       <Card>
-        <CardHeader className="flex flex-row items-center justify-between">
-          <div>
-            <CardTitle className="text-lg">My Active Services</CardTitle>
-            <CardDescription>Services assigned to you that need attention</CardDescription>
+        <CardHeader>
+          <div className="flex items-center justify-between">
+            <CardTitle>Today's Schedule</CardTitle>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => navigate("/technician/jobs")}
+            >
+              View All Jobs
+            </Button>
           </div>
-          <Button variant="outline" asChild>
-            <Link to="/my-services">
-              View All
-              <ArrowRight className="ml-2 h-4 w-4" />
-            </Link>
-          </Button>
         </CardHeader>
         <CardContent>
-          {loading ? (
-            <div className="flex items-center justify-center py-8">
-              <div className="h-8 w-8 animate-spin rounded-full border-4 border-primary border-t-transparent" />
-            </div>
-          ) : myServices.length === 0 ? (
-            <div className="text-center py-8">
-              <CheckCircle2 className="mx-auto h-12 w-12 text-emerald-500" />
-              <h3 className="mt-4 text-lg font-medium">No active services</h3>
-              <p className="mt-2 text-sm text-muted-foreground">
-                You don't have any assigned services at the moment.
-              </p>
+          {todayJobs.length === 0 ? (
+            <div className="text-center py-8 text-muted-foreground">
+              <Calendar className="h-12 w-12 mx-auto mb-2 opacity-50" />
+              <p className="text-sm">No jobs scheduled for today</p>
+              <p className="text-xs">Enjoy your day off!</p>
             </div>
           ) : (
             <div className="space-y-3">
-              {myServices.map((svc) => (
-                <Link
-                  key={svc.id}
-                  to={`/invoices/${svc.invoice_id}/service/${svc.id}`}
-                  className="flex items-center justify-between p-4 rounded-lg border hover:bg-muted/50 transition-colors"
+              {todayJobs.map((job) => (
+                <div
+                  key={job.id}
+                  className="flex items-start justify-between p-4 rounded-lg border bg-card hover:bg-accent/50 transition-colors cursor-pointer"
+                  onClick={() => navigate(`/technician/jobs/${job.id}`)}
                 >
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2 flex-wrap">
-                      <span className="font-mono text-sm text-muted-foreground">
-                        {svc.invoice_number}
+                  <div className="flex-1 space-y-2">
+                    <div className="flex items-center gap-2">
+                      <p className="font-medium">{job.title}</p>
+                      {getStatusBadge(job.status)}
+                      <span
+                        className={`text-xs font-medium ${getPriorityColor(
+                          job.priority
+                        )}`}
+                      >
+                        {job.priority.toUpperCase()}
                       </span>
-                      {getPriorityBadge(svc.priority)}
-                      {getStatusBadge(svc.status)}
                     </div>
-                    <p className="font-medium mt-1 truncate">{svc.title}</p>
-                    <div className="flex items-center gap-4 mt-1 text-sm text-muted-foreground">
-                      <span>{svc.customer_name}</span>
-                      {svc.scheduled_date && (
-                        <span className="flex items-center gap-1">
-                          <Calendar className="h-3 w-3" />
-                          {format(new Date(svc.scheduled_date), 'MMM d')}
-                        </span>
-                      )}
+
+                    <div className="flex items-center gap-4 text-sm text-muted-foreground">
+                      <span>{job.invoice.customer.name}</span>
+                      <span>•</span>
+                      <span>
+                        {format(parseISO(job.scheduled_date), "HH:mm")}
+                      </span>
                     </div>
-                    {svc.service_address && (
-                      <p className="flex items-center gap-1 mt-1 text-sm text-muted-foreground">
+
+                    {job.service_address && (
+                      <div className="flex items-center gap-2 text-sm text-muted-foreground">
                         <MapPin className="h-3 w-3" />
-                        <span className="truncate">{svc.service_address}</span>
-                      </p>
+                        <span className="truncate">{job.service_address}</span>
+                      </div>
+                    )}
+
+                    {job.actual_checkin_at && (
+                      <div className="flex items-center gap-2 text-xs text-green-600">
+                        <CheckCircle2 className="h-3 w-3" />
+                        <span>
+                          Checked in at{" "}
+                          {format(parseISO(job.actual_checkin_at), "HH:mm")}
+                        </span>
+                      </div>
                     )}
                   </div>
-                  <ArrowRight className="h-5 w-5 text-muted-foreground ml-4" />
-                </Link>
+
+                  <Button
+                    size="sm"
+                    variant={job.status === "pending" ? "default" : "outline"}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      navigate(`/technician/jobs/${job.id}`);
+                    }}
+                  >
+                    {job.status === "pending" && "Start"}
+                    {job.status === "in_progress" && "Continue"}
+                    {job.status === "completed" && "View"}
+                  </Button>
+                </div>
               ))}
             </div>
           )}
+        </CardContent>
+      </Card>
+
+      {/* Upcoming Jobs */}
+      {upcomingJobs.length > 0 && (
+        <Card>
+          <CardHeader>
+            <CardTitle>Upcoming Jobs</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-3">
+              {upcomingJobs.map((job) => (
+                <div
+                  key={job.id}
+                  className="flex items-center justify-between p-3 rounded-lg border bg-card hover:bg-accent/50 transition-colors cursor-pointer"
+                  onClick={() => navigate(`/technician/jobs/${job.id}`)}
+                >
+                  <div className="flex-1">
+                    <div className="flex items-center gap-2 mb-1">
+                      <p className="font-medium text-sm">{job.title}</p>
+                      <Badge variant="outline" className="text-xs">
+                        {job.priority}
+                      </Badge>
+                    </div>
+                    <div className="flex items-center gap-4 text-xs text-muted-foreground">
+                      <span>{job.invoice.customer.name}</span>
+                      <span>•</span>
+                      <span>
+                        {format(parseISO(job.scheduled_date), "EEE, dd MMM")}
+                      </span>
+                      <span>•</span>
+                      <span>
+                        {format(parseISO(job.scheduled_date), "HH:mm")}
+                      </span>
+                    </div>
+                  </div>
+                  {getStatusBadge(job.status)}
+                </div>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Quick Actions */}
+      <Card>
+        <CardHeader>
+          <CardTitle>Quick Actions</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+            <Button
+              variant="outline"
+              className="justify-start"
+              onClick={() => navigate("/technician/jobs?filter=pending")}
+            >
+              <Briefcase className="mr-2 h-4 w-4" />
+              View Pending Jobs
+            </Button>
+            <Button
+              variant="outline"
+              className="justify-start"
+              onClick={() => navigate("/technician/jobs?filter=in_progress")}
+            >
+              <Clock className="mr-2 h-4 w-4" />
+              Continue Jobs
+            </Button>
+            <Button
+              variant="outline"
+              className="justify-start"
+              onClick={() => navigate("/technician/jobs?filter=today")}
+            >
+              <Calendar className="mr-2 h-4 w-4" />
+              Today's Schedule
+            </Button>
+          </div>
         </CardContent>
       </Card>
     </div>

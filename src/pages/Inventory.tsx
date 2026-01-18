@@ -1,10 +1,20 @@
-import { useEffect, useState } from 'react';
-import { supabase } from '@/integrations/supabase/client';
-import DashboardLayout from '@/components/layout/DashboardLayout';
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Badge } from '@/components/ui/badge';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { useEffect, useState } from "react";
+import { supabase } from "@/integrations/supabase/client";
+import DashboardLayout from "@/components/layout/DashboardLayout";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Badge } from "@/components/ui/badge";
+import { StockHistory } from "@/components/inventory/StockHistory";
+import { ProductImageUpload } from "@/components/inventory/ProductImageUpload";
+import { ExportProducts } from "@/components/inventory/ExportProducts";
+import { History, Image as ImageIcon } from "lucide-react";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
 import {
   Table,
   TableBody,
@@ -12,7 +22,7 @@ import {
   TableHead,
   TableHeader,
   TableRow,
-} from '@/components/ui/table';
+} from "@/components/ui/table";
 import {
   Dialog,
   DialogContent,
@@ -21,17 +31,17 @@ import {
   DialogHeader,
   DialogTitle,
   DialogTrigger,
-} from '@/components/ui/dialog';
+} from "@/components/ui/dialog";
 import {
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
   SelectValue,
-} from '@/components/ui/select';
-import { Label } from '@/components/ui/label';
-import { Textarea } from '@/components/ui/textarea';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+} from "@/components/ui/select";
+import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   Plus,
   Search,
@@ -43,10 +53,23 @@ import {
   TrendingDown,
   TrendingUp,
   PackageX,
-} from 'lucide-react';
-import { useToast } from '@/hooks/use-toast';
-import { useAuth } from '@/hooks/useAuth';
-import { format } from 'date-fns';
+  Pencil,
+  Trash2,
+} from "lucide-react";
+import { useToast } from "@/hooks/use-toast";
+import { useAuth } from "@/hooks/useAuth";
+import { format } from "date-fns";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import { CurrencyInput } from "@/components/ui/currency-input";
 
 interface Product {
   id: string;
@@ -61,6 +84,7 @@ interface Product {
   min_stock_threshold: number;
   is_service_item: boolean;
   is_active: boolean;
+  image_url: string | null; // ✅ Add this
   created_at: string;
 }
 
@@ -77,44 +101,53 @@ interface StockAlert {
 }
 
 const CATEGORIES = [
-  { value: 'spare_parts', label: 'Spare Parts' },
-  { value: 'consumables', label: 'Consumables' },
-  { value: 'equipment', label: 'Equipment' },
-  { value: 'accessories', label: 'Accessories' },
-  { value: 'service_labor', label: 'Service/Labor' },
+  { value: "spare_parts", label: "Spare Parts" },
+  { value: "consumables", label: "Consumables" },
+  { value: "equipment", label: "Equipment" },
+  { value: "accessories", label: "Accessories" },
+  { value: "service_labor", label: "Service/Labor" },
 ];
 
 const CATEGORY_PREFIXES: Record<string, string> = {
-  spare_parts: 'SP',
-  consumables: 'CS',
-  equipment: 'EQ',
-  accessories: 'AC',
-  service_labor: 'SV',
+  spare_parts: "SP",
+  consumables: "CS",
+  equipment: "EQ",
+  accessories: "AC",
+  service_labor: "SV",
 };
 
 export default function Inventory() {
   const [products, setProducts] = useState<Product[]>([]);
   const [alerts, setAlerts] = useState<StockAlert[]>([]);
   const [loading, setLoading] = useState(true);
-  const [searchQuery, setSearchQuery] = useState('');
-  const [categoryFilter, setCategoryFilter] = useState('all');
+  const [searchQuery, setSearchQuery] = useState("");
+  const [categoryFilter, setCategoryFilter] = useState("all");
   const [dialogOpen, setDialogOpen] = useState(false);
   const [adjustDialogOpen, setAdjustDialogOpen] = useState(false);
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
-  const [adjustmentType, setAdjustmentType] = useState<'add' | 'remove'>('add');
-  const [adjustmentQty, setAdjustmentQty] = useState('');
-  const [adjustmentNotes, setAdjustmentNotes] = useState('');
+  const [adjustmentType, setAdjustmentType] = useState<"add" | "remove">("add");
+  const [adjustmentQty, setAdjustmentQty] = useState("");
+  const [adjustmentNotes, setAdjustmentNotes] = useState("");
   const [creating, setCreating] = useState(false);
+  const [editingProduct, setEditingProduct] = useState<Product | null>(null);
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [productToDelete, setProductToDelete] = useState<Product | null>(null);
+  const [imageDialogOpen, setImageDialogOpen] = useState(false);
+  const [selectedProductForImage, setSelectedProductForImage] =
+    useState<Product | null>(null);
+  const [historyDialogOpen, setHistoryDialogOpen] = useState(false);
+  const [selectedProductForHistory, setSelectedProductForHistory] =
+    useState<Product | null>(null);
 
   const [formData, setFormData] = useState({
-    name: '',
-    description: '',
-    category: 'spare_parts',
-    unit: 'pcs',
-    cost_price: '',
-    sell_price: '',
-    stock: '0',
-    min_stock_threshold: '5',
+    name: "",
+    description: "",
+    category: "spare_parts",
+    unit: "pcs",
+    cost_price: 0,
+    sell_price: 0,
+    stock: "0",
+    min_stock_threshold: "5",
     is_service_item: false,
   });
 
@@ -130,13 +163,13 @@ export default function Inventory() {
     setLoading(true);
     try {
       let query = supabase
-        .from('products')
-        .select('*')
-        .eq('is_active', true)
-        .order('name');
+        .from("products")
+        .select("*")
+        .eq("is_active", true)
+        .order("name");
 
-      if (categoryFilter !== 'all') {
-        query = query.eq('category', categoryFilter as any);
+      if (categoryFilter !== "all") {
+        query = query.eq("category", categoryFilter as any);
       }
 
       const { data, error } = await query;
@@ -144,11 +177,11 @@ export default function Inventory() {
       if (error) throw error;
       setProducts(data || []);
     } catch (error) {
-      console.error('Error fetching products:', error);
+      console.error("Error fetching products:", error);
       toast({
-        variant: 'destructive',
-        title: 'Error',
-        description: 'Failed to load products.',
+        variant: "destructive",
+        title: "Error",
+        description: "Failed to load products.",
       });
     } finally {
       setLoading(false);
@@ -158,40 +191,44 @@ export default function Inventory() {
   const fetchAlerts = async () => {
     try {
       const { data, error } = await supabase
-        .from('stock_alerts')
-        .select(`
+        .from("stock_alerts")
+        .select(
+          `
           *,
           products (name, sku)
-        `)
-        .eq('status', 'active')
-        .order('created_at', { ascending: false });
+        `
+        )
+        .eq("status", "active")
+        .order("created_at", { ascending: false });
 
       if (error) throw error;
 
-      setAlerts(data?.map(alert => ({
-        ...alert,
-        product_name: (alert.products as any)?.name || 'Unknown',
-        product_sku: (alert.products as any)?.sku || '',
-      })) || []);
+      setAlerts(
+        data?.map((alert) => ({
+          ...alert,
+          product_name: (alert.products as any)?.name || "Unknown",
+          product_sku: (alert.products as any)?.sku || "",
+        })) || []
+      );
     } catch (error) {
-      console.error('Error fetching alerts:', error);
+      console.error("Error fetching alerts:", error);
     }
   };
 
   const generateSKU = async (category: string) => {
-    const prefix = CATEGORY_PREFIXES[category] || 'XX';
+    const prefix = CATEGORY_PREFIXES[category] || "XX";
     const { count } = await supabase
-      .from('products')
-      .select('*', { count: 'exact', head: true });
-    return `${prefix}-${String((count || 0) + 1).padStart(5, '0')}`;
+      .from("products")
+      .select("*", { count: "exact", head: true });
+    return `${prefix}-${String((count || 0) + 1).padStart(5, "0")}`;
   };
 
   const handleCreateProduct = async () => {
     if (!formData.name || !formData.category) {
       toast({
-        variant: 'destructive',
-        title: 'Validation Error',
-        description: 'Name and category are required.',
+        variant: "destructive",
+        title: "Validation Error",
+        description: "Name and category are required.",
       });
       return;
     }
@@ -200,48 +237,48 @@ export default function Inventory() {
     try {
       const sku = await generateSKU(formData.category);
 
-      const { error } = await supabase
-        .from('products')
-        .insert([{
+      const { error } = await supabase.from("products").insert([
+        {
           sku,
           name: formData.name,
           description: formData.description || null,
           category: formData.category as any,
           unit: formData.unit,
-          cost_price: parseFloat(formData.cost_price) || 0,
-          sell_price: parseFloat(formData.sell_price) || 0,
+          cost_price: formData.cost_price,
+          sell_price: formData.sell_price,
           stock: parseInt(formData.stock) || 0,
           min_stock_threshold: parseInt(formData.min_stock_threshold) || 5,
           is_service_item: formData.is_service_item,
-        }]);
+        },
+      ]);
 
       if (error) throw error;
 
       toast({
-        title: 'Product Added',
+        title: "Product Added",
         description: `${formData.name} (${sku}) has been added successfully.`,
       });
 
       setDialogOpen(false);
       setFormData({
-        name: '',
-        description: '',
-        category: 'spare_parts',
-        unit: 'pcs',
-        cost_price: '',
-        sell_price: '',
-        stock: '0',
-        min_stock_threshold: '5',
+        name: "",
+        description: "",
+        category: "spare_parts",
+        unit: "pcs",
+        cost_price: 0,
+        sell_price: 0,
+        stock: "0",
+        min_stock_threshold: "5",
         is_service_item: false,
       });
       fetchProducts();
       fetchAlerts();
     } catch (error: any) {
-      console.error('Error creating product:', error);
+      console.error("Error creating product:", error);
       toast({
-        variant: 'destructive',
-        title: 'Error',
-        description: error.message || 'Failed to add product.',
+        variant: "destructive",
+        title: "Error",
+        description: error.message || "Failed to add product.",
       });
     } finally {
       setCreating(false);
@@ -254,21 +291,21 @@ export default function Inventory() {
     const qty = parseInt(adjustmentQty);
     if (isNaN(qty) || qty <= 0) {
       toast({
-        variant: 'destructive',
-        title: 'Validation Error',
-        description: 'Please enter a valid quantity.',
+        variant: "destructive",
+        title: "Validation Error",
+        description: "Please enter a valid quantity.",
       });
       return;
     }
 
-    const adjustedQty = adjustmentType === 'add' ? qty : -qty;
+    const adjustedQty = adjustmentType === "add" ? qty : -qty;
     const newStock = selectedProduct.stock + adjustedQty;
 
     if (newStock < 0) {
       toast({
-        variant: 'destructive',
-        title: 'Validation Error',
-        description: 'Stock cannot go below zero.',
+        variant: "destructive",
+        title: "Validation Error",
+        description: "Stock cannot go below zero.",
       });
       return;
     }
@@ -276,44 +313,51 @@ export default function Inventory() {
     try {
       // Update product stock
       const { error: updateError } = await supabase
-        .from('products')
+        .from("products")
         .update({ stock: newStock })
-        .eq('id', selectedProduct.id);
+        .eq("id", selectedProduct.id);
 
       if (updateError) throw updateError;
 
-      // Record transaction
+      // Record transaction - CORRECTED VERSION
       const { error: txError } = await supabase
-        .from('inventory_transactions')
-        .insert([{
-          product_id: selectedProduct.id,
-          transaction_type: 'adjustment',
-          quantity: adjustedQty,
-          stock_before: selectedProduct.stock,
-          stock_after: newStock,
-          notes: adjustmentNotes || `Stock ${adjustmentType === 'add' ? 'added' : 'removed'}`,
-          created_by: employee?.id,
-        }]);
+        .from("inventory_transactions")
+        .insert([
+          {
+            product_id: selectedProduct.id,
+            transaction_type: "adjustment",
+            quantity: adjustedQty,
+            stock_before: selectedProduct.stock,
+            stock_after: newStock,
+            reference_id: null, // Optional: untuk referensi ke dokumen lain
+            notes:
+              adjustmentNotes ||
+              `Stock ${adjustmentType === "add" ? "added" : "removed"}`,
+            created_by: employee?.id, // ✅ This is correct according to schema
+          },
+        ]);
 
       if (txError) throw txError;
 
       toast({
-        title: 'Stock Updated',
-        description: `${selectedProduct.name} stock adjusted by ${adjustedQty > 0 ? '+' : ''}${adjustedQty}.`,
+        title: "Stock Updated",
+        description: `${selectedProduct.name} stock adjusted by ${
+          adjustedQty > 0 ? "+" : ""
+        }${adjustedQty}.`,
       });
 
       setAdjustDialogOpen(false);
       setSelectedProduct(null);
-      setAdjustmentQty('');
-      setAdjustmentNotes('');
+      setAdjustmentQty("");
+      setAdjustmentNotes("");
       fetchProducts();
       fetchAlerts();
     } catch (error: any) {
-      console.error('Error adjusting stock:', error);
+      console.error("Error adjusting stock:", error);
       toast({
-        variant: 'destructive',
-        title: 'Error',
-        description: error.message || 'Failed to adjust stock.',
+        variant: "destructive",
+        title: "Error",
+        description: error.message || "Failed to adjust stock.",
       });
     }
   };
@@ -321,57 +365,192 @@ export default function Inventory() {
   const acknowledgeAlert = async (alertId: string) => {
     try {
       const { error } = await supabase
-        .from('stock_alerts')
+        .from("stock_alerts")
         .update({
-          status: 'acknowledged',
+          status: "acknowledged",
           acknowledged_by: employee?.id,
           acknowledged_at: new Date().toISOString(),
         })
-        .eq('id', alertId);
+        .eq("id", alertId);
 
       if (error) throw error;
 
       toast({
-        title: 'Alert Acknowledged',
-        description: 'The stock alert has been acknowledged.',
+        title: "Alert Acknowledged",
+        description: "The stock alert has been acknowledged.",
       });
 
       fetchAlerts();
     } catch (error) {
-      console.error('Error acknowledging alert:', error);
+      console.error("Error acknowledging alert:", error);
     }
   };
 
   const formatCurrency = (amount: number) => {
-    return new Intl.NumberFormat('id-ID', {
-      style: 'currency',
-      currency: 'IDR',
+    return new Intl.NumberFormat("id-ID", {
+      style: "currency",
+      currency: "IDR",
       minimumFractionDigits: 0,
     }).format(amount);
   };
 
   const getStockStatus = (product: Product) => {
     if (product.stock === 0) {
-      return { label: 'Out of Stock', className: 'bg-red-100 text-red-800' };
+      return { label: "Out of Stock", className: "bg-red-100 text-red-800" };
     }
     if (product.stock <= product.min_stock_threshold) {
-      return { label: 'Low Stock', className: 'bg-amber-100 text-amber-800' };
+      return { label: "Low Stock", className: "bg-amber-100 text-amber-800" };
     }
-    return { label: 'In Stock', className: 'bg-emerald-100 text-emerald-800' };
+    return { label: "In Stock", className: "bg-emerald-100 text-emerald-800" };
   };
 
   const getCategoryLabel = (category: string) => {
-    return CATEGORIES.find(c => c.value === category)?.label || category;
+    return CATEGORIES.find((c) => c.value === category)?.label || category;
   };
 
-  const filteredProducts = products.filter(product =>
-    product.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    product.sku.toLowerCase().includes(searchQuery.toLowerCase())
+  const filteredProducts = products.filter(
+    (product) =>
+      product.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      product.sku.toLowerCase().includes(searchQuery.toLowerCase())
   );
 
-  const lowStockCount = products.filter(p => p.stock <= p.min_stock_threshold && p.stock > 0).length;
-  const outOfStockCount = products.filter(p => p.stock === 0).length;
-  const totalValue = products.reduce((sum, p) => sum + (p.stock * p.cost_price), 0);
+  const lowStockCount = products.filter(
+    (p) => p.stock <= p.min_stock_threshold && p.stock > 0
+  ).length;
+  const outOfStockCount = products.filter((p) => p.stock === 0).length;
+  const totalValue = products.reduce(
+    (sum, p) => sum + p.stock * p.cost_price,
+    0
+  );
+
+  const resetForm = () => {
+    setFormData({
+      name: "",
+      description: "",
+      category: "spare_parts",
+      unit: "pcs",
+      cost_price: 0,
+      sell_price: 0,
+      stock: "0",
+      min_stock_threshold: "5",
+      is_service_item: false,
+    });
+    setEditingProduct(null);
+  };
+
+  // Handle edit click
+  const handleEditClick = (product: Product) => {
+    setEditingProduct(product);
+    setFormData({
+      name: product.name,
+      description: product.description || "",
+      category: product.category,
+      unit: product.unit,
+      cost_price: product.cost_price,
+      sell_price: product.sell_price,
+      stock: product.stock.toString(),
+      min_stock_threshold: product.min_stock_threshold.toString(),
+      is_service_item: product.is_service_item,
+    });
+    setDialogOpen(true);
+  };
+
+  // Handle update product
+  const handleUpdateProduct = async () => {
+    if (!editingProduct) return;
+
+    if (!formData.name || !formData.category) {
+      toast({
+        variant: "destructive",
+        title: "Validation Error",
+        description: "Name and category are required.",
+      });
+      return;
+    }
+
+    setCreating(true);
+    try {
+      const { error } = await supabase
+        .from("products")
+        .update({
+          name: formData.name,
+          description: formData.description || null,
+          category: formData.category as any,
+          unit: formData.unit,
+          cost_price: formData.cost_price,
+          sell_price: formData.sell_price,
+          stock: parseInt(formData.stock) || 0,
+          min_stock_threshold: parseInt(formData.min_stock_threshold) || 5,
+          is_service_item: formData.is_service_item,
+          updated_at: new Date().toISOString(),
+        })
+        .eq("id", editingProduct.id);
+
+      if (error) throw error;
+
+      toast({
+        title: "Product Updated",
+        description: `${formData.name} has been updated successfully.`,
+      });
+
+      setDialogOpen(false);
+      resetForm();
+      fetchProducts();
+      fetchAlerts();
+    } catch (error: any) {
+      console.error("Error updating product:", error);
+      toast({
+        variant: "destructive",
+        title: "Error",
+        description: error.message || "Failed to update product.",
+      });
+    } finally {
+      setCreating(false);
+    }
+  };
+
+  // Unified submit handler
+  const handleSubmitProduct = async () => {
+    if (editingProduct) {
+      await handleUpdateProduct();
+    } else {
+      await handleCreateProduct();
+    }
+  };
+
+  // Handle delete product
+  const handleDeleteProduct = async () => {
+    if (!productToDelete) return;
+
+    try {
+      const { error } = await supabase
+        .from("products")
+        .update({
+          is_active: false,
+          updated_at: new Date().toISOString(),
+        })
+        .eq("id", productToDelete.id);
+
+      if (error) throw error;
+
+      toast({
+        title: "Product Deleted",
+        description: `${productToDelete.name} has been deactivated.`,
+      });
+
+      setDeleteDialogOpen(false);
+      setProductToDelete(null);
+      fetchProducts();
+      fetchAlerts();
+    } catch (error: any) {
+      console.error("Error deleting product:", error);
+      toast({
+        variant: "destructive",
+        title: "Error",
+        description: error.message || "Failed to delete product.",
+      });
+    }
+  };
 
   return (
     <DashboardLayout>
@@ -384,139 +563,181 @@ export default function Inventory() {
               Manage products, stock levels, and alerts
             </p>
           </div>
-          <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-            <DialogTrigger asChild>
-              <Button>
-                <Plus className="mr-2 h-4 w-4" />
-                Add Product
-              </Button>
-            </DialogTrigger>
-            <DialogContent className="max-w-lg">
-              <DialogHeader>
-                <DialogTitle>Add New Product</DialogTitle>
-                <DialogDescription>
-                  Enter the product details. SKU will be generated automatically.
-                </DialogDescription>
-              </DialogHeader>
-              <div className="space-y-4 py-4 max-h-[60vh] overflow-y-auto">
-                <div className="space-y-2">
-                  <Label htmlFor="name">Product Name *</Label>
-                  <Input
-                    id="name"
-                    placeholder="e.g., Compressor 1 PK"
-                    value={formData.name}
-                    onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="description">Description</Label>
-                  <Textarea
-                    id="description"
-                    placeholder="Product description..."
-                    value={formData.description}
-                    onChange={(e) => setFormData({ ...formData, description: e.target.value })}
-                    rows={2}
-                  />
-                </div>
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="space-y-2">
-                    <Label htmlFor="category">Category *</Label>
-                    <Select
-                      value={formData.category}
-                      onValueChange={(value) => setFormData({ ...formData, category: value })}
-                    >
-                      <SelectTrigger>
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {CATEGORIES.map((cat) => (
-                          <SelectItem key={cat.value} value={cat.value}>
-                            {cat.label}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="unit">Unit</Label>
-                    <Select
-                      value={formData.unit}
-                      onValueChange={(value) => setFormData({ ...formData, unit: value })}
-                    >
-                      <SelectTrigger>
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="pcs">Pieces</SelectItem>
-                        <SelectItem value="set">Set</SelectItem>
-                        <SelectItem value="meter">Meter</SelectItem>
-                        <SelectItem value="liter">Liter</SelectItem>
-                        <SelectItem value="kg">Kilogram</SelectItem>
-                        <SelectItem value="roll">Roll</SelectItem>
-                        <SelectItem value="box">Box</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-                </div>
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="space-y-2">
-                    <Label htmlFor="cost_price">Cost Price (Rp)</Label>
-                    <Input
-                      id="cost_price"
-                      type="number"
-                      min="0"
-                      placeholder="0"
-                      value={formData.cost_price}
-                      onChange={(e) => setFormData({ ...formData, cost_price: e.target.value })}
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="sell_price">Sell Price (Rp)</Label>
-                    <Input
-                      id="sell_price"
-                      type="number"
-                      min="0"
-                      placeholder="0"
-                      value={formData.sell_price}
-                      onChange={(e) => setFormData({ ...formData, sell_price: e.target.value })}
-                    />
-                  </div>
-                </div>
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="space-y-2">
-                    <Label htmlFor="stock">Initial Stock</Label>
-                    <Input
-                      id="stock"
-                      type="number"
-                      min="0"
-                      placeholder="0"
-                      value={formData.stock}
-                      onChange={(e) => setFormData({ ...formData, stock: e.target.value })}
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="min_stock">Min. Stock Alert</Label>
-                    <Input
-                      id="min_stock"
-                      type="number"
-                      min="0"
-                      placeholder="5"
-                      value={formData.min_stock_threshold}
-                      onChange={(e) => setFormData({ ...formData, min_stock_threshold: e.target.value })}
-                    />
-                  </div>
-                </div>
-              </div>
-              <DialogFooter>
-                <Button variant="outline" onClick={() => setDialogOpen(false)}>
-                  Cancel
+          <div className="flex gap-2">
+            {/* ✅ Add Export Button */}
+            <ExportProducts products={products} />
+            <Dialog
+              open={dialogOpen}
+              onOpenChange={(open) => {
+                setDialogOpen(open);
+                if (!open) resetForm();
+              }}
+            >
+              <DialogTrigger asChild>
+                <Button>
+                  <Plus className="mr-2 h-4 w-4" />
+                  Add Product
                 </Button>
-                <Button onClick={handleCreateProduct} disabled={creating}>
-                  {creating ? 'Adding...' : 'Add Product'}
-                </Button>
-              </DialogFooter>
-            </DialogContent>
-          </Dialog>
+              </DialogTrigger>
+              <DialogContent className="max-w-lg">
+                <DialogHeader className="px-4">
+                  <DialogTitle>
+                    {editingProduct ? "Edit Product" : "Add New Product"}
+                  </DialogTitle>
+                  <DialogDescription>
+                    {editingProduct
+                      ? "Update the product details below."
+                      : "Enter the product details. SKU will be generated automatically."}
+                  </DialogDescription>
+                </DialogHeader>
+                <div className="space-y-4 px-4 py-4 max-h-[60vh] overflow-y-auto">
+                  <div className="space-y-2">
+                    <Label htmlFor="name">Product Name *</Label>
+                    <Input
+                      id="name"
+                      placeholder="e.g., Compressor 1 PK"
+                      value={formData.name}
+                      onChange={(e) =>
+                        setFormData({ ...formData, name: e.target.value })
+                      }
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="description">Description</Label>
+                    <Textarea
+                      id="description"
+                      placeholder="Product description..."
+                      value={formData.description}
+                      onChange={(e) =>
+                        setFormData({
+                          ...formData,
+                          description: e.target.value,
+                        })
+                      }
+                      rows={2}
+                    />
+                  </div>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                      <Label htmlFor="category">Category *</Label>
+                      <Select
+                        value={formData.category}
+                        onValueChange={(value) =>
+                          setFormData({ ...formData, category: value })
+                        }
+                      >
+                        <SelectTrigger>
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {CATEGORIES.map((cat) => (
+                            <SelectItem key={cat.value} value={cat.value}>
+                              {cat.label}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="unit">Unit</Label>
+                      <Select
+                        value={formData.unit}
+                        onValueChange={(value) =>
+                          setFormData({ ...formData, unit: value })
+                        }
+                      >
+                        <SelectTrigger>
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="pcs">Pieces</SelectItem>
+                          <SelectItem value="set">Set</SelectItem>
+                          <SelectItem value="meter">Meter</SelectItem>
+                          <SelectItem value="liter">Liter</SelectItem>
+                          <SelectItem value="kg">Kilogram</SelectItem>
+                          <SelectItem value="roll">Roll</SelectItem>
+                          <SelectItem value="box">Box</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                      <Label htmlFor="cost_price">Cost Price (Rp)</Label>
+                      <CurrencyInput
+                        value={formData.cost_price}
+                        onValueChange={(value) =>
+                          setFormData({ ...formData, cost_price: value })
+                        }
+                        placeholder="Rp 0"
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="sell_price">Sell Price (Rp)</Label>
+                      <CurrencyInput
+                        value={formData.sell_price}
+                        onValueChange={(value) =>
+                          setFormData({ ...formData, sell_price: value })
+                        }
+                        placeholder="Rp 0"
+                      />
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                      <Label htmlFor="stock">Initial Stock</Label>
+                      <Input
+                        id="stock"
+                        type="number"
+                        min="0"
+                        placeholder="0"
+                        value={formData.stock}
+                        onChange={(e) =>
+                          setFormData({ ...formData, stock: e.target.value })
+                        }
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="min_stock">Min. Stock Alert</Label>
+                      <Input
+                        id="min_stock"
+                        type="number"
+                        min="0"
+                        placeholder="5"
+                        value={formData.min_stock_threshold}
+                        onChange={(e) =>
+                          setFormData({
+                            ...formData,
+                            min_stock_threshold: e.target.value,
+                          })
+                        }
+                      />
+                    </div>
+                  </div>
+                </div>
+                <DialogFooter>
+                  <Button
+                    variant="outline"
+                    onClick={() => {
+                      setDialogOpen(false);
+                      resetForm();
+                    }}
+                  >
+                    Cancel
+                  </Button>
+                  <Button onClick={handleSubmitProduct} disabled={creating}>
+                    {creating
+                      ? editingProduct
+                        ? "Updating..."
+                        : "Adding..."
+                      : editingProduct
+                      ? "Update Product"
+                      : "Add Product"}
+                  </Button>
+                </DialogFooter>
+              </DialogContent>
+            </Dialog>
+          </div>
         </div>
 
         {/* Stats Cards */}
@@ -525,7 +746,9 @@ export default function Inventory() {
             <CardContent className="p-6">
               <div className="flex items-center justify-between">
                 <div>
-                  <p className="text-sm font-medium text-muted-foreground">Total Products</p>
+                  <p className="text-sm font-medium text-muted-foreground">
+                    Total Products
+                  </p>
                   <p className="text-3xl font-bold mt-1">{products.length}</p>
                 </div>
                 <div className="rounded-lg p-3 bg-primary/10">
@@ -538,7 +761,9 @@ export default function Inventory() {
             <CardContent className="p-6">
               <div className="flex items-center justify-between">
                 <div>
-                  <p className="text-sm font-medium text-muted-foreground">Low Stock</p>
+                  <p className="text-sm font-medium text-muted-foreground">
+                    Low Stock
+                  </p>
                   <p className="text-3xl font-bold mt-1">{lowStockCount}</p>
                 </div>
                 <div className="rounded-lg p-3 bg-amber-100">
@@ -551,7 +776,9 @@ export default function Inventory() {
             <CardContent className="p-6">
               <div className="flex items-center justify-between">
                 <div>
-                  <p className="text-sm font-medium text-muted-foreground">Out of Stock</p>
+                  <p className="text-sm font-medium text-muted-foreground">
+                    Out of Stock
+                  </p>
                   <p className="text-3xl font-bold mt-1">{outOfStockCount}</p>
                 </div>
                 <div className="rounded-lg p-3 bg-red-100">
@@ -564,8 +791,12 @@ export default function Inventory() {
             <CardContent className="p-6">
               <div className="flex items-center justify-between">
                 <div>
-                  <p className="text-sm font-medium text-muted-foreground">Total Value</p>
-                  <p className="text-2xl font-bold mt-1">{formatCurrency(totalValue)}</p>
+                  <p className="text-sm font-medium text-muted-foreground">
+                    Total Value
+                  </p>
+                  <p className="text-2xl font-bold mt-1">
+                    {formatCurrency(totalValue)}
+                  </p>
                 </div>
                 <div className="rounded-lg p-3 bg-emerald-100">
                   <TrendingUp className="h-6 w-6 text-emerald-600" />
@@ -602,7 +833,10 @@ export default function Inventory() {
                       className="pl-9"
                     />
                   </div>
-                  <Select value={categoryFilter} onValueChange={setCategoryFilter}>
+                  <Select
+                    value={categoryFilter}
+                    onValueChange={setCategoryFilter}
+                  >
                     <SelectTrigger className="w-full sm:w-[180px]">
                       <SelectValue placeholder="Category" />
                     </SelectTrigger>
@@ -623,7 +857,7 @@ export default function Inventory() {
             </Card>
 
             {/* Products Table */}
-            <Card>
+            <Card className="mt-4">
               <CardContent className="p-0">
                 {loading ? (
                   <div className="flex items-center justify-center py-12">
@@ -632,7 +866,9 @@ export default function Inventory() {
                 ) : filteredProducts.length === 0 ? (
                   <div className="text-center py-12">
                     <Package className="mx-auto h-12 w-12 text-muted-foreground/50" />
-                    <h3 className="mt-4 text-lg font-medium">No products found</h3>
+                    <h3 className="mt-4 text-lg font-medium">
+                      No products found
+                    </h3>
                     <p className="mt-2 text-sm text-muted-foreground">
                       Add your first product to start managing inventory.
                     </p>
@@ -642,6 +878,7 @@ export default function Inventory() {
                     <Table>
                       <TableHeader>
                         <TableRow>
+                          <TableHead className="w-[80px]">Image</TableHead>
                           <TableHead>SKU</TableHead>
                           <TableHead>Product</TableHead>
                           <TableHead>Category</TableHead>
@@ -656,7 +893,23 @@ export default function Inventory() {
                         {filteredProducts.map((product) => {
                           const stockStatus = getStockStatus(product);
                           return (
-                            <TableRow key={product.id} className="table-row-hover">
+                            <TableRow
+                              key={product.id}
+                              className="table-row-hover"
+                            >
+                              <TableCell>
+                                {product.image_url ? (
+                                  <img
+                                    src={product.image_url}
+                                    alt={product.name}
+                                    className="w-12 h-12 object-cover rounded"
+                                  />
+                                ) : (
+                                  <div className="w-12 h-12 bg-muted rounded flex items-center justify-center">
+                                    <ImageIcon className="h-6 w-6 text-muted-foreground" />
+                                  </div>
+                                )}
+                              </TableCell>
                               <TableCell className="font-mono text-sm">
                                 {product.sku}
                               </TableCell>
@@ -682,8 +935,13 @@ export default function Inventory() {
                                 {formatCurrency(product.sell_price)}
                               </TableCell>
                               <TableCell className="text-center">
-                                <span className="font-medium">{product.stock}</span>
-                                <span className="text-muted-foreground text-sm"> {product.unit}</span>
+                                <span className="font-medium">
+                                  {product.stock}
+                                </span>
+                                <span className="text-muted-foreground text-sm">
+                                  {" "}
+                                  {product.unit}
+                                </span>
                               </TableCell>
                               <TableCell>
                                 <Badge className={stockStatus.className}>
@@ -691,17 +949,63 @@ export default function Inventory() {
                                 </Badge>
                               </TableCell>
                               <TableCell>
-                                <Button
-                                  variant="ghost"
-                                  size="sm"
-                                  onClick={() => {
-                                    setSelectedProduct(product);
-                                    setAdjustDialogOpen(true);
-                                  }}
-                                >
-                                  <ArrowUpDown className="h-4 w-4 mr-1" />
-                                  Adjust
-                                </Button>
+                                <div className="flex gap-1">
+                                  <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    onClick={() => {
+                                      setSelectedProductForHistory(product);
+                                      setHistoryDialogOpen(true);
+                                    }}
+                                    title="View History"
+                                  >
+                                    <History className="h-4 w-4 mr-1" />
+                                    History
+                                  </Button>
+                                  <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    onClick={() => {
+                                      setSelectedProductForImage(product);
+                                      setImageDialogOpen(true);
+                                    }}
+                                    title="Upload Image"
+                                  >
+                                    <ImageIcon className="h-4 w-4 mr-1" />
+                                    Image
+                                  </Button>
+                                  <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    onClick={() => handleEditClick(product)}
+                                  >
+                                    <Pencil className="h-4 w-4 mr-1" />
+                                    Edit
+                                  </Button>
+                                  <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    onClick={() => {
+                                      setSelectedProduct(product);
+                                      setAdjustDialogOpen(true);
+                                    }}
+                                  >
+                                    <ArrowUpDown className="h-4 w-4 mr-1" />
+                                    Adjust
+                                  </Button>
+                                  <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    onClick={() => {
+                                      setProductToDelete(product);
+                                      setDeleteDialogOpen(true);
+                                    }}
+                                    className="text-destructive hover:text-destructive"
+                                  >
+                                    <Trash2 className="h-4 w-4 mr-1" />
+                                    Delete
+                                  </Button>
+                                </div>
                               </TableCell>
                             </TableRow>
                           );
@@ -729,9 +1033,12 @@ export default function Inventory() {
                 {alerts.length === 0 ? (
                   <div className="text-center py-8">
                     <Package className="mx-auto h-12 w-12 text-emerald-500" />
-                    <h3 className="mt-4 text-lg font-medium">All stock levels are healthy</h3>
+                    <h3 className="mt-4 text-lg font-medium">
+                      All stock levels are healthy
+                    </h3>
                     <p className="mt-2 text-sm text-muted-foreground">
-                      No products are currently below their minimum stock threshold.
+                      No products are currently below their minimum stock
+                      threshold.
                     </p>
                   </div>
                 ) : (
@@ -740,18 +1047,20 @@ export default function Inventory() {
                       <div
                         key={alert.id}
                         className={`flex items-center justify-between p-4 rounded-lg border ${
-                          alert.alert_type === 'out_of_stock'
-                            ? 'border-red-200 bg-red-50'
-                            : 'border-amber-200 bg-amber-50'
+                          alert.alert_type === "out_of_stock"
+                            ? "border-red-200 bg-red-50"
+                            : "border-amber-200 bg-amber-50"
                         }`}
                       >
                         <div className="flex items-center gap-4">
-                          <div className={`rounded-full p-2 ${
-                            alert.alert_type === 'out_of_stock'
-                              ? 'bg-red-100'
-                              : 'bg-amber-100'
-                          }`}>
-                            {alert.alert_type === 'out_of_stock' ? (
+                          <div
+                            className={`rounded-full p-2 ${
+                              alert.alert_type === "out_of_stock"
+                                ? "bg-red-100"
+                                : "bg-amber-100"
+                            }`}
+                          >
+                            {alert.alert_type === "out_of_stock" ? (
                               <PackageX className="h-5 w-5 text-red-600" />
                             ) : (
                               <TrendingDown className="h-5 w-5 text-amber-600" />
@@ -760,10 +1069,14 @@ export default function Inventory() {
                           <div>
                             <p className="font-medium">{alert.product_name}</p>
                             <p className="text-sm text-muted-foreground">
-                              SKU: {alert.product_sku} • Current: {alert.current_stock} • Min: {alert.threshold}
+                              SKU: {alert.product_sku} • Current:{" "}
+                              {alert.current_stock} • Min: {alert.threshold}
                             </p>
                             <p className="text-xs text-muted-foreground mt-1">
-                              {format(new Date(alert.created_at), 'MMM d, yyyy h:mm a')}
+                              {format(
+                                new Date(alert.created_at),
+                                "MMM d, yyyy h:mm a"
+                              )}
                             </p>
                           </div>
                         </div>
@@ -792,7 +1105,10 @@ export default function Inventory() {
                 {selectedProduct && (
                   <>
                     Adjusting stock for <strong>{selectedProduct.name}</strong>.
-                    Current stock: <strong>{selectedProduct.stock} {selectedProduct.unit}</strong>
+                    Current stock:{" "}
+                    <strong>
+                      {selectedProduct.stock} {selectedProduct.unit}
+                    </strong>
                   </>
                 )}
               </DialogDescription>
@@ -800,17 +1116,17 @@ export default function Inventory() {
             <div className="space-y-4 py-4">
               <div className="flex gap-2">
                 <Button
-                  variant={adjustmentType === 'add' ? 'default' : 'outline'}
+                  variant={adjustmentType === "add" ? "default" : "outline"}
                   className="flex-1"
-                  onClick={() => setAdjustmentType('add')}
+                  onClick={() => setAdjustmentType("add")}
                 >
                   <Plus className="mr-2 h-4 w-4" />
                   Add Stock
                 </Button>
                 <Button
-                  variant={adjustmentType === 'remove' ? 'default' : 'outline'}
+                  variant={adjustmentType === "remove" ? "default" : "outline"}
                   className="flex-1"
-                  onClick={() => setAdjustmentType('remove')}
+                  onClick={() => setAdjustmentType("remove")}
                 >
                   <Minus className="mr-2 h-4 w-4" />
                   Remove Stock
@@ -840,23 +1156,91 @@ export default function Inventory() {
               {selectedProduct && adjustmentQty && (
                 <div className="p-3 bg-muted rounded-lg">
                   <p className="text-sm">
-                    New stock level:{' '}
+                    New stock level:{" "}
                     <strong>
-                      {selectedProduct.stock + (adjustmentType === 'add' ? parseInt(adjustmentQty) || 0 : -(parseInt(adjustmentQty) || 0))}
-                    </strong>{' '}
+                      {selectedProduct.stock +
+                        (adjustmentType === "add"
+                          ? parseInt(adjustmentQty) || 0
+                          : -(parseInt(adjustmentQty) || 0))}
+                    </strong>{" "}
                     {selectedProduct.unit}
                   </p>
                 </div>
               )}
             </div>
             <DialogFooter>
-              <Button variant="outline" onClick={() => setAdjustDialogOpen(false)}>
+              <Button
+                variant="outline"
+                onClick={() => setAdjustDialogOpen(false)}
+              >
                 Cancel
               </Button>
               <Button onClick={handleStockAdjustment}>
                 Confirm Adjustment
               </Button>
             </DialogFooter>
+          </DialogContent>
+        </Dialog>
+
+        {/* Delete Confirmation Dialog */}
+        <AlertDialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>Delete Product</AlertDialogTitle>
+              <AlertDialogDescription>
+                Are you sure you want to delete{" "}
+                <strong>{productToDelete?.name}</strong>? This will deactivate
+                the product. You can reactivate it later if needed.
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel onClick={() => setProductToDelete(null)}>
+                Cancel
+              </AlertDialogCancel>
+              <AlertDialogAction
+                onClick={handleDeleteProduct}
+                className="bg-destructive hover:bg-destructive/90"
+              >
+                Delete Product
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
+
+        <StockHistory
+          productId={selectedProductForHistory?.id || null}
+          productName={selectedProductForHistory?.name || ""}
+          open={historyDialogOpen}
+          onOpenChange={setHistoryDialogOpen}
+        />
+
+        {/* Product Image Dialog */}
+        <Dialog open={imageDialogOpen} onOpenChange={setImageDialogOpen}>
+          <DialogContent className="max-w-md">
+            <DialogHeader>
+              <DialogTitle>Product Image</DialogTitle>
+              <DialogDescription>
+                Upload or change image for{" "}
+                <strong>{selectedProductForImage?.name}</strong>
+              </DialogDescription>
+            </DialogHeader>
+            {selectedProductForImage && (
+              <ProductImageUpload
+                productId={selectedProductForImage.id}
+                productName={selectedProductForImage.name}
+                currentImageUrl={selectedProductForImage.image_url}
+                onImageUpdate={(imageUrl) => {
+                  // Update local state
+                  setProducts((prev) =>
+                    prev.map((p) =>
+                      p.id === selectedProductForImage.id
+                        ? { ...p, image_url: imageUrl }
+                        : p
+                    )
+                  );
+                }}
+              />
+            )}
           </DialogContent>
         </Dialog>
       </div>

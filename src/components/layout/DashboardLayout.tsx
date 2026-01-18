@@ -56,7 +56,7 @@ const adminNavigation = [
 
 const technicianNavigation = [
   { name: "Dashboard", href: "/dashboard", icon: LayoutDashboard },
-  { name: "My Jobs", href: "/jobs", icon: Wrench },
+  { name: "My Jobs", href: "/technician/jobs", icon: Wrench },
   { name: "Settings", href: "/settings", icon: Settings },
 ];
 

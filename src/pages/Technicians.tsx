@@ -37,8 +37,8 @@ import {
   Clock,
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
-import SkillsManagementDialog from "@/components/technicians/SkillsManagementDialog";
-import AvailabilityManagementDialog from "@/components/technicians/AvailabilityManagementDialog";
+import SkillsManagementDialog from "@/components/technician/SkillsManagementDialog";
+import AvailabilityManagementDialog from "@/components/technician/AvailabilityManagementDialog";
 
 interface Technician {
   id: string;
