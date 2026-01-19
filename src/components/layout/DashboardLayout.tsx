@@ -44,7 +44,7 @@ import { supabase } from "@/integrations/supabase/client";
 // Navigation items for different roles
 const adminNavigation = [
   { name: "Dashboard", href: "/dashboard", icon: LayoutDashboard },
-  { name: "Service Jobs", href: "/jobs", icon: Wrench },
+  { name: "Jobs Management", href: "/jobs", icon: Wrench },
   { name: "Invoices", href: "/invoices", icon: FileText },
   { name: "Technicians", href: "/technicians", icon: Users },
   { name: "Customers", href: "/customers", icon: UserCircle },
@@ -157,7 +157,7 @@ export default function DashboardLayout({
       <aside
         className={cn(
           "fixed inset-y-0 left-0 z-50 w-64 transform bg-sidebar transition-transform duration-200 ease-in-out lg:translate-x-0",
-          sidebarOpen ? "translate-x-0" : "-translate-x-full"
+          sidebarOpen ? "translate-x-0" : "-translate-x-full",
         )}
       >
         {/* Logo */}
@@ -192,7 +192,7 @@ export default function DashboardLayout({
                   "flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors",
                   isActive
                     ? "bg-sidebar-accent text-sidebar-accent-foreground"
-                    : "text-sidebar-foreground/70 hover:bg-sidebar-accent/50 hover:text-sidebar-foreground"
+                    : "text-sidebar-foreground/70 hover:bg-sidebar-accent/50 hover:text-sidebar-foreground",
                 )}
               >
                 <item.icon className="h-5 w-5" />

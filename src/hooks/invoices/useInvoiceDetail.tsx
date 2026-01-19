@@ -92,9 +92,9 @@ export function useInvoiceDetail(invoiceId: string) {
           created_by:employees!invoices_created_by_fkey (
             name
           )
-        `
+        `,
         )
-        .eq("id", invoiceId)
+        .eq("invoice_number", invoiceId) // ✅ FIXED: Changed from "id" to "invoice_number"
         .single();
 
       if (invoiceError) throw invoiceError;
@@ -109,7 +109,7 @@ export function useInvoiceDetail(invoiceId: string) {
           : invoiceData.created_by,
       });
 
-      // Fetch services
+      // Fetch services - Use invoice.id (UUID) not invoice_number
       const { data: servicesData, error: servicesError } = await supabase
         .from("invoice_services")
         .select(
@@ -124,9 +124,9 @@ export function useInvoiceDetail(invoiceId: string) {
             unit_type,
             brand
           )
-        `
+        `,
         )
-        .eq("invoice_id", invoiceId)
+        .eq("invoice_id", invoiceData.id) // ✅ Use the UUID id from invoiceData
         .order("created_at", { ascending: true });
 
       if (servicesError) throw servicesError;
@@ -138,14 +138,14 @@ export function useInvoiceDetail(invoiceId: string) {
             ? s.assigned_technician[0]
             : s.assigned_technician,
           unit: Array.isArray(s.unit) ? s.unit[0] : s.unit,
-        })) || []
+        })) || [],
       );
 
-      // Fetch items
+      // Fetch items - Use invoice.id (UUID) not invoice_number
       const { data: itemsData, error: itemsError } = await supabase
         .from("invoice_items")
         .select("*")
-        .eq("invoice_id", invoiceId)
+        .eq("invoice_id", invoiceData.id) // ✅ Use the UUID id from invoiceData
         .order("created_at", { ascending: true });
 
       if (itemsError) throw itemsError;

@@ -100,7 +100,7 @@ export function InvoiceTable({
 
   const toggleSelect = (id: string) => {
     setSelectedIds((prev) =>
-      prev.includes(id) ? prev.filter((i) => i !== id) : [...prev, id]
+      prev.includes(id) ? prev.filter((i) => i !== id) : [...prev, id],
     );
   };
 
@@ -217,7 +217,7 @@ export function InvoiceTable({
               <TableRow
                 key={invoice.id}
                 className="cursor-pointer hover:bg-muted/50"
-                onClick={() => handleView(invoice.id)}
+                onClick={() => handleView(invoice.invoice_number)}
               >
                 <TableCell onClick={(e) => e.stopPropagation()}>
                   <Checkbox
@@ -263,7 +263,9 @@ export function InvoiceTable({
                       </Button>
                     </DropdownMenuTrigger>
                     <DropdownMenuContent align="end">
-                      <DropdownMenuItem onClick={() => handleView(invoice.id)}>
+                      <DropdownMenuItem
+                        onClick={() => handleView(invoice.invoice_number)}
+                      >
                         <Eye className="mr-2 h-4 w-4" />
                         View Details
                       </DropdownMenuItem>

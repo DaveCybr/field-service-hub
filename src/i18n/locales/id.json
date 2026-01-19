@@ -80,6 +80,7 @@
   "nav": {
     "dashboard": "Dasbor",
     "jobs": "Pekerjaan",
+    "invoices": "Invoice",
     "customers": "Pelanggan",
     "technicians": "Teknisi",
     "units": "Unit",
@@ -102,11 +103,16 @@
     "pendingPayment": "Menunggu Pembayaran",
     "totalRevenue": "Total Pendapatan",
     "todayJobs": "Pekerjaan Hari Ini",
+    "todayInvoices": "Invoice Hari Ini",
+    "todayRevenue": "Pendapatan Hari Ini",
+    "pendingServices": "Service Pending",
     "recentJobs": "Pekerjaan Terbaru",
+    "recentInvoices": "Invoice Terbaru",
     "upcomingJobs": "Pekerjaan Mendatang",
     "technicianPerformance": "Performa Teknisi",
     "quickActions": "Aksi Cepat",
     "newServiceJob": "Pekerjaan Service Baru",
+    "newInvoice": "Invoice Baru",
     "pendingApproval": "Menunggu Persetujuan",
     "inProgress": "Sedang Berlangsung",
     "completedToday": "Selesai Hari Ini",
@@ -114,11 +120,22 @@
     "techniciansAvailable": "{{available}} dari {{total}} teknisi tersedia",
     "viewAll": "Lihat Semua",
     "viewAllJobs": "Lihat Semua Pekerjaan",
+    "viewAllInvoices": "Lihat Semua Invoice",
     "noJobsYet": "Belum ada pekerjaan",
+    "noInvoicesYet": "Belum ada invoice",
     "getStartedJob": "Mulai dengan membuat pekerjaan service pertama Anda.",
+    "getStartedInvoice": "Mulai dengan membuat invoice pertama Anda",
     "createJob": "Buat Pekerjaan",
+    "createInvoice": "Buat Invoice",
     "latestJobsCreated": "Pekerjaan terbaru yang dibuat dalam sistem",
+    "latestInvoicesCreated": "Invoice terbaru yang dibuat",
     "assignedTo": "Ditugaskan ke"
+  },
+  "invoiceStatus": {
+    "draft": "Draft",
+    "sent": "Terkirim",
+    "paid": "Lunas",
+    "cancelled": "Dibatalkan"
   },
   "jobs": {
     "title": "Pekerjaan Service",
@@ -194,7 +211,8 @@
     "pending": "Menunggu",
     "paid": "Lunas",
     "partial": "Sebagian",
-    "overdue": "Terlambat"
+    "overdue": "Terlambat",
+    "unpaid": "Belum Bayar"
   },
   "customers": {
     "title": "Pelanggan",

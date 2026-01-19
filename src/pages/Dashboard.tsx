@@ -1,14 +1,20 @@
-import { useEffect, useState } from 'react';
-import { Link } from 'react-router-dom';
-import { useTranslation } from 'react-i18next';
-import { supabase } from '@/integrations/supabase/client';
-import { useAuth } from '@/hooks/useAuth';
-import DashboardLayout from '@/components/layout/DashboardLayout';
-import CashierDashboard from '@/components/dashboard/CashierDashboard';
-import TechnicianDashboard from '@/components/dashboard/TechnicianDashboard';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Button } from '@/components/ui/button';
-import { Badge } from '@/components/ui/badge';
+import { useEffect, useState } from "react";
+import { Link } from "react-router-dom";
+import { useTranslation } from "react-i18next";
+import { supabase } from "@/integrations/supabase/client";
+import { useAuth } from "@/hooks/useAuth";
+import DashboardLayout from "@/components/layout/DashboardLayout";
+import CashierDashboard from "@/components/dashboard/CashierDashboard";
+import TechnicianDashboard from "@/components/dashboard/TechnicianDashboard";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
 import {
   Wrench,
   Clock,
@@ -18,25 +24,29 @@ import {
   ArrowRight,
   Plus,
   TrendingUp,
-} from 'lucide-react';
+  FileText,
+  DollarSign,
+} from "lucide-react";
 
 interface DashboardStats {
-  totalJobsToday: number;
-  pendingApprovals: number;
-  inProgress: number;
-  completedToday: number;
+  totalInvoicesToday: number;
+  totalServicesToday: number;
+  pendingServices: number;
+  inProgressServices: number;
+  completedServicesToday: number;
   availableTechnicians: number;
   totalTechnicians: number;
+  todayRevenue: number;
 }
 
-interface RecentJob {
+interface RecentInvoice {
   id: string;
-  job_number: string;
-  title: string;
+  invoice_number: string;
   status: string;
-  priority: string;
+  payment_status: string;
   customer_name: string;
-  technician_name: string | null;
+  service_count: number;
+  grand_total: number;
   created_at: string;
 }
 
@@ -44,20 +54,22 @@ export default function Dashboard() {
   const { t } = useTranslation();
   const { employee, userRole, isSuperadmin, isAdmin } = useAuth();
   const [stats, setStats] = useState<DashboardStats>({
-    totalJobsToday: 0,
-    pendingApprovals: 0,
-    inProgress: 0,
-    completedToday: 0,
+    totalInvoicesToday: 0,
+    totalServicesToday: 0,
+    pendingServices: 0,
+    inProgressServices: 0,
+    completedServicesToday: 0,
     availableTechnicians: 0,
     totalTechnicians: 0,
+    todayRevenue: 0,
   });
-  const [recentJobs, setRecentJobs] = useState<RecentJob[]>([]);
+  const [recentInvoices, setRecentInvoices] = useState<RecentInvoice[]>([]);
   const [loading, setLoading] = useState(true);
 
   // Check role for conditional rendering
-  const isCashier = userRole === 'cashier';
-  const isTechnician = userRole === 'technician';
-  const isManagerOrAbove = isSuperadmin || isAdmin || userRole === 'manager';
+  const isCashier = userRole === "cashier";
+  const isTechnician = userRole === "technician";
+  const isManagerOrAbove = isSuperadmin || isAdmin || userRole === "manager";
 
   useEffect(() => {
     // Only fetch admin dashboard data if user is manager or above
@@ -70,140 +82,219 @@ export default function Dashboard() {
 
   const fetchDashboardData = async () => {
     try {
-      const today = new Date().toISOString().split('T')[0];
+      const today = new Date().toISOString().split("T")[0];
 
-      // Fetch today's jobs count
-      const { count: todayCount } = await supabase
-        .from('service_jobs')
-        .select('*', { count: 'exact', head: true })
-        .gte('created_at', `${today}T00:00:00`)
-        .lte('created_at', `${today}T23:59:59`);
+      // ✅ Fetch today's invoices count
+      const { count: todayInvoices } = await supabase
+        .from("invoices")
+        .select("*", { count: "exact", head: true })
+        .gte("created_at", `${today}T00:00:00`)
+        .lte("created_at", `${today}T23:59:59`);
 
-      // Fetch pending approvals
+      // ✅ Fetch today's services count
+      const { count: todayServices } = await supabase
+        .from("invoice_services")
+        .select("*", { count: "exact", head: true })
+        .gte("created_at", `${today}T00:00:00`)
+        .lte("created_at", `${today}T23:59:59`);
+
+      // ✅ Fetch pending services (status = 'pending')
       const { count: pendingCount } = await supabase
-        .from('service_jobs')
-        .select('*', { count: 'exact', head: true })
-        .eq('status', 'pending_approval');
+        .from("invoice_services")
+        .select("*", { count: "exact", head: true })
+        .eq("status", "pending");
 
-      // Fetch in progress
+      // ✅ Fetch in progress services
       const { count: progressCount } = await supabase
-        .from('service_jobs')
-        .select('*', { count: 'exact', head: true })
-        .eq('status', 'in_progress');
+        .from("invoice_services")
+        .select("*", { count: "exact", head: true })
+        .eq("status", "in_progress");
 
-      // Fetch completed today
+      // ✅ Fetch completed services today
       const { count: completedCount } = await supabase
-        .from('service_jobs')
-        .select('*', { count: 'exact', head: true })
-        .in('status', ['completed', 'completed_paid'])
-        .gte('updated_at', `${today}T00:00:00`);
+        .from("invoice_services")
+        .select("*", { count: "exact", head: true })
+        .eq("status", "completed")
+        .gte("updated_at", `${today}T00:00:00`);
 
-      // Fetch technician counts
+      // ✅ Fetch technician counts
       const { data: technicians } = await supabase
-        .from('employees')
-        .select('id, status')
-        .eq('role', 'technician');
+        .from("employees")
+        .select("id, status")
+        .eq("role", "technician");
 
-      const availableTechs = technicians?.filter(t => t.status === 'available').length || 0;
+      const availableTechs =
+        technicians?.filter((t) => t.status === "available").length || 0;
       const totalTechs = technicians?.length || 0;
 
+      // ✅ Calculate today's revenue (completed_paid invoices only)
+      const { data: paidInvoices } = await supabase
+        .from("invoices")
+        .select("grand_total")
+        .eq("payment_status", "paid")
+        .gte("updated_at", `${today}T00:00:00`)
+        .lte("updated_at", `${today}T23:59:59`);
+
+      const todayRevenue =
+        paidInvoices?.reduce((sum, inv) => sum + (inv.grand_total || 0), 0) ||
+        0;
+
       setStats({
-        totalJobsToday: todayCount || 0,
-        pendingApprovals: pendingCount || 0,
-        inProgress: progressCount || 0,
-        completedToday: completedCount || 0,
+        totalInvoicesToday: todayInvoices || 0,
+        totalServicesToday: todayServices || 0,
+        pendingServices: pendingCount || 0,
+        inProgressServices: progressCount || 0,
+        completedServicesToday: completedCount || 0,
         availableTechnicians: availableTechs,
         totalTechnicians: totalTechs,
+        todayRevenue,
       });
 
-      // Fetch recent jobs with customer and technician info
-      const { data: jobs } = await supabase
-        .from('service_jobs')
-        .select(`
+      // ✅ Fetch recent invoices with customer info and service count
+      const { data: invoices } = await supabase
+        .from("invoices")
+        .select(
+          `
           id,
-          job_number,
-          title,
+          invoice_number,
           status,
-          priority,
+          payment_status,
+          grand_total,
           created_at,
-          customers (name),
-          employees (name)
-        `)
-        .order('created_at', { ascending: false })
+          customers (name)
+        `
+        )
+        .order("created_at", { ascending: false })
         .limit(5);
 
-      if (jobs) {
-        setRecentJobs(jobs.map(job => ({
-          id: job.id,
-          job_number: job.job_number,
-          title: job.title,
-          status: job.status,
-          priority: job.priority,
-          customer_name: (job.customers as any)?.name || t('common.unknown'),
-          technician_name: (job.employees as any)?.name || null,
-          created_at: job.created_at,
-        })));
+      if (invoices) {
+        // Get service counts for each invoice
+        const invoicesWithCounts = await Promise.all(
+          invoices.map(async (invoice) => {
+            const { count } = await supabase
+              .from("invoice_services")
+              .select("*", { count: "exact", head: true })
+              .eq("invoice_id", invoice.id);
+
+            return {
+              id: invoice.id,
+              invoice_number: invoice.invoice_number,
+              status: invoice.status,
+              payment_status: invoice.payment_status,
+              customer_name:
+                (invoice.customers as any)?.name || t("common.unknown"),
+              service_count: count || 0,
+              grand_total: invoice.grand_total || 0,
+              created_at: invoice.created_at,
+            };
+          })
+        );
+
+        setRecentInvoices(invoicesWithCounts);
       }
     } catch (error) {
-      console.error('Error fetching dashboard data:', error);
+      console.error("Error fetching dashboard data:", error);
     } finally {
       setLoading(false);
     }
   };
 
   const getStatusBadge = (status: string) => {
-    const statusConfig: Record<string, { labelKey: string; className: string }> = {
-      pending_assignment: { labelKey: 'jobStatus.pending', className: 'badge-status-pending' },
-      pending_approval: { labelKey: 'jobStatus.needsApproval', className: 'badge-status-pending' },
-      approved: { labelKey: 'jobStatus.approved', className: 'badge-status-approved' },
-      in_progress: { labelKey: 'jobStatus.in_progress', className: 'badge-status-progress' },
-      completed: { labelKey: 'jobStatus.completed', className: 'badge-status-completed' },
-      completed_paid: { labelKey: 'jobStatus.paid', className: 'badge-status-completed' },
-      cancelled: { labelKey: 'jobStatus.cancelled', className: 'badge-status-cancelled' },
+    const statusConfig: Record<
+      string,
+      { labelKey: string; className: string }
+    > = {
+      draft: {
+        labelKey: "invoiceStatus.draft",
+        className: "badge-status-pending",
+      },
+      sent: {
+        labelKey: "invoiceStatus.sent",
+        className: "badge-status-approved",
+      },
+      paid: {
+        labelKey: "invoiceStatus.paid",
+        className: "badge-status-completed",
+      },
+      cancelled: {
+        labelKey: "invoiceStatus.cancelled",
+        className: "badge-status-cancelled",
+      },
     };
-    const config = statusConfig[status] || { labelKey: status, className: '' };
-    return <Badge variant="outline" className={config.className}>{t(config.labelKey)}</Badge>;
+    const config = statusConfig[status] || { labelKey: status, className: "" };
+    return (
+      <Badge variant="outline" className={config.className}>
+        {t(config.labelKey)}
+      </Badge>
+    );
   };
 
-  const getPriorityBadge = (priority: string) => {
-    const priorityConfig: Record<string, { labelKey: string; className: string }> = {
-      low: { labelKey: 'jobPriority.low', className: 'badge-priority-low' },
-      normal: { labelKey: 'jobPriority.normal', className: 'badge-priority-normal' },
-      high: { labelKey: 'jobPriority.high', className: 'badge-priority-high' },
-      urgent: { labelKey: 'jobPriority.urgent', className: 'badge-priority-urgent' },
+  const getPaymentStatusBadge = (status: string) => {
+    const statusConfig: Record<
+      string,
+      { labelKey: string; className: string }
+    > = {
+      unpaid: {
+        labelKey: "paymentStatus.unpaid",
+        className: "badge-status-pending",
+      },
+      partial: {
+        labelKey: "paymentStatus.partial",
+        className: "badge-status-progress",
+      },
+      paid: {
+        labelKey: "paymentStatus.paid",
+        className: "badge-status-completed",
+      },
     };
-    const config = priorityConfig[priority] || { labelKey: priority, className: '' };
-    return <Badge className={config.className}>{t(config.labelKey)}</Badge>;
+    const config = statusConfig[status] || { labelKey: status, className: "" };
+    return (
+      <Badge variant="outline" className={config.className}>
+        {t(config.labelKey)}
+      </Badge>
+    );
+  };
+
+  const formatCurrency = (amount: number) => {
+    return new Intl.NumberFormat("id-ID", {
+      style: "currency",
+      currency: "IDR",
+      minimumFractionDigits: 0,
+    }).format(amount);
   };
 
   const statCards = [
     {
-      title: t('dashboard.todayJobs'),
-      value: stats.totalJobsToday,
-      icon: Wrench,
-      color: 'text-primary',
-      bgColor: 'bg-primary/10',
+      title: t("dashboard.todayInvoices"),
+      value: stats.totalInvoicesToday,
+      icon: FileText,
+      color: "text-primary",
+      bgColor: "bg-primary/10",
+      description: `${stats.totalServicesToday} services`,
     },
     {
-      title: t('dashboard.pendingApproval'),
-      value: stats.pendingApprovals,
+      title: t("dashboard.pendingServices"),
+      value: stats.pendingServices,
       icon: Clock,
-      color: 'text-amber-600',
-      bgColor: 'bg-amber-100',
+      color: "text-amber-600",
+      bgColor: "bg-amber-100",
+      description: "Needs assignment",
     },
     {
-      title: t('dashboard.inProgress'),
-      value: stats.inProgress,
+      title: t("dashboard.inProgress"),
+      value: stats.inProgressServices,
       icon: TrendingUp,
-      color: 'text-blue-600',
-      bgColor: 'bg-blue-100',
+      color: "text-blue-600",
+      bgColor: "bg-blue-100",
+      description: "Active services",
     },
     {
-      title: t('dashboard.completedToday'),
-      value: stats.completedToday,
-      icon: CheckCircle2,
-      color: 'text-emerald-600',
-      bgColor: 'bg-emerald-100',
+      title: t("dashboard.todayRevenue"),
+      value: formatCurrency(stats.todayRevenue),
+      icon: DollarSign,
+      color: "text-emerald-600",
+      bgColor: "bg-emerald-100",
+      description: "Paid invoices",
     },
   ];
 
@@ -232,16 +323,17 @@ export default function Dashboard() {
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
           <div>
             <h1 className="text-2xl font-bold tracking-tight">
-              {t('dashboard.welcomeBack')}, {employee?.name?.split(' ')[0] || 'User'}!
+              {t("dashboard.welcomeBack")},{" "}
+              {employee?.name?.split(" ")[0] || "User"}!
             </h1>
             <p className="text-muted-foreground">
-              {t('dashboard.welcomeMessage')}
+              {t("dashboard.welcomeMessage")}
             </p>
           </div>
           <Button asChild>
-            <Link to="/jobs/new">
+            <Link to="/invoices/new">
               <Plus className="mr-2 h-4 w-4" />
-              {t('dashboard.newServiceJob')}
+              {t("dashboard.newInvoice")}
             </Link>
           </Button>
         </div>
@@ -254,8 +346,13 @@ export default function Dashboard() {
               <CardContent className="relative p-6">
                 <div className="flex items-center justify-between">
                   <div>
-                    <p className="text-sm font-medium text-muted-foreground">{stat.title}</p>
+                    <p className="text-sm font-medium text-muted-foreground">
+                      {stat.title}
+                    </p>
                     <p className="text-3xl font-bold mt-1">{stat.value}</p>
+                    <p className="text-xs text-muted-foreground mt-1">
+                      {stat.description}
+                    </p>
                   </div>
                   <div className={`rounded-lg p-3 ${stat.bgColor}`}>
                     <stat.icon className={`h-6 w-6 ${stat.color}`} />
@@ -270,14 +367,19 @@ export default function Dashboard() {
         <Card>
           <CardHeader className="flex flex-row items-center justify-between">
             <div>
-              <CardTitle className="text-lg">{t('dashboard.technicianAvailability')}</CardTitle>
+              <CardTitle className="text-lg">
+                {t("dashboard.technicianAvailability")}
+              </CardTitle>
               <CardDescription>
-                {t('dashboard.techniciansAvailable', { available: stats.availableTechnicians, total: stats.totalTechnicians })}
+                {t("dashboard.techniciansAvailable", {
+                  available: stats.availableTechnicians,
+                  total: stats.totalTechnicians,
+                })}
               </CardDescription>
             </div>
-            <Button variant="outline" asChild>
+            <Button variant="outline" size="sm" asChild>
               <Link to="/technicians">
-                {t('dashboard.viewAll')}
+                {t("dashboard.viewAll")}
                 <ArrowRight className="ml-2 h-4 w-4" />
               </Link>
             </Button>
@@ -285,34 +387,47 @@ export default function Dashboard() {
           <CardContent>
             <div className="flex items-center gap-4">
               <div className="flex-1 h-3 bg-secondary rounded-full overflow-hidden">
-                <div 
+                <div
                   className="h-full bg-emerald-500 transition-all duration-500"
-                  style={{ 
-                    width: stats.totalTechnicians > 0 
-                      ? `${(stats.availableTechnicians / stats.totalTechnicians) * 100}%` 
-                      : '0%' 
+                  style={{
+                    width:
+                      stats.totalTechnicians > 0
+                        ? `${
+                            (stats.availableTechnicians /
+                              stats.totalTechnicians) *
+                            100
+                          }%`
+                        : "0%",
                   }}
                 />
               </div>
               <span className="text-sm font-medium text-muted-foreground">
-                {stats.totalTechnicians > 0 
-                  ? Math.round((stats.availableTechnicians / stats.totalTechnicians) * 100) 
-                  : 0}%
+                {stats.totalTechnicians > 0
+                  ? Math.round(
+                      (stats.availableTechnicians / stats.totalTechnicians) *
+                        100
+                    )
+                  : 0}
+                %
               </span>
             </div>
           </CardContent>
         </Card>
 
-        {/* Recent Jobs */}
+        {/* Recent Invoices */}
         <Card>
           <CardHeader className="flex flex-row items-center justify-between">
             <div>
-              <CardTitle className="text-lg">{t('dashboard.recentJobs')}</CardTitle>
-              <CardDescription>{t('dashboard.latestJobsCreated')}</CardDescription>
+              <CardTitle className="text-lg">
+                {t("dashboard.recentInvoices")}
+              </CardTitle>
+              <CardDescription>
+                {t("dashboard.latestInvoicesCreated")}
+              </CardDescription>
             </div>
             <Button variant="outline" asChild>
-              <Link to="/jobs">
-                {t('dashboard.viewAllJobs')}
+              <Link to="/invoices">
+                {t("dashboard.viewAllInvoices")}
                 <ArrowRight className="ml-2 h-4 w-4" />
               </Link>
             </Button>
@@ -322,43 +437,51 @@ export default function Dashboard() {
               <div className="flex items-center justify-center py-8">
                 <div className="h-8 w-8 animate-spin rounded-full border-4 border-primary border-t-transparent" />
               </div>
-            ) : recentJobs.length === 0 ? (
+            ) : recentInvoices.length === 0 ? (
               <div className="text-center py-8">
                 <AlertCircle className="mx-auto h-12 w-12 text-muted-foreground/50" />
-                <h3 className="mt-4 text-lg font-medium">{t('dashboard.noJobsYet')}</h3>
+                <h3 className="mt-4 text-lg font-medium">
+                  {t("dashboard.noInvoicesYet")}
+                </h3>
                 <p className="mt-2 text-sm text-muted-foreground">
-                  {t('dashboard.getStartedJob')}
+                  {t("dashboard.getStartedInvoice")}
                 </p>
                 <Button asChild className="mt-4">
-                  <Link to="/jobs/new">
+                  <Link to="/invoices/new">
                     <Plus className="mr-2 h-4 w-4" />
-                    {t('dashboard.createJob')}
+                    {t("dashboard.createInvoice")}
                   </Link>
                 </Button>
               </div>
             ) : (
               <div className="space-y-4">
-                {recentJobs.map((job) => (
+                {recentInvoices.map((invoice) => (
                   <Link
-                    key={job.id}
-                    to={`/jobs/${job.id}`}
+                    key={invoice.id}
+                    to={`/invoices/${invoice.id}`}
                     className="flex items-center justify-between p-4 rounded-lg border hover:bg-muted/50 transition-colors"
                   >
                     <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2">
+                      <div className="flex items-center gap-2 mb-1">
                         <span className="font-mono text-sm text-muted-foreground">
-                          {job.job_number}
+                          {invoice.invoice_number}
                         </span>
-                        {getPriorityBadge(job.priority)}
+                        {getStatusBadge(invoice.status)}
+                        {getPaymentStatusBadge(invoice.payment_status)}
                       </div>
-                      <p className="font-medium mt-1 truncate">{job.title}</p>
-                      <p className="text-sm text-muted-foreground mt-0.5">
-                        {job.customer_name}
-                        {job.technician_name && ` • ${t('dashboard.assignedTo')} ${job.technician_name}`}
+                      <p className="font-medium truncate">
+                        {invoice.customer_name}
+                      </p>
+                      <p className="text-sm text-muted-foreground">
+                        {invoice.service_count} service
+                        {invoice.service_count !== 1 ? "s" : ""}
                       </p>
                     </div>
-                    <div className="ml-4 flex-shrink-0">
-                      {getStatusBadge(job.status)}
+                    <div className="ml-4 flex-shrink-0 text-right">
+                      <p className="font-bold text-primary">
+                        {formatCurrency(invoice.grand_total)}
+                      </p>
+                      <ArrowRight className="h-4 w-4 text-muted-foreground ml-auto mt-1" />
                     </div>
                   </Link>
                 ))}

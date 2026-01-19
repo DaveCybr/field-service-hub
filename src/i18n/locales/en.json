@@ -80,6 +80,7 @@
   "nav": {
     "dashboard": "Dashboard",
     "jobs": "Jobs",
+    "invoices": "Invoices",
     "customers": "Customers",
     "technicians": "Technicians",
     "units": "Units",
@@ -102,11 +103,16 @@
     "pendingPayment": "Pending Payment",
     "totalRevenue": "Total Revenue",
     "todayJobs": "Today's Jobs",
+    "todayInvoices": "Today's Invoices",
+    "todayRevenue": "Today's Revenue",
+    "pendingServices": "Pending Services",
     "recentJobs": "Recent Jobs",
+    "recentInvoices": "Recent Invoices",
     "upcomingJobs": "Upcoming Jobs",
     "technicianPerformance": "Technician Performance",
     "quickActions": "Quick Actions",
     "newServiceJob": "New Service Job",
+    "newInvoice": "New Invoice",
     "pendingApproval": "Pending Approval",
     "inProgress": "In Progress",
     "completedToday": "Completed Today",
@@ -114,11 +120,22 @@
     "techniciansAvailable": "{{available}} of {{total}} technicians available",
     "viewAll": "View All",
     "viewAllJobs": "View All Jobs",
+    "viewAllInvoices": "View All Invoices",
     "noJobsYet": "No jobs yet",
+    "noInvoicesYet": "No invoices yet",
     "getStartedJob": "Get started by creating your first service job.",
+    "getStartedInvoice": "Get started by creating your first invoice",
     "createJob": "Create Job",
+    "createInvoice": "Create Invoice",
     "latestJobsCreated": "Latest jobs created in the system",
+    "latestInvoicesCreated": "Latest invoices created",
     "assignedTo": "Assigned to"
+  },
+  "invoiceStatus": {
+    "draft": "Draft",
+    "sent": "Sent",
+    "paid": "Paid",
+    "cancelled": "Cancelled"
   },
   "jobs": {
     "title": "Service Jobs",
@@ -194,7 +211,8 @@
     "pending": "Pending",
     "paid": "Paid",
     "partial": "Partial",
-    "overdue": "Overdue"
+    "overdue": "Overdue",
+    "unpaid": "Unpaid"
   },
   "customers": {
     "title": "Customers",
