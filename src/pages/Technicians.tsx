@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import { supabase } from "@/integrations/supabase/client";
 import DashboardLayout from "@/components/layout/DashboardLayout";
@@ -35,6 +36,10 @@ import {
   Wrench,
   Settings,
   Clock,
+  UserCheck,
+  AlertCircle,
+  Briefcase,
+  TrendingUp,
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import SkillsManagementDialog from "@/components/technician/SkillsManagementDialog";
@@ -51,10 +56,12 @@ interface Technician {
   total_jobs_completed: number;
   avatar_url: string | null;
   skills: string[];
+  active_jobs_count: number;
 }
 
 export default function Technicians() {
   const { t } = useTranslation();
+  const navigate = useNavigate();
   const [technicians, setTechnicians] = useState<Technician[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState("");
@@ -69,6 +76,16 @@ export default function Technicians() {
     useState<Technician | null>(null);
   const { toast } = useToast();
 
+  // Stats
+  const availableTechs = technicians.filter(
+    (t) => t.active_jobs_count === 0 && t.status === "available",
+  ).length;
+  const busyTechs = technicians.filter((t) => t.active_jobs_count > 0).length;
+  const totalActiveJobs = technicians.reduce(
+    (sum, t) => sum + t.active_jobs_count,
+    0,
+  );
+
   useEffect(() => {
     fetchTechnicians();
   }, []);
@@ -76,10 +93,15 @@ export default function Technicians() {
   const fetchTechnicians = async () => {
     setLoading(true);
     try {
-      // Fetch technicians
+      // Fetch technicians with active jobs count
       const { data: techData, error: techError } = await supabase
         .from("employees")
-        .select("*")
+        .select(
+          `
+          *,
+          active_jobs:invoice_services!assigned_technician_id(count)
+        `,
+        )
         .eq("role", "technician")
         .order("name");
 
@@ -92,12 +114,13 @@ export default function Technicians() {
         .select("technician_id, skill_name")
         .in("technician_id", techIds);
 
-      // Map skills to technicians
+      // Map skills and active jobs to technicians
       const techWithSkills =
         techData?.map((tech) => ({
           ...tech,
           rating: tech.rating || 0,
           total_jobs_completed: tech.total_jobs_completed || 0,
+          active_jobs_count: tech.active_jobs?.[0]?.count || 0,
           skills:
             skillsData
               ?.filter((s) => s.technician_id === tech.id)
@@ -165,30 +188,57 @@ export default function Technicians() {
     }
   };
 
-  const getStatusBadge = (status: string) => {
+  const getStatusBadge = (status: string, activeJobs: number) => {
+    // Override status based on active jobs
+    if (activeJobs > 0) {
+      return (
+        <Badge className="bg-amber-100 text-amber-800">
+          <Clock className="h-3 w-3 mr-1" />
+          Busy ({activeJobs} active)
+        </Badge>
+      );
+    }
+
     const statusConfig: Record<
       string,
-      { labelKey: string; className: string }
+      { labelKey: string; className: string; icon?: any }
     > = {
       available: {
         labelKey: "technicians.available",
-        className: "bg-emerald-100 text-emerald-800",
+        className: "bg-green-100 text-green-800",
+        icon: UserCheck,
       },
       on_job: {
         labelKey: "technicians.onJob",
         className: "bg-blue-100 text-blue-800",
+        icon: Wrench,
       },
       locked: {
         labelKey: "technicians.locked",
         className: "bg-red-100 text-red-800",
+        icon: AlertCircle,
       },
       off_duty: {
         labelKey: "technicians.offDuty",
         className: "bg-gray-100 text-gray-800",
+        icon: Clock,
       },
     };
-    const config = statusConfig[status] || { labelKey: status, className: "" };
-    return <Badge className={config.className}>{t(config.labelKey)}</Badge>;
+
+    const config = statusConfig[status] || {
+      labelKey: status,
+      className: "",
+      icon: null,
+    };
+
+    const Icon = config.icon;
+
+    return (
+      <Badge className={config.className}>
+        {Icon && <Icon className="h-3 w-3 mr-1" />}
+        {t(config.labelKey)}
+      </Badge>
+    );
   };
 
   const getInitials = (name: string) => {
@@ -203,7 +253,7 @@ export default function Technicians() {
   const filteredTechnicians = technicians.filter(
     (tech) =>
       tech.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      tech.email.toLowerCase().includes(searchQuery.toLowerCase())
+      tech.email.toLowerCase().includes(searchQuery.toLowerCase()),
   );
 
   return (
@@ -217,62 +267,134 @@ export default function Technicians() {
             </h1>
             <p className="text-muted-foreground">{t("technicians.subtitle")}</p>
           </div>
-          <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-            {/* <DialogTrigger asChild>
-              <Button>
-                <Plus className="mr-2 h-4 w-4" />
-                {t('technicians.addTechnician')}
-              </Button>
-            </DialogTrigger> */}
-            <DialogContent>
-              <DialogHeader>
-                <DialogTitle>{t("technicians.newTechnician")}</DialogTitle>
-                <DialogDescription>
-                  {t("technicians.enterDetails")}
-                </DialogDescription>
-              </DialogHeader>
-              <div className="space-y-4 py-4">
-                <div className="space-y-2">
-                  <Label htmlFor="name">{t("auth.fullName")} *</Label>
-                  <Input
-                    id="name"
-                    placeholder="John Doe"
-                    value={newTechName}
-                    onChange={(e) => setNewTechName(e.target.value)}
-                  />
+          <div className="flex gap-2">
+            <Button
+              variant="outline"
+              onClick={() => navigate("/jobs?status=pending")}
+            >
+              <Briefcase className="mr-2 h-4 w-4" />
+              Pending Jobs
+            </Button>
+            <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
+              <DialogTrigger asChild>
+                <Button>
+                  <Plus className="mr-2 h-4 w-4" />
+                  {t("technicians.addTechnician")}
+                </Button>
+              </DialogTrigger>
+              <DialogContent>
+                <DialogHeader>
+                  <DialogTitle>{t("technicians.newTechnician")}</DialogTitle>
+                  <DialogDescription>
+                    {t("technicians.enterDetails")}
+                  </DialogDescription>
+                </DialogHeader>
+                <div className="space-y-4 py-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="name">{t("auth.fullName")} *</Label>
+                    <Input
+                      id="name"
+                      placeholder="John Doe"
+                      value={newTechName}
+                      onChange={(e) => setNewTechName(e.target.value)}
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="email">{t("common.email")} *</Label>
+                    <Input
+                      id="email"
+                      type="email"
+                      placeholder="john@example.com"
+                      value={newTechEmail}
+                      onChange={(e) => setNewTechEmail(e.target.value)}
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="phone">{t("common.phone")}</Label>
+                    <Input
+                      id="phone"
+                      placeholder="+62 812 3456 7890"
+                      value={newTechPhone}
+                      onChange={(e) => setNewTechPhone(e.target.value)}
+                    />
+                  </div>
                 </div>
-                <div className="space-y-2">
-                  <Label htmlFor="email">{t("common.email")} *</Label>
-                  <Input
-                    id="email"
-                    type="email"
-                    placeholder="john@example.com"
-                    value={newTechEmail}
-                    onChange={(e) => setNewTechEmail(e.target.value)}
-                  />
+                <DialogFooter>
+                  <Button
+                    variant="outline"
+                    onClick={() => setDialogOpen(false)}
+                  >
+                    {t("common.cancel")}
+                  </Button>
+                  <Button onClick={handleCreateTechnician} disabled={creating}>
+                    {creating
+                      ? t("common.adding")
+                      : t("technicians.addTechnician")}
+                  </Button>
+                </DialogFooter>
+              </DialogContent>
+            </Dialog>
+          </div>
+        </div>
+
+        {/* Stats Cards */}
+        <div className="grid gap-4 sm:grid-cols-3">
+          <Card>
+            <CardContent className="p-6">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-sm font-medium text-muted-foreground">
+                    Available
+                  </p>
+                  <p className="text-3xl font-bold mt-1">{availableTechs}</p>
+                  <p className="text-xs text-muted-foreground mt-1">
+                    Ready for jobs
+                  </p>
                 </div>
-                <div className="space-y-2">
-                  <Label htmlFor="phone">{t("common.phone")}</Label>
-                  <Input
-                    id="phone"
-                    placeholder="+62 812 3456 7890"
-                    value={newTechPhone}
-                    onChange={(e) => setNewTechPhone(e.target.value)}
-                  />
+                <div className="rounded-lg p-3 bg-green-100">
+                  <UserCheck className="h-6 w-6 text-green-600" />
                 </div>
               </div>
-              <DialogFooter>
-                <Button variant="outline" onClick={() => setDialogOpen(false)}>
-                  {t("common.cancel")}
-                </Button>
-                <Button onClick={handleCreateTechnician} disabled={creating}>
-                  {creating
-                    ? t("common.adding")
-                    : t("technicians.addTechnician")}
-                </Button>
-              </DialogFooter>
-            </DialogContent>
-          </Dialog>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardContent className="p-6">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-sm font-medium text-muted-foreground">
+                    Busy
+                  </p>
+                  <p className="text-3xl font-bold mt-1">{busyTechs}</p>
+                  <p className="text-xs text-muted-foreground mt-1">
+                    Currently working
+                  </p>
+                </div>
+                <div className="rounded-lg p-3 bg-amber-100">
+                  <Clock className="h-6 w-6 text-amber-600" />
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardContent className="p-6">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-sm font-medium text-muted-foreground">
+                    Active Jobs
+                  </p>
+                  <p className="text-3xl font-bold mt-1">{totalActiveJobs}</p>
+                  <p className="text-xs text-muted-foreground mt-1">
+                    In progress
+                  </p>
+                </div>
+                <div className="rounded-lg p-3 bg-blue-100">
+                  <Wrench className="h-6 w-6 text-blue-600" />
+                </div>
+              </div>
+            </CardContent>
+          </Card>
         </div>
 
         {/* Search */}
@@ -319,6 +441,7 @@ export default function Technicians() {
                       <TableHead>{t("technicians.title")}</TableHead>
                       <TableHead>{t("common.contact")}</TableHead>
                       <TableHead>{t("common.status")}</TableHead>
+                      <TableHead>Active Jobs</TableHead>
                       <TableHead>{t("technicians.rating")}</TableHead>
                       <TableHead>{t("technicians.jobsCompleted")}</TableHead>
                       <TableHead>{t("technicians.skills")}</TableHead>
@@ -332,12 +455,25 @@ export default function Technicians() {
                       <TableRow key={tech.id} className="table-row-hover">
                         <TableCell>
                           <div className="flex items-center gap-3">
-                            <Avatar>
-                              <AvatarImage src={tech.avatar_url || undefined} />
-                              <AvatarFallback className="bg-primary text-primary-foreground">
-                                {getInitials(tech.name)}
-                              </AvatarFallback>
-                            </Avatar>
+                            <div className="relative">
+                              <Avatar>
+                                <AvatarImage
+                                  src={tech.avatar_url || undefined}
+                                />
+                                <AvatarFallback className="bg-primary text-primary-foreground">
+                                  {getInitials(tech.name)}
+                                </AvatarFallback>
+                              </Avatar>
+                              {/* Status indicator dot */}
+                              <div
+                                className={`absolute bottom-0 right-0 h-3 w-3 rounded-full border-2 border-white ${
+                                  tech.active_jobs_count === 0 &&
+                                  tech.status === "available"
+                                    ? "bg-green-500"
+                                    : "bg-amber-500"
+                                }`}
+                              />
+                            </div>
                             <div>
                               <p className="font-medium">{tech.name}</p>
                               <p className="text-sm text-muted-foreground">
@@ -360,7 +496,28 @@ export default function Technicians() {
                             </div>
                           </div>
                         </TableCell>
-                        <TableCell>{getStatusBadge(tech.status)}</TableCell>
+                        <TableCell>
+                          {getStatusBadge(tech.status, tech.active_jobs_count)}
+                        </TableCell>
+                        <TableCell>
+                          <div className="flex items-center gap-2">
+                            <span className="text-lg font-bold">
+                              {tech.active_jobs_count}
+                            </span>
+                            {tech.active_jobs_count > 0 && (
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                className="h-6 text-xs"
+                                onClick={() =>
+                                  navigate(`/technician/jobs?tech=${tech.id}`)
+                                }
+                              >
+                                View
+                              </Button>
+                            )}
+                          </div>
+                        </TableCell>
                         <TableCell>
                           <div className="flex items-center gap-1">
                             <Star className="h-4 w-4 text-amber-500 fill-amber-500" />
@@ -370,13 +527,15 @@ export default function Technicians() {
                           </div>
                         </TableCell>
                         <TableCell>
-                          <span className="font-medium">
-                            {tech.total_jobs_completed}
-                          </span>
-                          <span className="text-muted-foreground">
-                            {" "}
-                            {t("technicians.jobs")}
-                          </span>
+                          <div className="flex items-center gap-1">
+                            <TrendingUp className="h-3 w-3 text-muted-foreground" />
+                            <span className="font-medium">
+                              {tech.total_jobs_completed}
+                            </span>
+                            <span className="text-muted-foreground text-sm">
+                              {t("technicians.jobs")}
+                            </span>
+                          </div>
                         </TableCell>
                         <TableCell>
                           <div className="flex flex-wrap gap-1">

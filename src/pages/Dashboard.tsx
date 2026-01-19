@@ -1,197 +1,104 @@
+// Dashboard.tsx - Main dashboard for Admin/Manager
 import { useEffect, useState } from "react";
-import { Link } from "react-router-dom";
-import { useTranslation } from "react-i18next";
+import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
-import { useAuth } from "@/hooks/useAuth";
 import DashboardLayout from "@/components/layout/DashboardLayout";
-import CashierDashboard from "@/components/dashboard/CashierDashboard";
-import TechnicianDashboard from "@/components/dashboard/TechnicianDashboard";
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import {
-  Wrench,
-  Clock,
-  CheckCircle2,
-  AlertCircle,
-  Users,
-  ArrowRight,
-  Plus,
-  TrendingUp,
   FileText,
   DollarSign,
+  Users,
+  Wrench,
+  TrendingUp,
+  AlertTriangle,
+  Clock,
+  CheckCircle2,
+  Plus,
+  Package,
+  UserCheck,
+  ArrowRight,
 } from "lucide-react";
+import { formatCurrency } from "@/lib/utils/currency";
+import { format } from "date-fns";
+import { useAuth } from "@/hooks/useAuth";
 
 interface DashboardStats {
-  totalInvoicesToday: number;
-  totalServicesToday: number;
-  pendingServices: number;
-  inProgressServices: number;
-  completedServicesToday: number;
-  availableTechnicians: number;
-  totalTechnicians: number;
   todayRevenue: number;
+  monthlyRevenue: number;
+  totalCustomers: number;
+  activeJobs: number;
+  pendingJobs: number;
+  completedJobsToday: number;
 }
 
 interface RecentInvoice {
   id: string;
   invoice_number: string;
-  status: string;
-  payment_status: string;
-  customer_name: string;
-  service_count: number;
+  customer: { name: string };
   grand_total: number;
+  payment_status: string;
   created_at: string;
 }
 
+interface PendingJob {
+  id: string;
+  title: string;
+  priority: string;
+  invoice: {
+    invoice_number: string;
+    customer: { name: string };
+  };
+}
+
+interface StockAlert {
+  id: string;
+  product: {
+    name: string;
+    stock: number;
+    min_stock_threshold: number;
+  };
+}
+
+interface TechnicianStatus {
+  id: string;
+  name: string;
+  status: string;
+  active_jobs_count: number;
+}
+
 export default function Dashboard() {
-  const { t } = useTranslation();
-  const { employee, userRole, isSuperadmin, isAdmin } = useAuth();
+  const navigate = useNavigate();
+  const { employee } = useAuth();
   const [stats, setStats] = useState<DashboardStats>({
-    totalInvoicesToday: 0,
-    totalServicesToday: 0,
-    pendingServices: 0,
-    inProgressServices: 0,
-    completedServicesToday: 0,
-    availableTechnicians: 0,
-    totalTechnicians: 0,
     todayRevenue: 0,
+    monthlyRevenue: 0,
+    totalCustomers: 0,
+    activeJobs: 0,
+    pendingJobs: 0,
+    completedJobsToday: 0,
   });
   const [recentInvoices, setRecentInvoices] = useState<RecentInvoice[]>([]);
+  const [pendingJobs, setPendingJobs] = useState<PendingJob[]>([]);
+  const [stockAlerts, setStockAlerts] = useState<StockAlert[]>([]);
+  const [technicians, setTechnicians] = useState<TechnicianStatus[]>([]);
   const [loading, setLoading] = useState(true);
 
-  // Check role for conditional rendering
-  const isCashier = userRole === "cashier";
-  const isTechnician = userRole === "technician";
-  const isManagerOrAbove = isSuperadmin || isAdmin || userRole === "manager";
-
   useEffect(() => {
-    // Only fetch admin dashboard data if user is manager or above
-    if (isManagerOrAbove) {
-      fetchDashboardData();
-    } else {
-      setLoading(false);
-    }
-  }, [isManagerOrAbove]);
+    fetchDashboardData();
+  }, []);
 
   const fetchDashboardData = async () => {
+    setLoading(true);
     try {
-      const today = new Date().toISOString().split("T")[0];
-
-      // ✅ Fetch today's invoices count
-      const { count: todayInvoices } = await supabase
-        .from("invoices")
-        .select("*", { count: "exact", head: true })
-        .gte("created_at", `${today}T00:00:00`)
-        .lte("created_at", `${today}T23:59:59`);
-
-      // ✅ Fetch today's services count
-      const { count: todayServices } = await supabase
-        .from("invoice_services")
-        .select("*", { count: "exact", head: true })
-        .gte("created_at", `${today}T00:00:00`)
-        .lte("created_at", `${today}T23:59:59`);
-
-      // ✅ Fetch pending services (status = 'pending')
-      const { count: pendingCount } = await supabase
-        .from("invoice_services")
-        .select("*", { count: "exact", head: true })
-        .eq("status", "pending");
-
-      // ✅ Fetch in progress services
-      const { count: progressCount } = await supabase
-        .from("invoice_services")
-        .select("*", { count: "exact", head: true })
-        .eq("status", "in_progress");
-
-      // ✅ Fetch completed services today
-      const { count: completedCount } = await supabase
-        .from("invoice_services")
-        .select("*", { count: "exact", head: true })
-        .eq("status", "completed")
-        .gte("updated_at", `${today}T00:00:00`);
-
-      // ✅ Fetch technician counts
-      const { data: technicians } = await supabase
-        .from("employees")
-        .select("id, status")
-        .eq("role", "technician");
-
-      const availableTechs =
-        technicians?.filter((t) => t.status === "available").length || 0;
-      const totalTechs = technicians?.length || 0;
-
-      // ✅ Calculate today's revenue (completed_paid invoices only)
-      const { data: paidInvoices } = await supabase
-        .from("invoices")
-        .select("grand_total")
-        .eq("payment_status", "paid")
-        .gte("updated_at", `${today}T00:00:00`)
-        .lte("updated_at", `${today}T23:59:59`);
-
-      const todayRevenue =
-        paidInvoices?.reduce((sum, inv) => sum + (inv.grand_total || 0), 0) ||
-        0;
-
-      setStats({
-        totalInvoicesToday: todayInvoices || 0,
-        totalServicesToday: todayServices || 0,
-        pendingServices: pendingCount || 0,
-        inProgressServices: progressCount || 0,
-        completedServicesToday: completedCount || 0,
-        availableTechnicians: availableTechs,
-        totalTechnicians: totalTechs,
-        todayRevenue,
-      });
-
-      // ✅ Fetch recent invoices with customer info and service count
-      const { data: invoices } = await supabase
-        .from("invoices")
-        .select(
-          `
-          id,
-          invoice_number,
-          status,
-          payment_status,
-          grand_total,
-          created_at,
-          customers (name)
-        `
-        )
-        .order("created_at", { ascending: false })
-        .limit(5);
-
-      if (invoices) {
-        // Get service counts for each invoice
-        const invoicesWithCounts = await Promise.all(
-          invoices.map(async (invoice) => {
-            const { count } = await supabase
-              .from("invoice_services")
-              .select("*", { count: "exact", head: true })
-              .eq("invoice_id", invoice.id);
-
-            return {
-              id: invoice.id,
-              invoice_number: invoice.invoice_number,
-              status: invoice.status,
-              payment_status: invoice.payment_status,
-              customer_name:
-                (invoice.customers as any)?.name || t("common.unknown"),
-              service_count: count || 0,
-              grand_total: invoice.grand_total || 0,
-              created_at: invoice.created_at,
-            };
-          })
-        );
-
-        setRecentInvoices(invoicesWithCounts);
-      }
+      await Promise.all([
+        fetchStats(),
+        fetchRecentInvoices(),
+        fetchPendingJobs(),
+        fetchStockAlerts(),
+        fetchTechnicians(),
+      ]);
     } catch (error) {
       console.error("Error fetching dashboard data:", error);
     } finally {
@@ -199,296 +106,512 @@ export default function Dashboard() {
     }
   };
 
-  const getStatusBadge = (status: string) => {
-    const statusConfig: Record<
-      string,
-      { labelKey: string; className: string }
-    > = {
-      draft: {
-        labelKey: "invoiceStatus.draft",
-        className: "badge-status-pending",
-      },
-      sent: {
-        labelKey: "invoiceStatus.sent",
-        className: "badge-status-approved",
-      },
-      paid: {
-        labelKey: "invoiceStatus.paid",
-        className: "badge-status-completed",
-      },
-      cancelled: {
-        labelKey: "invoiceStatus.cancelled",
-        className: "badge-status-cancelled",
-      },
-    };
-    const config = statusConfig[status] || { labelKey: status, className: "" };
-    return (
-      <Badge variant="outline" className={config.className}>
-        {t(config.labelKey)}
-      </Badge>
-    );
+  const fetchStats = async () => {
+    try {
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      const startOfMonth = new Date(today.getFullYear(), today.getMonth(), 1);
+
+      // Today's revenue
+      const { data: todayInvoices } = await supabase
+        .from("invoices")
+        .select("grand_total")
+        .gte("created_at", today.toISOString())
+        .in("payment_status", ["paid", "partial"]);
+
+      // Monthly revenue
+      const { data: monthlyInvoices } = await supabase
+        .from("invoices")
+        .select("grand_total")
+        .gte("created_at", startOfMonth.toISOString())
+        .in("payment_status", ["paid", "partial"]);
+
+      // Total customers
+      const { count: customersCount } = await supabase
+        .from("customers")
+        .select("*", { count: "exact", head: true });
+
+      // Active jobs (assigned + in_progress)
+      const { count: activeJobsCount } = await supabase
+        .from("invoice_services")
+        .select("*", { count: "exact", head: true })
+        .in("status", ["assigned", "in_progress"]);
+
+      // Pending jobs
+      const { count: pendingJobsCount } = await supabase
+        .from("invoice_services")
+        .select("*", { count: "exact", head: true })
+        .eq("status", "pending");
+
+      // Completed jobs today
+      const { count: completedTodayCount } = await supabase
+        .from("invoice_services")
+        .select("*", { count: "exact", head: true })
+        .eq("status", "completed")
+        .gte("actual_checkout_at", today.toISOString());
+
+      setStats({
+        todayRevenue:
+          todayInvoices?.reduce(
+            (sum, inv) => sum + (inv.grand_total || 0),
+            0,
+          ) || 0,
+        monthlyRevenue:
+          monthlyInvoices?.reduce(
+            (sum, inv) => sum + (inv.grand_total || 0),
+            0,
+          ) || 0,
+        totalCustomers: customersCount || 0,
+        activeJobs: activeJobsCount || 0,
+        pendingJobs: pendingJobsCount || 0,
+        completedJobsToday: completedTodayCount || 0,
+      });
+    } catch (error) {
+      console.error("Error fetching stats:", error);
+    }
+  };
+
+  const fetchRecentInvoices = async () => {
+    try {
+      const { data } = await supabase
+        .from("invoices")
+        .select(
+          "id, invoice_number, grand_total, payment_status, created_at, customer:customers(name)",
+        )
+        .order("created_at", { ascending: false })
+        .limit(5);
+
+      setRecentInvoices(data || []);
+    } catch (error) {
+      console.error("Error fetching recent invoices:", error);
+    }
+  };
+
+  const fetchPendingJobs = async () => {
+    try {
+      const { data } = await supabase
+        .from("invoice_services")
+        .select(
+          `
+          id, 
+          title, 
+          priority,
+          invoice:invoices!inner(
+            invoice_number,
+            customer:customers(name)
+          )
+        `,
+        )
+        .eq("status", "pending")
+        .order("priority", { ascending: true })
+        .order("created_at", { ascending: true })
+        .limit(5);
+
+      setPendingJobs(data || []);
+    } catch (error) {
+      console.error("Error fetching pending jobs:", error);
+    }
+  };
+
+  const fetchStockAlerts = async () => {
+    try {
+      const { data } = await supabase
+        .from("stock_alerts")
+        .select(
+          `
+          id,
+          product:products!inner(name, stock, min_stock_threshold)
+        `,
+        )
+        .eq("status", "active")
+        .limit(5);
+
+      setStockAlerts(data || []);
+    } catch (error) {
+      console.error("Error fetching stock alerts:", error);
+    }
+  };
+
+  const fetchTechnicians = async () => {
+    try {
+      const { data } = await supabase
+        .from("employees")
+        .select(
+          `
+          id,
+          name,
+          status,
+          active_jobs:invoice_services!assigned_technician_id(count)
+        `,
+        )
+        .eq("role", "technician")
+        .order("name");
+
+      const techsWithCount = (data || []).map((tech: any) => ({
+        ...tech,
+        active_jobs_count: tech.active_jobs?.[0]?.count || 0,
+      }));
+
+      setTechnicians(techsWithCount);
+    } catch (error) {
+      console.error("Error fetching technicians:", error);
+    }
   };
 
   const getPaymentStatusBadge = (status: string) => {
-    const statusConfig: Record<
-      string,
-      { labelKey: string; className: string }
-    > = {
-      unpaid: {
-        labelKey: "paymentStatus.unpaid",
-        className: "badge-status-pending",
-      },
-      partial: {
-        labelKey: "paymentStatus.partial",
-        className: "badge-status-progress",
-      },
-      paid: {
-        labelKey: "paymentStatus.paid",
-        className: "badge-status-completed",
-      },
+    const config: Record<string, { label: string; className: string }> = {
+      paid: { label: "Paid", className: "bg-green-100 text-green-800" },
+      partial: { label: "Partial", className: "bg-yellow-100 text-yellow-800" },
+      pending: { label: "Pending", className: "bg-gray-100 text-gray-800" },
+      overdue: { label: "Overdue", className: "bg-red-100 text-red-800" },
     };
-    const config = statusConfig[status] || { labelKey: status, className: "" };
-    return (
-      <Badge variant="outline" className={config.className}>
-        {t(config.labelKey)}
-      </Badge>
-    );
+    const { label, className } = config[status] || config.pending;
+    return <Badge className={className}>{label}</Badge>;
   };
 
-  const formatCurrency = (amount: number) => {
-    return new Intl.NumberFormat("id-ID", {
-      style: "currency",
-      currency: "IDR",
-      minimumFractionDigits: 0,
-    }).format(amount);
+  const getPriorityBadge = (priority: string) => {
+    const config: Record<string, { className: string }> = {
+      urgent: { className: "bg-red-100 text-red-800" },
+      high: { className: "bg-orange-100 text-orange-800" },
+      normal: { className: "bg-blue-100 text-blue-800" },
+      low: { className: "bg-gray-100 text-gray-800" },
+    };
+    const { className } = config[priority] || config.normal;
+    return <Badge className={className}>{priority.toUpperCase()}</Badge>;
   };
 
-  const statCards = [
-    {
-      title: t("dashboard.todayInvoices"),
-      value: stats.totalInvoicesToday,
-      icon: FileText,
-      color: "text-primary",
-      bgColor: "bg-primary/10",
-      description: `${stats.totalServicesToday} services`,
-    },
-    {
-      title: t("dashboard.pendingServices"),
-      value: stats.pendingServices,
-      icon: Clock,
-      color: "text-amber-600",
-      bgColor: "bg-amber-100",
-      description: "Needs assignment",
-    },
-    {
-      title: t("dashboard.inProgress"),
-      value: stats.inProgressServices,
-      icon: TrendingUp,
-      color: "text-blue-600",
-      bgColor: "bg-blue-100",
-      description: "Active services",
-    },
-    {
-      title: t("dashboard.todayRevenue"),
-      value: formatCurrency(stats.todayRevenue),
-      icon: DollarSign,
-      color: "text-emerald-600",
-      bgColor: "bg-emerald-100",
-      description: "Paid invoices",
-    },
-  ];
-
-  // Render role-specific dashboard
-  if (isCashier) {
+  if (loading) {
     return (
       <DashboardLayout>
-        <CashierDashboard />
+        <div className="flex items-center justify-center min-h-[400px]">
+          <div className="h-8 w-8 animate-spin rounded-full border-4 border-primary border-t-transparent" />
+        </div>
       </DashboardLayout>
     );
   }
 
-  if (isTechnician) {
-    return (
-      <DashboardLayout>
-        <TechnicianDashboard />
-      </DashboardLayout>
-    );
-  }
-
-  // Admin/Manager Dashboard
   return (
     <DashboardLayout>
       <div className="space-y-6 animate-fade-in">
-        {/* Welcome Header */}
-        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+        {/* Header */}
+        <div className="flex items-center justify-between">
           <div>
-            <h1 className="text-2xl font-bold tracking-tight">
-              {t("dashboard.welcomeBack")},{" "}
-              {employee?.name?.split(" ")[0] || "User"}!
+            <h1 className="text-3xl font-bold tracking-tight">
+              Welcome back, {employee?.name}!
             </h1>
-            <p className="text-muted-foreground">
-              {t("dashboard.welcomeMessage")}
+            <p className="text-muted-foreground mt-1">
+              Here's what's happening with your business today
             </p>
           </div>
-          <Button asChild>
-            <Link to="/invoices/new">
-              <Plus className="mr-2 h-4 w-4" />
-              {t("dashboard.newInvoice")}
-            </Link>
+          <Button onClick={() => navigate("/invoices/new")}>
+            <Plus className="mr-2 h-4 w-4" />
+            New Invoice
           </Button>
         </div>
 
-        {/* Stats Grid */}
+        {/* Stats Cards */}
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-          {statCards.map((stat, index) => (
-            <Card key={index} className="stats-card">
-              <div className="stats-card-gradient" />
-              <CardContent className="relative p-6">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="text-sm font-medium text-muted-foreground">
-                      {stat.title}
-                    </p>
-                    <p className="text-3xl font-bold mt-1">{stat.value}</p>
-                    <p className="text-xs text-muted-foreground mt-1">
-                      {stat.description}
-                    </p>
-                  </div>
-                  <div className={`rounded-lg p-3 ${stat.bgColor}`}>
-                    <stat.icon className={`h-6 w-6 ${stat.color}`} />
-                  </div>
+          <Card>
+            <CardContent className="p-6">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-sm font-medium text-muted-foreground">
+                    Today's Revenue
+                  </p>
+                  <p className="text-2xl font-bold mt-1">
+                    {formatCurrency(stats.todayRevenue)}
+                  </p>
                 </div>
-              </CardContent>
-            </Card>
-          ))}
+                <div className="rounded-lg p-3 bg-green-100">
+                  <DollarSign className="h-6 w-6 text-green-600" />
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardContent className="p-6">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-sm font-medium text-muted-foreground">
+                    Monthly Revenue
+                  </p>
+                  <p className="text-2xl font-bold mt-1">
+                    {formatCurrency(stats.monthlyRevenue)}
+                  </p>
+                </div>
+                <div className="rounded-lg p-3 bg-blue-100">
+                  <TrendingUp className="h-6 w-6 text-blue-600" />
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardContent className="p-6">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-sm font-medium text-muted-foreground">
+                    Active Jobs
+                  </p>
+                  <p className="text-2xl font-bold mt-1">{stats.activeJobs}</p>
+                  <p className="text-xs text-muted-foreground mt-1">
+                    {stats.pendingJobs} pending
+                  </p>
+                </div>
+                <div className="rounded-lg p-3 bg-purple-100">
+                  <Wrench className="h-6 w-6 text-purple-600" />
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardContent className="p-6">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-sm font-medium text-muted-foreground">
+                    Total Customers
+                  </p>
+                  <p className="text-2xl font-bold mt-1">
+                    {stats.totalCustomers}
+                  </p>
+                  <p className="text-xs text-muted-foreground mt-1">
+                    {stats.completedJobsToday} jobs done today
+                  </p>
+                </div>
+                <div className="rounded-lg p-3 bg-amber-100">
+                  <Users className="h-6 w-6 text-amber-600" />
+                </div>
+              </div>
+            </CardContent>
+          </Card>
         </div>
 
-        {/* Technicians Overview */}
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between">
-            <div>
-              <CardTitle className="text-lg">
-                {t("dashboard.technicianAvailability")}
+        {/* Two Columns */}
+        <div className="grid gap-6 lg:grid-cols-2">
+          {/* Recent Invoices */}
+          <Card>
+            <CardHeader className="flex flex-row items-center justify-between pb-2">
+              <CardTitle className="text-base font-semibold">
+                Recent Invoices
               </CardTitle>
-              <CardDescription>
-                {t("dashboard.techniciansAvailable", {
-                  available: stats.availableTechnicians,
-                  total: stats.totalTechnicians,
-                })}
-              </CardDescription>
-            </div>
-            <Button variant="outline" size="sm" asChild>
-              <Link to="/technicians">
-                {t("dashboard.viewAll")}
-                <ArrowRight className="ml-2 h-4 w-4" />
-              </Link>
-            </Button>
-          </CardHeader>
-          <CardContent>
-            <div className="flex items-center gap-4">
-              <div className="flex-1 h-3 bg-secondary rounded-full overflow-hidden">
-                <div
-                  className="h-full bg-emerald-500 transition-all duration-500"
-                  style={{
-                    width:
-                      stats.totalTechnicians > 0
-                        ? `${
-                            (stats.availableTechnicians /
-                              stats.totalTechnicians) *
-                            100
-                          }%`
-                        : "0%",
-                  }}
-                />
-              </div>
-              <span className="text-sm font-medium text-muted-foreground">
-                {stats.totalTechnicians > 0
-                  ? Math.round(
-                      (stats.availableTechnicians / stats.totalTechnicians) *
-                        100
-                    )
-                  : 0}
-                %
-              </span>
-            </div>
-          </CardContent>
-        </Card>
-
-        {/* Recent Invoices */}
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between">
-            <div>
-              <CardTitle className="text-lg">
-                {t("dashboard.recentInvoices")}
-              </CardTitle>
-              <CardDescription>
-                {t("dashboard.latestInvoicesCreated")}
-              </CardDescription>
-            </div>
-            <Button variant="outline" asChild>
-              <Link to="/invoices">
-                {t("dashboard.viewAllInvoices")}
-                <ArrowRight className="ml-2 h-4 w-4" />
-              </Link>
-            </Button>
-          </CardHeader>
-          <CardContent>
-            {loading ? (
-              <div className="flex items-center justify-center py-8">
-                <div className="h-8 w-8 animate-spin rounded-full border-4 border-primary border-t-transparent" />
-              </div>
-            ) : recentInvoices.length === 0 ? (
-              <div className="text-center py-8">
-                <AlertCircle className="mx-auto h-12 w-12 text-muted-foreground/50" />
-                <h3 className="mt-4 text-lg font-medium">
-                  {t("dashboard.noInvoicesYet")}
-                </h3>
-                <p className="mt-2 text-sm text-muted-foreground">
-                  {t("dashboard.getStartedInvoice")}
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => navigate("/invoices")}
+              >
+                View All
+                <ArrowRight className="ml-1 h-4 w-4" />
+              </Button>
+            </CardHeader>
+            <CardContent>
+              {recentInvoices.length === 0 ? (
+                <p className="text-sm text-muted-foreground py-4 text-center">
+                  No invoices yet
                 </p>
-                <Button asChild className="mt-4">
-                  <Link to="/invoices/new">
-                    <Plus className="mr-2 h-4 w-4" />
-                    {t("dashboard.createInvoice")}
-                  </Link>
-                </Button>
-              </div>
-            ) : (
-              <div className="space-y-4">
-                {recentInvoices.map((invoice) => (
-                  <Link
-                    key={invoice.id}
-                    to={`/invoices/${invoice.id}`}
-                    className="flex items-center justify-between p-4 rounded-lg border hover:bg-muted/50 transition-colors"
-                  >
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2 mb-1">
-                        <span className="font-mono text-sm text-muted-foreground">
+              ) : (
+                <div className="space-y-3">
+                  {recentInvoices.map((invoice) => (
+                    <div
+                      key={invoice.id}
+                      className="flex items-center justify-between p-3 rounded-lg border hover:bg-muted/50 cursor-pointer transition-colors"
+                      onClick={() =>
+                        navigate(`/invoices/${invoice.invoice_number}`)
+                      }
+                    >
+                      <div className="flex-1 min-w-0">
+                        <p className="font-medium text-sm truncate">
+                          {invoice.customer.name}
+                        </p>
+                        <p className="text-xs text-muted-foreground font-mono">
                           {invoice.invoice_number}
-                        </span>
-                        {getStatusBadge(invoice.status)}
+                        </p>
+                      </div>
+                      <div className="text-right ml-4">
+                        <p className="font-medium text-sm">
+                          {formatCurrency(invoice.grand_total)}
+                        </p>
                         {getPaymentStatusBadge(invoice.payment_status)}
                       </div>
-                      <p className="font-medium truncate">
-                        {invoice.customer_name}
-                      </p>
-                      <p className="text-sm text-muted-foreground">
-                        {invoice.service_count} service
-                        {invoice.service_count !== 1 ? "s" : ""}
-                      </p>
                     </div>
-                    <div className="ml-4 flex-shrink-0 text-right">
-                      <p className="font-bold text-primary">
-                        {formatCurrency(invoice.grand_total)}
-                      </p>
-                      <ArrowRight className="h-4 w-4 text-muted-foreground ml-auto mt-1" />
+                  ))}
+                </div>
+              )}
+            </CardContent>
+          </Card>
+
+          {/* Pending Jobs */}
+          <Card>
+            <CardHeader className="flex flex-row items-center justify-between pb-2">
+              <CardTitle className="text-base font-semibold">
+                <div className="flex items-center gap-2">
+                  Pending Jobs
+                  {stats.pendingJobs > 0 && (
+                    <Badge variant="destructive">{stats.pendingJobs}</Badge>
+                  )}
+                </div>
+              </CardTitle>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => navigate("/jobs?status=pending")}
+              >
+                View All
+                <ArrowRight className="ml-1 h-4 w-4" />
+              </Button>
+            </CardHeader>
+            <CardContent>
+              {pendingJobs.length === 0 ? (
+                <div className="text-center py-8">
+                  <CheckCircle2 className="h-10 w-10 mx-auto text-green-500 mb-2" />
+                  <p className="text-sm text-muted-foreground">
+                    All jobs assigned!
+                  </p>
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  {pendingJobs.map((job) => (
+                    <div
+                      key={job.id}
+                      className="flex items-center justify-between p-3 rounded-lg border border-yellow-200 bg-yellow-50 hover:bg-yellow-100 cursor-pointer transition-colors"
+                      onClick={() => navigate(`/jobs/${job.id}`)}
+                    >
+                      <div className="flex-1 min-w-0">
+                        <p className="font-medium text-sm truncate">
+                          {job.title}
+                        </p>
+                        <p className="text-xs text-muted-foreground">
+                          {job.invoice.customer.name}
+                        </p>
+                      </div>
+                      <div className="ml-4">
+                        {getPriorityBadge(job.priority)}
+                      </div>
                     </div>
-                  </Link>
-                ))}
-              </div>
-            )}
-          </CardContent>
-        </Card>
+                  ))}
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </div>
+
+        {/* Bottom Row */}
+        <div className="grid gap-6 lg:grid-cols-2">
+          {/* Stock Alerts */}
+          <Card>
+            <CardHeader className="flex flex-row items-center justify-between pb-2">
+              <CardTitle className="text-base font-semibold">
+                <div className="flex items-center gap-2">
+                  Low Stock Alerts
+                  {stockAlerts.length > 0 && (
+                    <Badge variant="destructive">{stockAlerts.length}</Badge>
+                  )}
+                </div>
+              </CardTitle>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => navigate("/inventory")}
+              >
+                View All
+                <ArrowRight className="ml-1 h-4 w-4" />
+              </Button>
+            </CardHeader>
+            <CardContent>
+              {stockAlerts.length === 0 ? (
+                <div className="text-center py-8">
+                  <Package className="h-10 w-10 mx-auto text-green-500 mb-2" />
+                  <p className="text-sm text-muted-foreground">
+                    All stock levels good!
+                  </p>
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  {stockAlerts.map((alert) => (
+                    <div
+                      key={alert.id}
+                      className="flex items-center justify-between p-3 rounded-lg border border-amber-200 bg-amber-50"
+                    >
+                      <div className="flex items-center gap-3">
+                        <AlertTriangle className="h-5 w-5 text-amber-600" />
+                        <div>
+                          <p className="font-medium text-sm">
+                            {alert.product.name}
+                          </p>
+                          <p className="text-xs text-muted-foreground">
+                            Current: {alert.product.stock} | Min:{" "}
+                            {alert.product.min_stock_threshold}
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </CardContent>
+          </Card>
+
+          {/* Technician Status */}
+          <Card>
+            <CardHeader className="flex flex-row items-center justify-between pb-2">
+              <CardTitle className="text-base font-semibold">
+                Technician Status
+              </CardTitle>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => navigate("/technicians")}
+              >
+                View All
+                <ArrowRight className="ml-1 h-4 w-4" />
+              </Button>
+            </CardHeader>
+            <CardContent>
+              {technicians.length === 0 ? (
+                <p className="text-sm text-muted-foreground py-4 text-center">
+                  No technicians yet
+                </p>
+              ) : (
+                <div className="space-y-2">
+                  {technicians.map((tech) => (
+                    <div
+                      key={tech.id}
+                      className="flex items-center justify-between p-3 rounded-lg border"
+                    >
+                      <div className="flex items-center gap-3">
+                        <div
+                          className={`h-2 w-2 rounded-full ${
+                            tech.active_jobs_count === 0
+                              ? "bg-green-500"
+                              : "bg-amber-500"
+                          }`}
+                        />
+                        <span className="font-medium text-sm">{tech.name}</span>
+                      </div>
+                      <div className="text-right">
+                        {tech.active_jobs_count === 0 ? (
+                          <Badge
+                            variant="outline"
+                            className="text-green-600 border-green-600"
+                          >
+                            <UserCheck className="h-3 w-3 mr-1" />
+                            Available
+                          </Badge>
+                        ) : (
+                          <Badge variant="secondary">
+                            <Clock className="h-3 w-3 mr-1" />
+                            {tech.active_jobs_count} active
+                          </Badge>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </div>
       </div>
     </DashboardLayout>
   );
