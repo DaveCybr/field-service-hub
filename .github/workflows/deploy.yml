@@ -2,11 +2,16 @@ name: Deploy to VPS
 
 on:
   push:
+<<<<<<< HEAD
     branches: [main] # ganti ke 'master' kalau branch utama kamu master
+=======
+    branches: [ main ]  # ganti ke 'master' kalau branch utama kamu master
+>>>>>>> f04c10f7a1aab33c091c36e1926d5c49702537ab
 
 jobs:
   deploy:
     runs-on: ubuntu-latest
+<<<<<<< HEAD
 
     steps:
       - name: Checkout code
@@ -49,3 +54,47 @@ jobs:
             mv /tmp/deploy-temp/* /home/satelliteorbit/domains/rekamteknik.satelliteorbit.cloud/public_html/
             rm -rf /tmp/deploy-temp
             echo "Deploy completed at $(date)"
+=======
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v3
+    
+    - name: Setup Node.js
+      uses: actions/setup-node@v3
+      with:
+        node-version: '18'
+        cache: 'npm'
+    
+    - name: Install dependencies
+      run: npm ci
+    
+    - name: Build project
+      run: npm run build
+      env:
+        VITE_SUPABASE_PROJECT_ID: ${{ secrets.VITE_SUPABASE_PROJECT_ID }}
+        VITE_SUPABASE_PUBLISHABLE_KEY: ${{ secrets.VITE_SUPABASE_PUBLISHABLE_KEY }}
+        VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
+    
+    - name: Deploy to VPS
+      uses: appleboy/scp-action@v0.1.7
+      with:
+        host: ${{ secrets.VPS_HOST }}
+        username: ${{ secrets.VPS_USERNAME }}
+        key: ${{ secrets.VPS_SSH_KEY }}
+        source: "dist/*"
+        target: "/tmp/deploy-temp"
+        strip_components: 1
+    
+    - name: Move files to public_html
+      uses: appleboy/ssh-action@v1.0.3
+      with:
+        host: ${{ secrets.VPS_HOST }}
+        username: ${{ secrets.VPS_USERNAME }}
+        key: ${{ secrets.VPS_SSH_KEY }}
+        script: |
+          rm -rf /home/satelliteorbit/domains/rekamteknik.satelliteorbit.cloud/public_html/*
+          mv /tmp/deploy-temp/* /home/satelliteorbit/domains/rekamteknik.satelliteorbit.cloud/public_html/
+          rm -rf /tmp/deploy-temp
+          echo "Deploy completed at $(date)"
+>>>>>>> f04c10f7a1aab33c091c36e1926d5c49702537ab
