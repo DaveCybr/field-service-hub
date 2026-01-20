@@ -1,825 +1,1802 @@
-import { useEffect, useState } from 'react';
-import { supabase } from '@/integrations/supabase/client';
-import DashboardLayout from '@/components/layout/DashboardLayout';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { useState, useEffect } from "react";
+import DashboardLayout from "@/components/layout/DashboardLayout";
 import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select';
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
 import {
-  BarChart,
-  Bar,
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
+import { supabase } from "@/integrations/supabase/client";
+import { useToast } from "@/hooks/use-toast";
+import {
+  DollarSign,
+  TrendingUp,
+  TrendingDown,
+  ArrowUpRight,
+  ArrowDownRight,
+  Download,
+  Calendar,
+  Users,
+  Package,
+  FileText,
+  AlertTriangle,
+  CheckCircle2,
+  Clock,
+  Target,
+} from "lucide-react";
+import {
   LineChart,
   Line,
+  BarChart,
+  Bar,
+  AreaChart,
+  Area,
   PieChart,
   Pie,
   Cell,
-  AreaChart,
-  Area,
   XAxis,
   YAxis,
   CartesianGrid,
   Tooltip,
   Legend,
   ResponsiveContainer,
-} from 'recharts';
-import { format, subDays, startOfMonth, endOfMonth, eachDayOfInterval, subMonths } from 'date-fns';
-import {
-  TrendingUp,
-  TrendingDown,
-  DollarSign,
-  Briefcase,
-  Users,
-  Clock,
-  CheckCircle,
-  AlertTriangle,
-} from 'lucide-react';
-
-interface JobStats {
-  total: number;
-  completed: number;
-  inProgress: number;
-  pending: number;
-  cancelled: number;
-}
-
-interface RevenueData {
-  date: string;
-  revenue: number;
-  jobs: number;
-}
-
-interface TechnicianPerformance {
-  name: string;
-  jobsCompleted: number;
-  avgDuration: number;
-  rating: number;
-}
-
-interface StatusDistribution {
-  name: string;
-  value: number;
-  color: string;
-}
-
-interface PriorityDistribution {
-  name: string;
-  value: number;
-  color: string;
-}
+  ComposedChart,
+} from "recharts";
+import * as XLSX from "xlsx";
 
 const COLORS = {
-  primary: 'hsl(217, 91%, 60%)',
-  success: 'hsl(142, 76%, 36%)',
-  warning: 'hsl(38, 92%, 50%)',
-  danger: 'hsl(0, 84%, 60%)',
-  info: 'hsl(199, 89%, 48%)',
-  muted: 'hsl(215, 16%, 47%)',
+  primary: "#3b82f6",
+  success: "#10b981",
+  warning: "#f59e0b",
+  danger: "#ef4444",
+  purple: "#8b5cf6",
+  teal: "#14b8a6",
 };
 
-const STATUS_COLORS: Record<string, string> = {
-  pending_assignment: '#f59e0b',
-  pending_approval: '#f59e0b',
-  approved: '#0ea5e9',
-  in_progress: '#3b82f6',
-  completed: '#22c55e',
-  completed_paid: '#16a34a',
-  cancelled: '#6b7280',
-};
-
-const PRIORITY_COLORS: Record<string, string> = {
-  low: '#6b7280',
-  normal: '#3b82f6',
-  high: '#f59e0b',
-  urgent: '#ef4444',
-};
+const CHART_COLORS = [
+  "#3b82f6",
+  "#10b981",
+  "#f59e0b",
+  "#ef4444",
+  "#8b5cf6",
+  "#ec4899",
+];
 
 export default function Reports() {
-  const [timeRange, setTimeRange] = useState('30');
-  const [loading, setLoading] = useState(true);
-  const [jobStats, setJobStats] = useState<JobStats>({ total: 0, completed: 0, inProgress: 0, pending: 0, cancelled: 0 });
-  const [revenueData, setRevenueData] = useState<RevenueData[]>([]);
-  const [technicianPerformance, setTechnicianPerformance] = useState<TechnicianPerformance[]>([]);
-  const [statusDistribution, setStatusDistribution] = useState<StatusDistribution[]>([]);
-  const [priorityDistribution, setPriorityDistribution] = useState<PriorityDistribution[]>([]);
-  const [totalRevenue, setTotalRevenue] = useState(0);
-  const [avgJobDuration, setAvgJobDuration] = useState(0);
-  const [monthlyComparison, setMonthlyComparison] = useState<{ current: number; previous: number; change: number }>({ current: 0, previous: 0, change: 0 });
+  const { toast } = useToast();
+  const [activeTab, setActiveTab] = useState("overview");
+  const [loading, setLoading] = useState(false);
+  const [dateRange, setDateRange] = useState({
+    from: new Date(new Date().setDate(new Date().getDate() - 30)),
+    to: new Date(),
+  });
+
+  // Overview Data
+  const [overview, setOverview] = useState({
+    totalRevenue: 0,
+    revenueGrowth: 0,
+    totalOrders: 0,
+    ordersGrowth: 0,
+    avgOrderValue: 0,
+    totalServices: 0,
+    servicesGrowth: 0,
+    completionRate: 0,
+    outstandingAmount: 0,
+    collectionRate: 0,
+  });
+
+  // Detailed Data
+  const [salesData, setSalesData] = useState({
+    dailyRevenue: [] as any[],
+    topProducts: [] as any[],
+    categoryBreakdown: [] as any[],
+    hourlyPattern: [] as any[],
+  });
+
+  const [serviceData, setServiceData] = useState({
+    statusDistribution: [] as any[],
+    priorityBreakdown: [] as any[],
+    technicianPerformance: [] as any[],
+    dailyCompletion: [] as any[],
+  });
+
+  const [financialData, setFinancialData] = useState({
+    revenueBreakdown: [] as any[],
+    paymentStatus: [] as any[],
+    topCustomers: [] as any[],
+    agingReceivables: [] as any[],
+  });
+
+  const [inventoryData, setInventoryData] = useState({
+    stockLevels: [] as any[],
+    fastMoving: [] as any[],
+    slowMoving: [] as any[],
+    alerts: [] as any[],
+  });
 
   useEffect(() => {
-    fetchReportData();
-  }, [timeRange]);
+    fetchOverviewData();
+  }, [dateRange]);
 
-  const fetchReportData = async () => {
+  useEffect(() => {
+    if (activeTab === "sales") fetchSalesData();
+    else if (activeTab === "services") fetchServiceData();
+    else if (activeTab === "financial") fetchFinancialData();
+    else if (activeTab === "inventory") fetchInventoryData();
+  }, [activeTab, dateRange]);
+
+  const formatCurrency = (amount: number) => {
+    return new Intl.NumberFormat("id-ID", {
+      style: "currency",
+      currency: "IDR",
+      minimumFractionDigits: 0,
+      maximumFractionDigits: 0,
+    }).format(amount);
+  };
+
+  const formatNumber = (num: number) => {
+    return new Intl.NumberFormat("id-ID").format(num);
+  };
+
+  const formatPercent = (value: number) => {
+    return `${value >= 0 ? "+" : ""}${value.toFixed(1)}%`;
+  };
+
+  const fetchOverviewData = async () => {
     setLoading(true);
-    const days = parseInt(timeRange);
-    const startDate = subDays(new Date(), days).toISOString();
-
     try {
-      // Fetch jobs within time range
-      const { data: jobs } = await supabase
-        .from('service_jobs')
-        .select('*')
-        .gte('created_at', startDate);
+      const fromDate = dateRange.from.toISOString();
+      const toDate = dateRange.to.toISOString();
 
-      if (jobs) {
-        // Calculate job stats
-        const stats: JobStats = {
-          total: jobs.length,
-          completed: jobs.filter(j => ['completed', 'completed_paid'].includes(j.status)).length,
-          inProgress: jobs.filter(j => j.status === 'in_progress').length,
-          pending: jobs.filter(j => ['pending_assignment', 'pending_approval', 'approved'].includes(j.status)).length,
-          cancelled: jobs.filter(j => j.status === 'cancelled').length,
-        };
-        setJobStats(stats);
+      // Get previous period for comparison
+      const daysDiff = Math.ceil(
+        (dateRange.to.getTime() - dateRange.from.getTime()) /
+          (1000 * 60 * 60 * 24),
+      );
+      const prevFrom = new Date(dateRange.from);
+      prevFrom.setDate(prevFrom.getDate() - daysDiff);
+      const prevFromDate = prevFrom.toISOString();
 
-        // Calculate total revenue
-        const revenue = jobs
-          .filter(j => j.status === 'completed_paid')
-          .reduce((sum, j) => sum + (j.total_cost || 0), 0);
-        setTotalRevenue(revenue);
+      // Current period invoices
+      const { data: currentInvoices } = await supabase
+        .from("invoices")
+        .select("grand_total, amount_paid, payment_status")
+        .gte("invoice_date", fromDate)
+        .lte("invoice_date", toDate);
 
-        // Calculate average job duration
-        const completedJobs = jobs.filter(j => j.actual_duration_minutes);
-        const avgDuration = completedJobs.length > 0
-          ? Math.round(completedJobs.reduce((sum, j) => sum + (j.actual_duration_minutes || 0), 0) / completedJobs.length)
+      // Previous period invoices
+      const { data: prevInvoices } = await supabase
+        .from("invoices")
+        .select("grand_total")
+        .gte("invoice_date", prevFromDate)
+        .lt("invoice_date", fromDate);
+
+      // Current services
+      const { data: currentServices } = await supabase
+        .from("invoice_services")
+        .select(`*, invoice:invoices!inner(invoice_date)`)
+        .gte("invoice.invoice_date", fromDate)
+        .lte("invoice.invoice_date", toDate);
+
+      // Previous services
+      const { data: prevServices } = await supabase
+        .from("invoice_services")
+        .select(`*, invoice:invoices!inner(invoice_date)`)
+        .gte("invoice.invoice_date", prevFromDate)
+        .lt("invoice.invoice_date", fromDate);
+
+      // Calculate metrics
+      const totalRevenue =
+        currentInvoices?.reduce((sum, inv) => sum + inv.grand_total, 0) || 0;
+      const prevRevenue =
+        prevInvoices?.reduce((sum, inv) => sum + inv.grand_total, 0) || 0;
+      const revenueGrowth =
+        prevRevenue > 0
+          ? ((totalRevenue - prevRevenue) / prevRevenue) * 100
           : 0;
-        setAvgJobDuration(avgDuration);
 
-        // Build daily revenue data
-        const dailyData: Record<string, { revenue: number; jobs: number }> = {};
-        const dateRange = eachDayOfInterval({
-          start: subDays(new Date(), days),
-          end: new Date(),
-        });
+      const totalOrders = currentInvoices?.length || 0;
+      const prevOrders = prevInvoices?.length || 0;
+      const ordersGrowth =
+        prevOrders > 0 ? ((totalOrders - prevOrders) / prevOrders) * 100 : 0;
 
-        dateRange.forEach(date => {
-          const dateStr = format(date, 'MMM dd');
-          dailyData[dateStr] = { revenue: 0, jobs: 0 };
-        });
+      const avgOrderValue = totalOrders > 0 ? totalRevenue / totalOrders : 0;
 
-        jobs.forEach(job => {
-          const dateStr = format(new Date(job.created_at), 'MMM dd');
-          if (dailyData[dateStr]) {
-            dailyData[dateStr].jobs += 1;
-            if (job.status === 'completed_paid') {
-              dailyData[dateStr].revenue += job.total_cost || 0;
-            }
-          }
-        });
+      const totalServices = currentServices?.length || 0;
+      const prevTotalServices = prevServices?.length || 0;
+      const servicesGrowth =
+        prevTotalServices > 0
+          ? ((totalServices - prevTotalServices) / prevTotalServices) * 100
+          : 0;
 
-        setRevenueData(Object.entries(dailyData).map(([date, data]) => ({
-          date,
-          revenue: data.revenue,
-          jobs: data.jobs,
-        })));
+      const completedServices =
+        currentServices?.filter((s) => s.status === "completed").length || 0;
+      const completionRate =
+        totalServices > 0 ? (completedServices / totalServices) * 100 : 0;
 
-        // Status distribution
-        const statusCounts: Record<string, number> = {};
-        jobs.forEach(job => {
-          statusCounts[job.status] = (statusCounts[job.status] || 0) + 1;
-        });
+      const totalPaid =
+        currentInvoices?.reduce((sum, inv) => sum + inv.amount_paid, 0) || 0;
+      const outstandingAmount = totalRevenue - totalPaid;
+      const collectionRate =
+        totalRevenue > 0 ? (totalPaid / totalRevenue) * 100 : 0;
 
-        const statusLabels: Record<string, string> = {
-          pending_assignment: 'Pending Assignment',
-          pending_approval: 'Pending Approval',
-          approved: 'Approved',
-          in_progress: 'In Progress',
-          completed: 'Completed',
-          completed_paid: 'Paid',
-          cancelled: 'Cancelled',
-        };
-
-        setStatusDistribution(
-          Object.entries(statusCounts).map(([status, count]) => ({
-            name: statusLabels[status] || status,
-            value: count,
-            color: STATUS_COLORS[status] || '#6b7280',
-          }))
-        );
-
-        // Priority distribution
-        const priorityCounts: Record<string, number> = {};
-        jobs.forEach(job => {
-          priorityCounts[job.priority] = (priorityCounts[job.priority] || 0) + 1;
-        });
-
-        setPriorityDistribution(
-          Object.entries(priorityCounts).map(([priority, count]) => ({
-            name: priority.charAt(0).toUpperCase() + priority.slice(1),
-            value: count,
-            color: PRIORITY_COLORS[priority] || '#6b7280',
-          }))
-        );
-      }
-
-      // Fetch technician performance
-      const { data: technicians } = await supabase
-        .from('employees')
-        .select('id, name, rating, total_jobs_completed')
-        .eq('role', 'technician');
-
-      if (technicians) {
-        // Get job stats per technician
-        const { data: techJobs } = await supabase
-          .from('service_jobs')
-          .select('assigned_technician_id, actual_duration_minutes, status')
-          .gte('created_at', startDate)
-          .in('status', ['completed', 'completed_paid']);
-
-        const techStats: Record<string, { jobs: number; totalDuration: number }> = {};
-        techJobs?.forEach(job => {
-          if (job.assigned_technician_id) {
-            if (!techStats[job.assigned_technician_id]) {
-              techStats[job.assigned_technician_id] = { jobs: 0, totalDuration: 0 };
-            }
-            techStats[job.assigned_technician_id].jobs += 1;
-            techStats[job.assigned_technician_id].totalDuration += job.actual_duration_minutes || 0;
-          }
-        });
-
-        setTechnicianPerformance(
-          technicians.map(tech => ({
-            name: tech.name,
-            jobsCompleted: techStats[tech.id]?.jobs || 0,
-            avgDuration: techStats[tech.id]?.jobs 
-              ? Math.round(techStats[tech.id].totalDuration / techStats[tech.id].jobs)
-              : 0,
-            rating: tech.rating || 0,
-          })).sort((a, b) => b.jobsCompleted - a.jobsCompleted)
-        );
-      }
-
-      // Monthly comparison
-      const currentMonthStart = startOfMonth(new Date());
-      const previousMonthStart = startOfMonth(subMonths(new Date(), 1));
-      const previousMonthEnd = endOfMonth(subMonths(new Date(), 1));
-
-      const { data: currentMonthJobs } = await supabase
-        .from('service_jobs')
-        .select('total_cost, status')
-        .gte('created_at', currentMonthStart.toISOString())
-        .in('status', ['completed', 'completed_paid']);
-
-      const { data: previousMonthJobs } = await supabase
-        .from('service_jobs')
-        .select('total_cost, status')
-        .gte('created_at', previousMonthStart.toISOString())
-        .lte('created_at', previousMonthEnd.toISOString())
-        .in('status', ['completed', 'completed_paid']);
-
-      const currentRevenue = currentMonthJobs?.reduce((sum, j) => sum + (j.total_cost || 0), 0) || 0;
-      const previousRevenue = previousMonthJobs?.reduce((sum, j) => sum + (j.total_cost || 0), 0) || 0;
-      const change = previousRevenue > 0 ? ((currentRevenue - previousRevenue) / previousRevenue) * 100 : 0;
-
-      setMonthlyComparison({ current: currentRevenue, previous: previousRevenue, change });
-
-    } catch (error) {
-      console.error('Error fetching report data:', error);
+      setOverview({
+        totalRevenue,
+        revenueGrowth,
+        totalOrders,
+        ordersGrowth,
+        avgOrderValue,
+        totalServices,
+        servicesGrowth,
+        completionRate,
+        outstandingAmount,
+        collectionRate,
+      });
+    } catch (error: any) {
+      toast({
+        variant: "destructive",
+        title: "Error",
+        description: error.message,
+      });
     } finally {
       setLoading(false);
     }
   };
 
-  const formatCurrency = (amount: number) => {
-    return new Intl.NumberFormat('id-ID', {
-      style: 'currency',
-      currency: 'IDR',
-      minimumFractionDigits: 0,
-      notation: 'compact',
-    }).format(amount);
+  const fetchSalesData = async () => {
+    setLoading(true);
+    try {
+      const { data: items } = await supabase
+        .from("invoice_items")
+        .select(
+          `
+          *,
+          invoice:invoices!inner(invoice_date, created_at),
+          product:products(name, category)
+        `,
+        )
+        .gte("invoice.invoice_date", dateRange.from.toISOString())
+        .lte("invoice.invoice_date", dateRange.to.toISOString())
+        .in("invoice.payment_status", ["paid", "partial"]);
+
+      // Daily revenue
+      const dailyMap = new Map();
+      items?.forEach((item) => {
+        const date = new Date(item.invoice.invoice_date).toLocaleDateString(
+          "id-ID",
+          { month: "short", day: "numeric" },
+        );
+        dailyMap.set(date, (dailyMap.get(date) || 0) + item.total_price);
+      });
+      const dailyRevenue = Array.from(dailyMap.entries())
+        .map(([date, revenue]) => ({ date, revenue }))
+        .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime())
+        .slice(-14); // Last 14 days
+
+      // Top products
+      const productMap = new Map();
+      items?.forEach((item) => {
+        const name = item.product?.name || item.product_name;
+        if (!productMap.has(name)) {
+          productMap.set(name, { quantity: 0, revenue: 0 });
+        }
+        const current = productMap.get(name);
+        productMap.set(name, {
+          quantity: current.quantity + item.quantity,
+          revenue: current.revenue + item.total_price,
+        });
+      });
+      const topProducts = Array.from(productMap.entries())
+        .map(([name, stats]) => ({ name, ...stats }))
+        .sort((a, b) => b.revenue - a.revenue)
+        .slice(0, 8);
+
+      // Category breakdown
+      const categoryMap = new Map();
+      items?.forEach((item) => {
+        const category = item.product?.category || "Other";
+        categoryMap.set(
+          category,
+          (categoryMap.get(category) || 0) + item.total_price,
+        );
+      });
+      const categoryBreakdown = Array.from(categoryMap.entries())
+        .map(([name, value]) => ({ name, value }))
+        .sort((a, b) => b.value - a.value);
+
+      // Hourly pattern
+      const hourlyMap = new Map();
+      for (let i = 0; i < 24; i++) hourlyMap.set(i, 0);
+      items?.forEach((item) => {
+        const hour = new Date(item.invoice.created_at).getHours();
+        hourlyMap.set(hour, (hourlyMap.get(hour) || 0) + item.total_price);
+      });
+      const hourlyPattern = Array.from(hourlyMap.entries()).map(
+        ([hour, revenue]) => ({ hour: `${hour}:00`, revenue }),
+      );
+
+      setSalesData({
+        dailyRevenue,
+        topProducts,
+        categoryBreakdown,
+        hourlyPattern,
+      });
+    } catch (error: any) {
+      toast({
+        variant: "destructive",
+        title: "Error",
+        description: error.message,
+      });
+    } finally {
+      setLoading(false);
+    }
   };
 
-  const formatFullCurrency = (amount: number) => {
-    return new Intl.NumberFormat('id-ID', {
-      style: 'currency',
-      currency: 'IDR',
-      minimumFractionDigits: 0,
-    }).format(amount);
+  const fetchServiceData = async () => {
+    setLoading(true);
+    try {
+      const { data: services } = await supabase
+        .from("invoice_services")
+        .select(
+          `
+          *,
+          invoice:invoices!inner(invoice_date),
+          technician:employees(name, rating)
+        `,
+        )
+        .gte("invoice.invoice_date", dateRange.from.toISOString())
+        .lte("invoice.invoice_date", dateRange.to.toISOString());
+
+      // Status distribution
+      const statusMap = new Map([
+        ["completed", 0],
+        ["in_progress", 0],
+        ["pending", 0],
+        ["cancelled", 0],
+      ]);
+      services?.forEach((s) => {
+        statusMap.set(s.status, (statusMap.get(s.status) || 0) + 1);
+      });
+      const statusDistribution = Array.from(statusMap.entries()).map(
+        ([name, value]) => ({ name, value }),
+      );
+
+      // Priority breakdown
+      const priorityMap = new Map([
+        ["urgent", 0],
+        ["high", 0],
+        ["normal", 0],
+        ["low", 0],
+      ]);
+      services?.forEach((s) => {
+        priorityMap.set(s.priority, (priorityMap.get(s.priority) || 0) + 1);
+      });
+      const priorityBreakdown = Array.from(priorityMap.entries()).map(
+        ([name, value]) => ({ name, value }),
+      );
+
+      // Technician performance
+      const techMap = new Map();
+      services?.forEach((s) => {
+        if (s.technician) {
+          const name = s.technician.name;
+          if (!techMap.has(name)) {
+            techMap.set(name, {
+              jobs: 0,
+              completed: 0,
+              revenue: 0,
+              rating: s.technician.rating || 0,
+            });
+          }
+          const current = techMap.get(name);
+          techMap.set(name, {
+            jobs: current.jobs + 1,
+            completed: current.completed + (s.status === "completed" ? 1 : 0),
+            revenue: current.revenue + s.total_cost,
+            rating: current.rating,
+          });
+        }
+      });
+      const technicianPerformance = Array.from(techMap.entries())
+        .map(([name, stats]) => ({ name, ...stats }))
+        .sort((a, b) => b.revenue - a.revenue)
+        .slice(0, 10);
+
+      // Daily completion
+      const dailyMap = new Map();
+      services?.forEach((s) => {
+        if (s.status === "completed") {
+          const date = new Date(s.invoice.invoice_date).toLocaleDateString(
+            "id-ID",
+            { month: "short", day: "numeric" },
+          );
+          dailyMap.set(date, (dailyMap.get(date) || 0) + 1);
+        }
+      });
+      const dailyCompletion = Array.from(dailyMap.entries())
+        .map(([date, count]) => ({ date, count }))
+        .slice(-14);
+
+      setServiceData({
+        statusDistribution,
+        priorityBreakdown,
+        technicianPerformance,
+        dailyCompletion,
+      });
+    } catch (error: any) {
+      toast({
+        variant: "destructive",
+        title: "Error",
+        description: error.message,
+      });
+    } finally {
+      setLoading(false);
+    }
   };
 
-  if (loading) {
-    return (
-      <DashboardLayout>
-        <div className="flex items-center justify-center py-24">
-          <div className="h-8 w-8 animate-spin rounded-full border-4 border-primary border-t-transparent" />
-        </div>
-      </DashboardLayout>
-    );
-  }
+  const fetchFinancialData = async () => {
+    setLoading(true);
+    try {
+      const { data: invoices } = await supabase
+        .from("invoices")
+        .select(
+          `
+          *,
+          customer:customers(name),
+          items:invoice_items(total_price),
+          services:invoice_services(total_cost)
+        `,
+        )
+        .gte("invoice_date", dateRange.from.toISOString())
+        .lte("invoice_date", dateRange.to.toISOString());
+
+      // Revenue breakdown (Products vs Services)
+      const productRevenue =
+        invoices?.reduce(
+          (sum, inv) =>
+            sum + (inv.items?.reduce((s, i) => s + i.total_price, 0) || 0),
+          0,
+        ) || 0;
+      const serviceRevenue =
+        invoices?.reduce(
+          (sum, inv) =>
+            sum + (inv.services?.reduce((s, i) => s + i.total_cost, 0) || 0),
+          0,
+        ) || 0;
+
+      const revenueBreakdown = [
+        { name: "Products", value: productRevenue },
+        { name: "Services", value: serviceRevenue },
+      ];
+
+      // Payment status
+      const paymentMap = new Map([
+        ["paid", 0],
+        ["partial", 0],
+        ["unpaid", 0],
+      ]);
+      invoices?.forEach((inv) => {
+        paymentMap.set(
+          inv.payment_status,
+          (paymentMap.get(inv.payment_status) || 0) + inv.grand_total,
+        );
+      });
+      const paymentStatus = Array.from(paymentMap.entries()).map(
+        ([name, value]) => ({ name, value }),
+      );
+
+      // Top customers
+      const customerMap = new Map();
+      invoices?.forEach((inv) => {
+        const name = inv.customer?.name || "Unknown";
+        if (!customerMap.has(name)) {
+          customerMap.set(name, { orders: 0, revenue: 0, outstanding: 0 });
+        }
+        const current = customerMap.get(name);
+        customerMap.set(name, {
+          orders: current.orders + 1,
+          revenue: current.revenue + inv.grand_total,
+          outstanding:
+            current.outstanding + (inv.grand_total - inv.amount_paid),
+        });
+      });
+      const topCustomers = Array.from(customerMap.entries())
+        .map(([name, stats]) => ({ name, ...stats }))
+        .sort((a, b) => b.revenue - a.revenue)
+        .slice(0, 10);
+
+      // Aging receivables
+      const now = new Date();
+      const aging = {
+        current: 0,
+        days30: 0,
+        days60: 0,
+        days90: 0,
+        over90: 0,
+      };
+
+      invoices?.forEach((inv) => {
+        if (inv.payment_status !== "paid") {
+          const outstanding = inv.grand_total - inv.amount_paid;
+          const daysOld = Math.floor(
+            (now.getTime() - new Date(inv.invoice_date).getTime()) /
+              (1000 * 60 * 60 * 24),
+          );
+
+          if (daysOld <= 30) aging.current += outstanding;
+          else if (daysOld <= 60) aging.days30 += outstanding;
+          else if (daysOld <= 90) aging.days60 += outstanding;
+          else aging.over90 += outstanding;
+        }
+      });
+
+      const agingReceivables = [
+        { name: "0-30 days", value: aging.current },
+        { name: "31-60 days", value: aging.days30 },
+        { name: "61-90 days", value: aging.days60 },
+        { name: ">90 days", value: aging.over90 },
+      ];
+
+      setFinancialData({
+        revenueBreakdown,
+        paymentStatus,
+        topCustomers,
+        agingReceivables,
+      });
+    } catch (error: any) {
+      toast({
+        variant: "destructive",
+        title: "Error",
+        description: error.message,
+      });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const fetchInventoryData = async () => {
+    setLoading(true);
+    try {
+      const { data: products } = await supabase
+        .from("products")
+        .select(
+          `
+          *,
+          transactions:inventory_transactions(quantity, transaction_date)
+        `,
+        )
+        .eq("is_active", true);
+
+      // Stock levels by category
+      const categoryMap = new Map();
+      products?.forEach((p) => {
+        if (!categoryMap.has(p.category)) {
+          categoryMap.set(p.category, { stock: 0, value: 0 });
+        }
+        const current = categoryMap.get(p.category);
+        categoryMap.set(p.category, {
+          stock: current.stock + p.stock,
+          value: current.value + p.stock * p.sell_price,
+        });
+      });
+      const stockLevels = Array.from(categoryMap.entries()).map(
+        ([name, stats]) => ({ name, ...stats }),
+      );
+
+      // Fast moving (high sales volume)
+      const fastMoving =
+        products
+          ?.filter((p) => {
+            const totalSold =
+              p.transactions?.reduce(
+                (sum, t) => (t.quantity < 0 ? sum + Math.abs(t.quantity) : sum),
+                0,
+              ) || 0;
+            return totalSold > 10; // Sold more than 10 units
+          })
+          .map((p) => ({
+            name: p.name,
+            stock: p.stock,
+            sold:
+              p.transactions?.reduce(
+                (sum, t) => (t.quantity < 0 ? sum + Math.abs(t.quantity) : sum),
+                0,
+              ) || 0,
+          }))
+          .sort((a, b) => b.sold - a.sold)
+          .slice(0, 10) || [];
+
+      // Slow moving (low sales)
+      const slowMoving =
+        products
+          ?.filter((p) => {
+            const totalSold =
+              p.transactions?.reduce(
+                (sum, t) => (t.quantity < 0 ? sum + Math.abs(t.quantity) : sum),
+                0,
+              ) || 0;
+            return p.stock > 0 && totalSold < 5;
+          })
+          .map((p) => ({
+            name: p.name,
+            stock: p.stock,
+            value: p.stock * p.sell_price,
+          }))
+          .sort((a, b) => b.value - a.value)
+          .slice(0, 10) || [];
+
+      // Alerts
+      const alerts =
+        products
+          ?.filter((p) => p.stock <= p.min_stock_threshold)
+          .map((p) => ({
+            name: p.name,
+            stock: p.stock,
+            threshold: p.min_stock_threshold,
+            severity: p.stock === 0 ? "critical" : "warning",
+          })) || [];
+
+      setInventoryData({ stockLevels, fastMoving, slowMoving, alerts });
+    } catch (error: any) {
+      toast({
+        variant: "destructive",
+        title: "Error",
+        description: error.message,
+      });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const exportToExcel = () => {
+    const wb = XLSX.utils.book_new();
+
+    // Overview sheet
+    const overviewData = [
+      ["Metric", "Value", "Growth"],
+      [
+        "Total Revenue",
+        overview.totalRevenue,
+        formatPercent(overview.revenueGrowth),
+      ],
+      [
+        "Total Orders",
+        overview.totalOrders,
+        formatPercent(overview.ordersGrowth),
+      ],
+      ["Avg Order Value", overview.avgOrderValue, "-"],
+      [
+        "Total Services",
+        overview.totalServices,
+        formatPercent(overview.servicesGrowth),
+      ],
+      ["Completion Rate", `${overview.completionRate.toFixed(1)}%`, "-"],
+      ["Outstanding", overview.outstandingAmount, "-"],
+      ["Collection Rate", `${overview.collectionRate.toFixed(1)}%`, "-"],
+    ];
+    const ws1 = XLSX.utils.aoa_to_sheet(overviewData);
+    XLSX.utils.book_append_sheet(wb, ws1, "Overview");
+
+    if (activeTab === "sales" && salesData.topProducts.length > 0) {
+      const ws2 = XLSX.utils.json_to_sheet(salesData.topProducts);
+      XLSX.utils.book_append_sheet(wb, ws2, "Top Products");
+    }
+
+    if (activeTab === "financial" && financialData.topCustomers.length > 0) {
+      const ws3 = XLSX.utils.json_to_sheet(financialData.topCustomers);
+      XLSX.utils.book_append_sheet(wb, ws3, "Top Customers");
+    }
+
+    XLSX.writeFile(wb, `REKAMTEKNIK_Report_${Date.now()}.xlsx`);
+    toast({
+      title: "Export Successful",
+      description: "Report exported to Excel",
+    });
+  };
+
+  const StatCard = ({ title, value, growth, icon: Icon, trend }: any) => (
+    <Card className="relative overflow-hidden">
+      <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+        <CardTitle className="text-sm font-medium text-muted-foreground">
+          {title}
+        </CardTitle>
+        <Icon className="h-4 w-4 text-muted-foreground" />
+      </CardHeader>
+      <CardContent>
+        <div className="text-2xl font-bold">{value}</div>
+        {growth !== undefined && (
+          <div className="flex items-center gap-1 mt-1">
+            {growth >= 0 ? (
+              <ArrowUpRight className="h-4 w-4 text-green-600" />
+            ) : (
+              <ArrowDownRight className="h-4 w-4 text-red-600" />
+            )}
+            <span
+              className={`text-xs font-medium ${growth >= 0 ? "text-green-600" : "text-red-600"}`}
+            >
+              {formatPercent(growth)}
+            </span>
+            <span className="text-xs text-muted-foreground">
+              vs prev period
+            </span>
+          </div>
+        )}
+      </CardContent>
+    </Card>
+  );
 
   return (
     <DashboardLayout>
-      <div className="space-y-6 animate-fade-in">
+      <div className="space-y-6">
         {/* Header */}
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
           <div>
-            <h1 className="text-2xl font-bold tracking-tight">Reports & Analytics</h1>
+            <h1 className="text-3xl font-bold tracking-tight">
+              Analytics Dashboard
+            </h1>
             <p className="text-muted-foreground">
-              Business insights and performance metrics
+              {dateRange.from.toLocaleDateString("id-ID", {
+                day: "numeric",
+                month: "long",
+              })}{" "}
+              -{" "}
+              {dateRange.to.toLocaleDateString("id-ID", {
+                day: "numeric",
+                month: "long",
+                year: "numeric",
+              })}
             </p>
           </div>
-          <Select value={timeRange} onValueChange={setTimeRange}>
-            <SelectTrigger className="w-[180px]">
-              <SelectValue placeholder="Time range" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="7">Last 7 days</SelectItem>
-              <SelectItem value="30">Last 30 days</SelectItem>
-              <SelectItem value="90">Last 90 days</SelectItem>
-              <SelectItem value="365">Last year</SelectItem>
-            </SelectContent>
-          </Select>
+          <Button onClick={exportToExcel} size="lg">
+            <Download className="mr-2 h-4 w-4" />
+            Export Excel
+          </Button>
         </div>
 
-        {/* KPI Cards */}
-        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-          <Card className="stats-card">
-            <div className="stats-card-gradient" />
-            <CardHeader className="flex flex-row items-center justify-between pb-2">
-              <CardTitle className="text-sm font-medium">Total Revenue</CardTitle>
-              <DollarSign className="h-4 w-4 text-muted-foreground" />
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold">{formatCurrency(totalRevenue)}</div>
-              <div className="flex items-center gap-1 mt-1">
-                {monthlyComparison.change >= 0 ? (
-                  <TrendingUp className="h-4 w-4 text-emerald-600" />
-                ) : (
-                  <TrendingDown className="h-4 w-4 text-red-600" />
-                )}
-                <span className={`text-xs ${monthlyComparison.change >= 0 ? 'text-emerald-600' : 'text-red-600'}`}>
-                  {monthlyComparison.change >= 0 ? '+' : ''}{monthlyComparison.change.toFixed(1)}% from last month
-                </span>
-              </div>
-            </CardContent>
-          </Card>
-
-          <Card className="stats-card">
-            <div className="stats-card-gradient" />
-            <CardHeader className="flex flex-row items-center justify-between pb-2">
-              <CardTitle className="text-sm font-medium">Total Jobs</CardTitle>
-              <Briefcase className="h-4 w-4 text-muted-foreground" />
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold">{jobStats.total}</div>
-              <p className="text-xs text-muted-foreground mt-1">
-                {jobStats.completed} completed ({jobStats.total > 0 ? Math.round((jobStats.completed / jobStats.total) * 100) : 0}%)
-              </p>
-            </CardContent>
-          </Card>
-
-          <Card className="stats-card">
-            <div className="stats-card-gradient" />
-            <CardHeader className="flex flex-row items-center justify-between pb-2">
-              <CardTitle className="text-sm font-medium">Avg Duration</CardTitle>
-              <Clock className="h-4 w-4 text-muted-foreground" />
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold">{avgJobDuration} min</div>
-              <p className="text-xs text-muted-foreground mt-1">
-                Per completed job
-              </p>
-            </CardContent>
-          </Card>
-
-          <Card className="stats-card">
-            <div className="stats-card-gradient" />
-            <CardHeader className="flex flex-row items-center justify-between pb-2">
-              <CardTitle className="text-sm font-medium">Completion Rate</CardTitle>
-              <CheckCircle className="h-4 w-4 text-muted-foreground" />
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold">
-                {jobStats.total > 0 ? Math.round((jobStats.completed / jobStats.total) * 100) : 0}%
-              </div>
-              <p className="text-xs text-muted-foreground mt-1">
-                {jobStats.cancelled} cancelled
-              </p>
-            </CardContent>
-          </Card>
-        </div>
-
-        {/* Charts */}
-        <Tabs defaultValue="overview" className="space-y-6">
-          <TabsList>
+        {/* Tabs */}
+        <Tabs
+          value={activeTab}
+          onValueChange={setActiveTab}
+          className="space-y-6"
+        >
+          <TabsList className="grid w-full grid-cols-5 lg:w-auto lg:inline-grid">
             <TabsTrigger value="overview">Overview</TabsTrigger>
-            <TabsTrigger value="revenue">Revenue</TabsTrigger>
-            <TabsTrigger value="technicians">Technicians</TabsTrigger>
+            <TabsTrigger value="sales">Sales</TabsTrigger>
+            <TabsTrigger value="services">Services</TabsTrigger>
+            <TabsTrigger value="financial">Financial</TabsTrigger>
+            <TabsTrigger value="inventory">Inventory</TabsTrigger>
           </TabsList>
 
-          {/* Overview Tab */}
-          <TabsContent value="overview" className="space-y-6">
-            <div className="grid gap-6 lg:grid-cols-2">
-              {/* Jobs Over Time */}
-              <Card>
-                <CardHeader>
-                  <CardTitle>Jobs Over Time</CardTitle>
-                  <CardDescription>Daily job volume for the selected period</CardDescription>
-                </CardHeader>
-                <CardContent>
-                  <div className="h-[300px]">
-                    <ResponsiveContainer width="100%" height="100%">
-                      <AreaChart data={revenueData}>
+          {loading ? (
+            <div className="flex items-center justify-center py-12">
+              <div className="h-12 w-12 animate-spin rounded-full border-4 border-primary border-t-transparent" />
+            </div>
+          ) : (
+            <>
+              {/* OVERVIEW TAB */}
+              <TabsContent value="overview" className="space-y-6">
+                {/* Key Metrics */}
+                <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+                  <StatCard
+                    title="Total Revenue"
+                    value={formatCurrency(overview.totalRevenue)}
+                    growth={overview.revenueGrowth}
+                    icon={DollarSign}
+                  />
+                  <StatCard
+                    title="Total Orders"
+                    value={formatNumber(overview.totalOrders)}
+                    growth={overview.ordersGrowth}
+                    icon={FileText}
+                  />
+                  <StatCard
+                    title="Avg Order Value"
+                    value={formatCurrency(overview.avgOrderValue)}
+                    icon={TrendingUp}
+                  />
+                  <StatCard
+                    title="Collection Rate"
+                    value={`${overview.collectionRate.toFixed(1)}%`}
+                    icon={Target}
+                  />
+                </div>
+
+                <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+                  <StatCard
+                    title="Total Services"
+                    value={formatNumber(overview.totalServices)}
+                    growth={overview.servicesGrowth}
+                    icon={FileText}
+                  />
+                  <StatCard
+                    title="Completion Rate"
+                    value={`${overview.completionRate.toFixed(1)}%`}
+                    icon={CheckCircle2}
+                  />
+                  <StatCard
+                    title="Outstanding"
+                    value={formatCurrency(overview.outstandingAmount)}
+                    icon={AlertTriangle}
+                  />
+                  <StatCard
+                    title="Active Period"
+                    value={`${Math.ceil((dateRange.to.getTime() - dateRange.from.getTime()) / (1000 * 60 * 60 * 24))} Days`}
+                    icon={Calendar}
+                  />
+                </div>
+
+                {/* Performance Indicators */}
+                <div className="grid gap-4 md:grid-cols-2">
+                  <Card>
+                    <CardHeader>
+                      <CardTitle className="text-sm font-medium">
+                        Business Health Score
+                      </CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                      <div className="space-y-4">
+                        <div>
+                          <div className="flex items-center justify-between mb-2">
+                            <span className="text-sm font-medium">
+                              Revenue Growth
+                            </span>
+                            <span
+                              className={`text-sm font-bold ${overview.revenueGrowth >= 0 ? "text-green-600" : "text-red-600"}`}
+                            >
+                              {formatPercent(overview.revenueGrowth)}
+                            </span>
+                          </div>
+                          <div className="w-full bg-gray-200 rounded-full h-2">
+                            <div
+                              className={`h-2 rounded-full ${overview.revenueGrowth >= 0 ? "bg-green-600" : "bg-red-600"}`}
+                              style={{
+                                width: `${Math.min(Math.abs(overview.revenueGrowth), 100)}%`,
+                              }}
+                            />
+                          </div>
+                        </div>
+                        <div>
+                          <div className="flex items-center justify-between mb-2">
+                            <span className="text-sm font-medium">
+                              Completion Rate
+                            </span>
+                            <span className="text-sm font-bold text-blue-600">
+                              {overview.completionRate.toFixed(1)}%
+                            </span>
+                          </div>
+                          <div className="w-full bg-gray-200 rounded-full h-2">
+                            <div
+                              className="bg-blue-600 h-2 rounded-full"
+                              style={{ width: `${overview.completionRate}%` }}
+                            />
+                          </div>
+                        </div>
+                        <div>
+                          <div className="flex items-center justify-between mb-2">
+                            <span className="text-sm font-medium">
+                              Collection Rate
+                            </span>
+                            <span className="text-sm font-bold text-purple-600">
+                              {overview.collectionRate.toFixed(1)}%
+                            </span>
+                          </div>
+                          <div className="w-full bg-gray-200 rounded-full h-2">
+                            <div
+                              className="bg-purple-600 h-2 rounded-full"
+                              style={{ width: `${overview.collectionRate}%` }}
+                            />
+                          </div>
+                        </div>
+                      </div>
+                    </CardContent>
+                  </Card>
+
+                  <Card>
+                    <CardHeader>
+                      <CardTitle className="text-sm font-medium">
+                        Quick Stats
+                      </CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                      <div className="space-y-3">
+                        <div className="flex items-center justify-between p-3 bg-green-50 dark:bg-green-950 rounded-lg">
+                          <div className="flex items-center gap-2">
+                            <CheckCircle2 className="h-5 w-5 text-green-600" />
+                            <span className="text-sm font-medium">
+                              Services Completed
+                            </span>
+                          </div>
+                          <span className="text-lg font-bold text-green-600">
+                            {Math.round(
+                              overview.totalServices *
+                                (overview.completionRate / 100),
+                            )}
+                          </span>
+                        </div>
+                        <div className="flex items-center justify-between p-3 bg-blue-50 dark:bg-blue-950 rounded-lg">
+                          <div className="flex items-center gap-2">
+                            <Clock className="h-5 w-5 text-blue-600" />
+                            <span className="text-sm font-medium">
+                              In Progress
+                            </span>
+                          </div>
+                          <span className="text-lg font-bold text-blue-600">
+                            {Math.round(
+                              overview.totalServices *
+                                (1 - overview.completionRate / 100),
+                            )}
+                          </span>
+                        </div>
+                        <div className="flex items-center justify-between p-3 bg-orange-50 dark:bg-orange-950 rounded-lg">
+                          <div className="flex items-center gap-2">
+                            <AlertTriangle className="h-5 w-5 text-orange-600" />
+                            <span className="text-sm font-medium">
+                              Outstanding Balance
+                            </span>
+                          </div>
+                          <span className="text-lg font-bold text-orange-600">
+                            {formatCurrency(overview.outstandingAmount)}
+                          </span>
+                        </div>
+                      </div>
+                    </CardContent>
+                  </Card>
+                </div>
+              </TabsContent>
+
+              {/* SALES TAB */}
+              <TabsContent value="sales" className="space-y-6">
+                {/* Revenue Trend */}
+                <Card>
+                  <CardHeader>
+                    <CardTitle>Revenue Trend (Last 14 Days)</CardTitle>
+                    <CardDescription>Daily revenue performance</CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                    <ResponsiveContainer width="100%" height={300}>
+                      <AreaChart data={salesData.dailyRevenue}>
                         <defs>
-                          <linearGradient id="colorJobs" x1="0" y1="0" x2="0" y2="1">
-                            <stop offset="5%" stopColor={COLORS.primary} stopOpacity={0.3}/>
-                            <stop offset="95%" stopColor={COLORS.primary} stopOpacity={0}/>
+                          <linearGradient
+                            id="colorRevenue"
+                            x1="0"
+                            y1="0"
+                            x2="0"
+                            y2="1"
+                          >
+                            <stop
+                              offset="5%"
+                              stopColor={COLORS.primary}
+                              stopOpacity={0.8}
+                            />
+                            <stop
+                              offset="95%"
+                              stopColor={COLORS.primary}
+                              stopOpacity={0}
+                            />
                           </linearGradient>
                         </defs>
-                        <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
-                        <XAxis 
-                          dataKey="date" 
-                          tick={{ fontSize: 12 }}
-                          tickLine={false}
-                          axisLine={false}
+                        <CartesianGrid
+                          strokeDasharray="3 3"
+                          className="stroke-muted"
                         />
-                        <YAxis 
-                          tick={{ fontSize: 12 }}
-                          tickLine={false}
-                          axisLine={false}
+                        <XAxis dataKey="date" className="text-xs" />
+                        <YAxis
+                          className="text-xs"
+                          tickFormatter={(value) =>
+                            `${(value / 1000000).toFixed(1)}M`
+                          }
                         />
-                        <Tooltip 
-                          contentStyle={{ 
-                            backgroundColor: 'hsl(var(--card))',
-                            border: '1px solid hsl(var(--border))',
-                            borderRadius: '8px',
+                        <Tooltip
+                          formatter={(value: any) => [
+                            formatCurrency(value),
+                            "Revenue",
+                          ]}
+                          contentStyle={{
+                            backgroundColor: "hsl(var(--background))",
+                            border: "1px solid hsl(var(--border))",
                           }}
                         />
-                        <Area 
-                          type="monotone" 
-                          dataKey="jobs" 
+                        <Area
+                          type="monotone"
+                          dataKey="revenue"
                           stroke={COLORS.primary}
-                          strokeWidth={2}
                           fillOpacity={1}
-                          fill="url(#colorJobs)"
-                          name="Jobs"
+                          fill="url(#colorRevenue)"
                         />
                       </AreaChart>
                     </ResponsiveContainer>
-                  </div>
-                </CardContent>
-              </Card>
+                  </CardContent>
+                </Card>
 
-              {/* Status Distribution */}
-              <Card>
-                <CardHeader>
-                  <CardTitle>Job Status Distribution</CardTitle>
-                  <CardDescription>Current status breakdown of all jobs</CardDescription>
-                </CardHeader>
-                <CardContent>
-                  <div className="h-[300px]">
-                    <ResponsiveContainer width="100%" height="100%">
-                      <PieChart>
-                        <Pie
-                          data={statusDistribution}
-                          cx="50%"
-                          cy="50%"
-                          innerRadius={60}
-                          outerRadius={100}
-                          paddingAngle={2}
-                          dataKey="value"
+                <div className="grid gap-6 md:grid-cols-2">
+                  {/* Top Products */}
+                  <Card>
+                    <CardHeader>
+                      <CardTitle>Top Products</CardTitle>
+                      <CardDescription>Best sellers by revenue</CardDescription>
+                    </CardHeader>
+                    <CardContent>
+                      <ResponsiveContainer width="100%" height={300}>
+                        <BarChart
+                          data={salesData.topProducts.slice(0, 6)}
+                          layout="vertical"
                         >
-                          {statusDistribution.map((entry, index) => (
-                            <Cell key={`cell-${index}`} fill={entry.color} />
+                          <CartesianGrid
+                            strokeDasharray="3 3"
+                            className="stroke-muted"
+                          />
+                          <XAxis
+                            type="number"
+                            className="text-xs"
+                            tickFormatter={(value) =>
+                              `${(value / 1000000).toFixed(1)}M`
+                            }
+                          />
+                          <YAxis
+                            dataKey="name"
+                            type="category"
+                            className="text-xs"
+                            width={100}
+                          />
+                          <Tooltip
+                            formatter={(value: any) => [
+                              formatCurrency(value),
+                              "Revenue",
+                            ]}
+                            contentStyle={{
+                              backgroundColor: "hsl(var(--background))",
+                              border: "1px solid hsl(var(--border))",
+                            }}
+                          />
+                          <Bar
+                            dataKey="revenue"
+                            fill={COLORS.success}
+                            radius={[0, 4, 4, 0]}
+                          />
+                        </BarChart>
+                      </ResponsiveContainer>
+                    </CardContent>
+                  </Card>
+
+                  {/* Category Breakdown */}
+                  <Card>
+                    <CardHeader>
+                      <CardTitle>Category Distribution</CardTitle>
+                      <CardDescription>
+                        Revenue by product category
+                      </CardDescription>
+                    </CardHeader>
+                    <CardContent>
+                      <ResponsiveContainer width="100%" height={300}>
+                        <PieChart>
+                          <Pie
+                            data={salesData.categoryBreakdown}
+                            cx="50%"
+                            cy="50%"
+                            labelLine={false}
+                            label={({ name, percent }) =>
+                              `${name}: ${(percent * 100).toFixed(0)}%`
+                            }
+                            outerRadius={80}
+                            fill="#8884d8"
+                            dataKey="value"
+                          >
+                            {salesData.categoryBreakdown.map((entry, index) => (
+                              <Cell
+                                key={`cell-${index}`}
+                                fill={CHART_COLORS[index % CHART_COLORS.length]}
+                              />
+                            ))}
+                          </Pie>
+                          <Tooltip
+                            formatter={(value: any) => formatCurrency(value)}
+                            contentStyle={{
+                              backgroundColor: "hsl(var(--background))",
+                              border: "1px solid hsl(var(--border))",
+                            }}
+                          />
+                        </PieChart>
+                      </ResponsiveContainer>
+                    </CardContent>
+                  </Card>
+
+                  {/* Hourly Pattern */}
+                  <Card className="md:col-span-2">
+                    <CardHeader>
+                      <CardTitle>Sales Pattern by Hour</CardTitle>
+                      <CardDescription>
+                        Peak sales hours analysis
+                      </CardDescription>
+                    </CardHeader>
+                    <CardContent>
+                      <ResponsiveContainer width="100%" height={200}>
+                        <BarChart data={salesData.hourlyPattern}>
+                          <CartesianGrid
+                            strokeDasharray="3 3"
+                            className="stroke-muted"
+                          />
+                          <XAxis dataKey="hour" className="text-xs" />
+                          <YAxis
+                            className="text-xs"
+                            tickFormatter={(value) =>
+                              `${(value / 1000000).toFixed(1)}M`
+                            }
+                          />
+                          <Tooltip
+                            formatter={(value: any) => [
+                              formatCurrency(value),
+                              "Revenue",
+                            ]}
+                            contentStyle={{
+                              backgroundColor: "hsl(var(--background))",
+                              border: "1px solid hsl(var(--border))",
+                            }}
+                          />
+                          <Bar
+                            dataKey="revenue"
+                            fill={COLORS.purple}
+                            radius={[4, 4, 0, 0]}
+                          />
+                        </BarChart>
+                      </ResponsiveContainer>
+                    </CardContent>
+                  </Card>
+
+                  {/* Product Performance Table */}
+                  <Card className="md:col-span-2">
+                    <CardHeader>
+                      <CardTitle>Product Performance Detail</CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                      <Table>
+                        <TableHeader>
+                          <TableRow>
+                            <TableHead>#</TableHead>
+                            <TableHead>Product</TableHead>
+                            <TableHead className="text-right">
+                              Units Sold
+                            </TableHead>
+                            <TableHead className="text-right">
+                              Revenue
+                            </TableHead>
+                            <TableHead className="text-right">
+                              Avg Price
+                            </TableHead>
+                          </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                          {salesData.topProducts.map((product, idx) => (
+                            <TableRow key={idx}>
+                              <TableCell className="font-medium">
+                                {idx + 1}
+                              </TableCell>
+                              <TableCell className="font-medium">
+                                {product.name}
+                              </TableCell>
+                              <TableCell className="text-right">
+                                {formatNumber(product.quantity)}
+                              </TableCell>
+                              <TableCell className="text-right font-medium">
+                                {formatCurrency(product.revenue)}
+                              </TableCell>
+                              <TableCell className="text-right">
+                                {formatCurrency(
+                                  product.revenue / product.quantity,
+                                )}
+                              </TableCell>
+                            </TableRow>
                           ))}
-                        </Pie>
-                        <Tooltip 
-                          contentStyle={{ 
-                            backgroundColor: 'hsl(var(--card))',
-                            border: '1px solid hsl(var(--border))',
-                            borderRadius: '8px',
-                          }}
-                        />
-                        <Legend />
-                      </PieChart>
-                    </ResponsiveContainer>
-                  </div>
-                </CardContent>
-              </Card>
-
-              {/* Priority Distribution */}
-              <Card>
-                <CardHeader>
-                  <CardTitle>Priority Distribution</CardTitle>
-                  <CardDescription>Jobs by priority level</CardDescription>
-                </CardHeader>
-                <CardContent>
-                  <div className="h-[300px]">
-                    <ResponsiveContainer width="100%" height="100%">
-                      <BarChart data={priorityDistribution} layout="vertical">
-                        <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
-                        <XAxis type="number" tick={{ fontSize: 12 }} />
-                        <YAxis 
-                          dataKey="name" 
-                          type="category" 
-                          tick={{ fontSize: 12 }}
-                          width={80}
-                        />
-                        <Tooltip 
-                          contentStyle={{ 
-                            backgroundColor: 'hsl(var(--card))',
-                            border: '1px solid hsl(var(--border))',
-                            borderRadius: '8px',
-                          }}
-                        />
-                        <Bar 
-                          dataKey="value" 
-                          name="Jobs"
-                          radius={[0, 4, 4, 0]}
-                        >
-                          {priorityDistribution.map((entry, index) => (
-                            <Cell key={`cell-${index}`} fill={entry.color} />
-                          ))}
-                        </Bar>
-                      </BarChart>
-                    </ResponsiveContainer>
-                  </div>
-                </CardContent>
-              </Card>
-
-              {/* Quick Stats */}
-              <Card>
-                <CardHeader>
-                  <CardTitle>Quick Stats</CardTitle>
-                  <CardDescription>Key metrics at a glance</CardDescription>
-                </CardHeader>
-                <CardContent className="space-y-4">
-                  <div className="flex items-center justify-between p-4 rounded-lg bg-muted">
-                    <div className="flex items-center gap-3">
-                      <div className="p-2 rounded-full bg-amber-100">
-                        <AlertTriangle className="h-5 w-5 text-amber-600" />
-                      </div>
-                      <div>
-                        <p className="font-medium">Pending Jobs</p>
-                        <p className="text-sm text-muted-foreground">Awaiting action</p>
-                      </div>
-                    </div>
-                    <span className="text-2xl font-bold">{jobStats.pending}</span>
-                  </div>
-
-                  <div className="flex items-center justify-between p-4 rounded-lg bg-muted">
-                    <div className="flex items-center gap-3">
-                      <div className="p-2 rounded-full bg-blue-100">
-                        <Briefcase className="h-5 w-5 text-blue-600" />
-                      </div>
-                      <div>
-                        <p className="font-medium">In Progress</p>
-                        <p className="text-sm text-muted-foreground">Currently active</p>
-                      </div>
-                    </div>
-                    <span className="text-2xl font-bold">{jobStats.inProgress}</span>
-                  </div>
-
-                  <div className="flex items-center justify-between p-4 rounded-lg bg-muted">
-                    <div className="flex items-center gap-3">
-                      <div className="p-2 rounded-full bg-emerald-100">
-                        <CheckCircle className="h-5 w-5 text-emerald-600" />
-                      </div>
-                      <div>
-                        <p className="font-medium">Completed</p>
-                        <p className="text-sm text-muted-foreground">Successfully done</p>
-                      </div>
-                    </div>
-                    <span className="text-2xl font-bold">{jobStats.completed}</span>
-                  </div>
-                </CardContent>
-              </Card>
-            </div>
-          </TabsContent>
-
-          {/* Revenue Tab */}
-          <TabsContent value="revenue" className="space-y-6">
-            <Card>
-              <CardHeader>
-                <CardTitle>Revenue Trend</CardTitle>
-                <CardDescription>Daily revenue for the selected period</CardDescription>
-              </CardHeader>
-              <CardContent>
-                <div className="h-[400px]">
-                  <ResponsiveContainer width="100%" height="100%">
-                    <LineChart data={revenueData}>
-                      <defs>
-                        <linearGradient id="colorRevenue" x1="0" y1="0" x2="0" y2="1">
-                          <stop offset="5%" stopColor={COLORS.success} stopOpacity={0.3}/>
-                          <stop offset="95%" stopColor={COLORS.success} stopOpacity={0}/>
-                        </linearGradient>
-                      </defs>
-                      <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
-                      <XAxis 
-                        dataKey="date" 
-                        tick={{ fontSize: 12 }}
-                        tickLine={false}
-                        axisLine={false}
-                      />
-                      <YAxis 
-                        tick={{ fontSize: 12 }}
-                        tickLine={false}
-                        axisLine={false}
-                        tickFormatter={(value) => formatCurrency(value)}
-                      />
-                      <Tooltip 
-                        contentStyle={{ 
-                          backgroundColor: 'hsl(var(--card))',
-                          border: '1px solid hsl(var(--border))',
-                          borderRadius: '8px',
-                        }}
-                        formatter={(value: number) => [formatFullCurrency(value), 'Revenue']}
-                      />
-                      <Legend />
-                      <Line 
-                        type="monotone" 
-                        dataKey="revenue" 
-                        stroke={COLORS.success}
-                        strokeWidth={3}
-                        dot={{ fill: COLORS.success, strokeWidth: 2 }}
-                        activeDot={{ r: 6 }}
-                        name="Revenue"
-                      />
-                    </LineChart>
-                  </ResponsiveContainer>
+                        </TableBody>
+                      </Table>
+                    </CardContent>
+                  </Card>
                 </div>
-              </CardContent>
-            </Card>
+              </TabsContent>
 
-            <div className="grid gap-6 lg:grid-cols-2">
-              <Card>
-                <CardHeader>
-                  <CardTitle>Monthly Comparison</CardTitle>
-                  <CardDescription>Current vs previous month</CardDescription>
-                </CardHeader>
-                <CardContent>
-                  <div className="space-y-6">
-                    <div>
-                      <p className="text-sm text-muted-foreground">This Month</p>
-                      <p className="text-3xl font-bold text-primary">{formatFullCurrency(monthlyComparison.current)}</p>
-                    </div>
-                    <div>
-                      <p className="text-sm text-muted-foreground">Last Month</p>
-                      <p className="text-2xl font-semibold">{formatFullCurrency(monthlyComparison.previous)}</p>
-                    </div>
-                    <div className={`flex items-center gap-2 p-3 rounded-lg ${monthlyComparison.change >= 0 ? 'bg-emerald-50' : 'bg-red-50'}`}>
-                      {monthlyComparison.change >= 0 ? (
-                        <TrendingUp className="h-5 w-5 text-emerald-600" />
-                      ) : (
-                        <TrendingDown className="h-5 w-5 text-red-600" />
-                      )}
-                      <span className={`font-medium ${monthlyComparison.change >= 0 ? 'text-emerald-700' : 'text-red-700'}`}>
-                        {monthlyComparison.change >= 0 ? '+' : ''}{monthlyComparison.change.toFixed(1)}% change
-                      </span>
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
+              {/* SERVICES TAB */}
+              <TabsContent value="services" className="space-y-6">
+                <div className="grid gap-6 md:grid-cols-2">
+                  {/* Status Distribution */}
+                  <Card>
+                    <CardHeader>
+                      <CardTitle>Service Status</CardTitle>
+                      <CardDescription>
+                        Current service distribution
+                      </CardDescription>
+                    </CardHeader>
+                    <CardContent>
+                      <ResponsiveContainer width="100%" height={300}>
+                        <PieChart>
+                          <Pie
+                            data={serviceData.statusDistribution}
+                            cx="50%"
+                            cy="50%"
+                            innerRadius={60}
+                            outerRadius={90}
+                            paddingAngle={5}
+                            dataKey="value"
+                            label={({ name, value }) => `${name}: ${value}`}
+                          >
+                            {serviceData.statusDistribution.map(
+                              (entry, index) => (
+                                <Cell
+                                  key={`cell-${index}`}
+                                  fill={
+                                    CHART_COLORS[index % CHART_COLORS.length]
+                                  }
+                                />
+                              ),
+                            )}
+                          </Pie>
+                          <Tooltip
+                            contentStyle={{
+                              backgroundColor: "hsl(var(--background))",
+                              border: "1px solid hsl(var(--border))",
+                            }}
+                          />
+                        </PieChart>
+                      </ResponsiveContainer>
+                    </CardContent>
+                  </Card>
 
-              <Card>
-                <CardHeader>
-                  <CardTitle>Jobs vs Revenue</CardTitle>
-                  <CardDescription>Correlation between jobs and revenue</CardDescription>
-                </CardHeader>
-                <CardContent>
-                  <div className="h-[250px]">
-                    <ResponsiveContainer width="100%" height="100%">
-                      <BarChart data={revenueData.slice(-14)}>
-                        <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
-                        <XAxis dataKey="date" tick={{ fontSize: 10 }} />
-                        <YAxis yAxisId="left" tick={{ fontSize: 12 }} />
-                        <YAxis yAxisId="right" orientation="right" tick={{ fontSize: 12 }} />
-                        <Tooltip 
-                          contentStyle={{ 
-                            backgroundColor: 'hsl(var(--card))',
-                            border: '1px solid hsl(var(--border))',
-                            borderRadius: '8px',
-                          }}
-                        />
-                        <Legend />
-                        <Bar yAxisId="left" dataKey="jobs" fill={COLORS.primary} name="Jobs" radius={[4, 4, 0, 0]} />
-                        <Bar yAxisId="right" dataKey="revenue" fill={COLORS.success} name="Revenue" radius={[4, 4, 0, 0]} />
-                      </BarChart>
-                    </ResponsiveContainer>
-                  </div>
-                </CardContent>
-              </Card>
-            </div>
-          </TabsContent>
+                  {/* Priority Breakdown */}
+                  <Card>
+                    <CardHeader>
+                      <CardTitle>Priority Levels</CardTitle>
+                      <CardDescription>Services by priority</CardDescription>
+                    </CardHeader>
+                    <CardContent>
+                      <ResponsiveContainer width="100%" height={300}>
+                        <BarChart data={serviceData.priorityBreakdown}>
+                          <CartesianGrid
+                            strokeDasharray="3 3"
+                            className="stroke-muted"
+                          />
+                          <XAxis dataKey="name" className="text-xs" />
+                          <YAxis className="text-xs" />
+                          <Tooltip
+                            contentStyle={{
+                              backgroundColor: "hsl(var(--background))",
+                              border: "1px solid hsl(var(--border))",
+                            }}
+                          />
+                          <Bar
+                            dataKey="value"
+                            fill={COLORS.warning}
+                            radius={[4, 4, 0, 0]}
+                          />
+                        </BarChart>
+                      </ResponsiveContainer>
+                    </CardContent>
+                  </Card>
 
-          {/* Technicians Tab */}
-          <TabsContent value="technicians" className="space-y-6">
-            <Card>
-              <CardHeader>
-                <CardTitle>Technician Performance</CardTitle>
-                <CardDescription>Jobs completed by each technician</CardDescription>
-              </CardHeader>
-              <CardContent>
-                <div className="h-[400px]">
-                  <ResponsiveContainer width="100%" height="100%">
-                    <BarChart data={technicianPerformance} layout="vertical">
-                      <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
-                      <XAxis type="number" tick={{ fontSize: 12 }} />
-                      <YAxis 
-                        dataKey="name" 
-                        type="category" 
-                        tick={{ fontSize: 12 }}
-                        width={120}
-                      />
-                      <Tooltip 
-                        contentStyle={{ 
-                          backgroundColor: 'hsl(var(--card))',
-                          border: '1px solid hsl(var(--border))',
-                          borderRadius: '8px',
-                        }}
-                      />
-                      <Legend />
-                      <Bar 
-                        dataKey="jobsCompleted" 
-                        fill={COLORS.primary}
-                        name="Jobs Completed"
-                        radius={[0, 4, 4, 0]}
-                      />
-                    </BarChart>
-                  </ResponsiveContainer>
+                  {/* Daily Completion */}
+                  <Card className="md:col-span-2">
+                    <CardHeader>
+                      <CardTitle>Completion Trend</CardTitle>
+                      <CardDescription>
+                        Services completed per day (Last 14 days)
+                      </CardDescription>
+                    </CardHeader>
+                    <CardContent>
+                      <ResponsiveContainer width="100%" height={250}>
+                        <LineChart data={serviceData.dailyCompletion}>
+                          <CartesianGrid
+                            strokeDasharray="3 3"
+                            className="stroke-muted"
+                          />
+                          <XAxis dataKey="date" className="text-xs" />
+                          <YAxis className="text-xs" />
+                          <Tooltip
+                            contentStyle={{
+                              backgroundColor: "hsl(var(--background))",
+                              border: "1px solid hsl(var(--border))",
+                            }}
+                          />
+                          <Line
+                            type="monotone"
+                            dataKey="count"
+                            stroke={COLORS.success}
+                            strokeWidth={2}
+                            dot={{ r: 4 }}
+                          />
+                        </LineChart>
+                      </ResponsiveContainer>
+                    </CardContent>
+                  </Card>
+
+                  {/* Technician Performance */}
+                  <Card className="md:col-span-2">
+                    <CardHeader>
+                      <CardTitle>Technician Performance</CardTitle>
+                      <CardDescription>
+                        Top performers by revenue
+                      </CardDescription>
+                    </CardHeader>
+                    <CardContent>
+                      <Table>
+                        <TableHeader>
+                          <TableRow>
+                            <TableHead>#</TableHead>
+                            <TableHead>Technician</TableHead>
+                            <TableHead className="text-right">
+                              Total Jobs
+                            </TableHead>
+                            <TableHead className="text-right">
+                              Completed
+                            </TableHead>
+                            <TableHead className="text-right">
+                              Completion %
+                            </TableHead>
+                            <TableHead className="text-right">
+                              Revenue
+                            </TableHead>
+                            <TableHead className="text-right">Rating</TableHead>
+                          </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                          {serviceData.technicianPerformance.map(
+                            (tech, idx) => (
+                              <TableRow key={idx}>
+                                <TableCell className="font-medium">
+                                  {idx + 1}
+                                </TableCell>
+                                <TableCell className="font-medium">
+                                  {tech.name}
+                                </TableCell>
+                                <TableCell className="text-right">
+                                  {tech.jobs}
+                                </TableCell>
+                                <TableCell className="text-right">
+                                  {tech.completed}
+                                </TableCell>
+                                <TableCell className="text-right">
+                                  <Badge
+                                    variant={
+                                      tech.completed / tech.jobs >= 0.8
+                                        ? "default"
+                                        : "secondary"
+                                    }
+                                  >
+                                    {(
+                                      (tech.completed / tech.jobs) *
+                                      100
+                                    ).toFixed(0)}
+                                    %
+                                  </Badge>
+                                </TableCell>
+                                <TableCell className="text-right font-medium">
+                                  {formatCurrency(tech.revenue)}
+                                </TableCell>
+                                <TableCell className="text-right">
+                                  <span className="text-yellow-600">★</span>{" "}
+                                  {tech.rating.toFixed(1)}
+                                </TableCell>
+                              </TableRow>
+                            ),
+                          )}
+                        </TableBody>
+                      </Table>
+                    </CardContent>
+                  </Card>
                 </div>
-              </CardContent>
-            </Card>
+              </TabsContent>
 
-            <div className="grid gap-6 lg:grid-cols-2">
-              <Card>
-                <CardHeader>
-                  <CardTitle>Average Job Duration</CardTitle>
-                  <CardDescription>Minutes per job by technician</CardDescription>
-                </CardHeader>
-                <CardContent>
-                  <div className="h-[300px]">
-                    <ResponsiveContainer width="100%" height="100%">
-                      <BarChart data={technicianPerformance.filter(t => t.avgDuration > 0)}>
-                        <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
-                        <XAxis dataKey="name" tick={{ fontSize: 10 }} />
-                        <YAxis tick={{ fontSize: 12 }} />
-                        <Tooltip 
-                          contentStyle={{ 
-                            backgroundColor: 'hsl(var(--card))',
-                            border: '1px solid hsl(var(--border))',
-                            borderRadius: '8px',
-                          }}
-                          formatter={(value: number) => [`${value} min`, 'Avg Duration']}
-                        />
-                        <Bar 
-                          dataKey="avgDuration" 
-                          fill={COLORS.info}
-                          name="Avg Duration (min)"
-                          radius={[4, 4, 0, 0]}
-                        />
-                      </BarChart>
-                    </ResponsiveContainer>
-                  </div>
-                </CardContent>
-              </Card>
+              {/* FINANCIAL TAB */}
+              <TabsContent value="financial" className="space-y-6">
+                <div className="grid gap-6 md:grid-cols-2">
+                  {/* Revenue Breakdown */}
+                  <Card>
+                    <CardHeader>
+                      <CardTitle>Revenue Sources</CardTitle>
+                      <CardDescription>Products vs Services</CardDescription>
+                    </CardHeader>
+                    <CardContent>
+                      <ResponsiveContainer width="100%" height={300}>
+                        <PieChart>
+                          <Pie
+                            data={financialData.revenueBreakdown}
+                            cx="50%"
+                            cy="50%"
+                            labelLine={true}
+                            label={({ name, value }) =>
+                              `${name}: ${formatCurrency(value)}`
+                            }
+                            outerRadius={90}
+                            fill="#8884d8"
+                            dataKey="value"
+                          >
+                            <Cell fill={COLORS.primary} />
+                            <Cell fill={COLORS.success} />
+                          </Pie>
+                          <Tooltip
+                            formatter={(value: any) => formatCurrency(value)}
+                            contentStyle={{
+                              backgroundColor: "hsl(var(--background))",
+                              border: "1px solid hsl(var(--border))",
+                            }}
+                          />
+                        </PieChart>
+                      </ResponsiveContainer>
+                    </CardContent>
+                  </Card>
 
-              <Card>
-                <CardHeader>
-                  <CardTitle>Technician Leaderboard</CardTitle>
-                  <CardDescription>Top performers this period</CardDescription>
-                </CardHeader>
-                <CardContent>
-                  <div className="space-y-4">
-                    {technicianPerformance.slice(0, 5).map((tech, index) => (
-                      <div key={tech.name} className="flex items-center gap-4">
-                        <div className={`flex items-center justify-center h-8 w-8 rounded-full font-bold text-sm ${
-                          index === 0 ? 'bg-amber-100 text-amber-700' :
-                          index === 1 ? 'bg-gray-200 text-gray-700' :
-                          index === 2 ? 'bg-orange-100 text-orange-700' :
-                          'bg-muted text-muted-foreground'
-                        }`}>
-                          {index + 1}
+                  {/* Payment Status */}
+                  <Card>
+                    <CardHeader>
+                      <CardTitle>Payment Status</CardTitle>
+                      <CardDescription>Collection breakdown</CardDescription>
+                    </CardHeader>
+                    <CardContent>
+                      <ResponsiveContainer width="100%" height={300}>
+                        <BarChart data={financialData.paymentStatus}>
+                          <CartesianGrid
+                            strokeDasharray="3 3"
+                            className="stroke-muted"
+                          />
+                          <XAxis dataKey="name" className="text-xs" />
+                          <YAxis
+                            className="text-xs"
+                            tickFormatter={(value) =>
+                              `${(value / 1000000).toFixed(1)}M`
+                            }
+                          />
+                          <Tooltip
+                            formatter={(value: any) => formatCurrency(value)}
+                            contentStyle={{
+                              backgroundColor: "hsl(var(--background))",
+                              border: "1px solid hsl(var(--border))",
+                            }}
+                          />
+                          <Bar
+                            dataKey="value"
+                            fill={COLORS.teal}
+                            radius={[4, 4, 0, 0]}
+                          />
+                        </BarChart>
+                      </ResponsiveContainer>
+                    </CardContent>
+                  </Card>
+
+                  {/* Aging Receivables */}
+                  <Card className="md:col-span-2">
+                    <CardHeader>
+                      <CardTitle>Aging Receivables</CardTitle>
+                      <CardDescription>
+                        Outstanding balances by age
+                      </CardDescription>
+                    </CardHeader>
+                    <CardContent>
+                      <ResponsiveContainer width="100%" height={250}>
+                        <BarChart data={financialData.agingReceivables}>
+                          <CartesianGrid
+                            strokeDasharray="3 3"
+                            className="stroke-muted"
+                          />
+                          <XAxis dataKey="name" className="text-xs" />
+                          <YAxis
+                            className="text-xs"
+                            tickFormatter={(value) =>
+                              `${(value / 1000000).toFixed(1)}M`
+                            }
+                          />
+                          <Tooltip
+                            formatter={(value: any) => formatCurrency(value)}
+                            contentStyle={{
+                              backgroundColor: "hsl(var(--background))",
+                              border: "1px solid hsl(var(--border))",
+                            }}
+                          />
+                          <Bar
+                            dataKey="value"
+                            fill={COLORS.danger}
+                            radius={[4, 4, 0, 0]}
+                          />
+                        </BarChart>
+                      </ResponsiveContainer>
+                    </CardContent>
+                  </Card>
+
+                  {/* Top Customers */}
+                  <Card className="md:col-span-2">
+                    <CardHeader>
+                      <CardTitle>Top Customers</CardTitle>
+                      <CardDescription>
+                        Best customers by revenue
+                      </CardDescription>
+                    </CardHeader>
+                    <CardContent>
+                      <Table>
+                        <TableHeader>
+                          <TableRow>
+                            <TableHead>#</TableHead>
+                            <TableHead>Customer</TableHead>
+                            <TableHead className="text-right">Orders</TableHead>
+                            <TableHead className="text-right">
+                              Total Revenue
+                            </TableHead>
+                            <TableHead className="text-right">
+                              Outstanding
+                            </TableHead>
+                            <TableHead className="text-right">
+                              Payment Rate
+                            </TableHead>
+                          </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                          {financialData.topCustomers.map((customer, idx) => {
+                            const paymentRate =
+                              customer.revenue > 0
+                                ? ((customer.revenue - customer.outstanding) /
+                                    customer.revenue) *
+                                  100
+                                : 0;
+                            return (
+                              <TableRow key={idx}>
+                                <TableCell className="font-medium">
+                                  {idx + 1}
+                                </TableCell>
+                                <TableCell className="font-medium">
+                                  {customer.name}
+                                </TableCell>
+                                <TableCell className="text-right">
+                                  {customer.orders}
+                                </TableCell>
+                                <TableCell className="text-right font-medium">
+                                  {formatCurrency(customer.revenue)}
+                                </TableCell>
+                                <TableCell className="text-right">
+                                  <span
+                                    className={
+                                      customer.outstanding > 0
+                                        ? "text-orange-600"
+                                        : "text-green-600"
+                                    }
+                                  >
+                                    {formatCurrency(customer.outstanding)}
+                                  </span>
+                                </TableCell>
+                                <TableCell className="text-right">
+                                  <Badge
+                                    variant={
+                                      paymentRate >= 80
+                                        ? "default"
+                                        : "secondary"
+                                    }
+                                  >
+                                    {paymentRate.toFixed(0)}%
+                                  </Badge>
+                                </TableCell>
+                              </TableRow>
+                            );
+                          })}
+                        </TableBody>
+                      </Table>
+                    </CardContent>
+                  </Card>
+                </div>
+              </TabsContent>
+
+              {/* INVENTORY TAB */}
+              <TabsContent value="inventory" className="space-y-6">
+                <div className="grid gap-6 md:grid-cols-2">
+                  {/* Stock Levels by Category */}
+                  <Card>
+                    <CardHeader>
+                      <CardTitle>Stock by Category</CardTitle>
+                      <CardDescription>Inventory distribution</CardDescription>
+                    </CardHeader>
+                    <CardContent>
+                      <ResponsiveContainer width="100%" height={300}>
+                        <BarChart data={inventoryData.stockLevels}>
+                          <CartesianGrid
+                            strokeDasharray="3 3"
+                            className="stroke-muted"
+                          />
+                          <XAxis dataKey="name" className="text-xs" />
+                          <YAxis className="text-xs" />
+                          <Tooltip
+                            formatter={(value: any, name: string) =>
+                              name === "value" ? formatCurrency(value) : value
+                            }
+                            contentStyle={{
+                              backgroundColor: "hsl(var(--background))",
+                              border: "1px solid hsl(var(--border))",
+                            }}
+                          />
+                          <Bar
+                            dataKey="stock"
+                            fill={COLORS.primary}
+                            name="Units"
+                          />
+                        </BarChart>
+                      </ResponsiveContainer>
+                    </CardContent>
+                  </Card>
+
+                  {/* Stock Value by Category */}
+                  <Card>
+                    <CardHeader>
+                      <CardTitle>Stock Value</CardTitle>
+                      <CardDescription>
+                        Value distribution by category
+                      </CardDescription>
+                    </CardHeader>
+                    <CardContent>
+                      <ResponsiveContainer width="100%" height={300}>
+                        <PieChart>
+                          <Pie
+                            data={inventoryData.stockLevels}
+                            cx="50%"
+                            cy="50%"
+                            labelLine={false}
+                            label={({ name, percent }) =>
+                              `${name}: ${(percent * 100).toFixed(0)}%`
+                            }
+                            outerRadius={90}
+                            fill="#8884d8"
+                            dataKey="value"
+                          >
+                            {inventoryData.stockLevels.map((entry, index) => (
+                              <Cell
+                                key={`cell-${index}`}
+                                fill={CHART_COLORS[index % CHART_COLORS.length]}
+                              />
+                            ))}
+                          </Pie>
+                          <Tooltip
+                            formatter={(value: any) => formatCurrency(value)}
+                            contentStyle={{
+                              backgroundColor: "hsl(var(--background))",
+                              border: "1px solid hsl(var(--border))",
+                            }}
+                          />
+                        </PieChart>
+                      </ResponsiveContainer>
+                    </CardContent>
+                  </Card>
+
+                  {/* Stock Alerts */}
+                  {inventoryData.alerts.length > 0 && (
+                    <Card className="md:col-span-2">
+                      <CardHeader>
+                        <CardTitle className="flex items-center gap-2">
+                          <AlertTriangle className="h-5 w-5 text-orange-600" />
+                          Stock Alerts ({inventoryData.alerts.length})
+                        </CardTitle>
+                        <CardDescription>
+                          Low stock and out of stock items
+                        </CardDescription>
+                      </CardHeader>
+                      <CardContent>
+                        <div className="grid gap-2 md:grid-cols-2 lg:grid-cols-3">
+                          {inventoryData.alerts
+                            .slice(0, 6)
+                            .map((alert, idx) => (
+                              <div
+                                key={idx}
+                                className={`p-3 rounded-lg border-2 ${
+                                  alert.severity === "critical"
+                                    ? "border-red-600 bg-red-50 dark:bg-red-950"
+                                    : "border-orange-600 bg-orange-50 dark:bg-orange-950"
+                                }`}
+                              >
+                                <div className="font-medium text-sm">
+                                  {alert.name}
+                                </div>
+                                <div className="flex items-center justify-between mt-1">
+                                  <span className="text-xs text-muted-foreground">
+                                    Stock: {alert.stock} / Min:{" "}
+                                    {alert.threshold}
+                                  </span>
+                                  <Badge
+                                    variant={
+                                      alert.severity === "critical"
+                                        ? "destructive"
+                                        : "secondary"
+                                    }
+                                  >
+                                    {alert.severity === "critical"
+                                      ? "Out of Stock"
+                                      : "Low Stock"}
+                                  </Badge>
+                                </div>
+                              </div>
+                            ))}
                         </div>
-                        <div className="flex-1">
-                          <p className="font-medium">{tech.name}</p>
-                          <p className="text-sm text-muted-foreground">
-                            {tech.jobsCompleted} jobs · {tech.avgDuration > 0 ? `${tech.avgDuration} min avg` : 'No data'}
-                          </p>
-                        </div>
-                        {tech.rating > 0 && (
-                          <div className="flex items-center gap-1 text-amber-500">
-                            <span className="font-medium">{tech.rating.toFixed(1)}</span>
-                            <span>★</span>
-                          </div>
-                        )}
-                      </div>
-                    ))}
-                    {technicianPerformance.length === 0 && (
-                      <p className="text-sm text-muted-foreground text-center py-8">
-                        No technician data available
-                      </p>
-                    )}
-                  </div>
-                </CardContent>
-              </Card>
-            </div>
-          </TabsContent>
+                      </CardContent>
+                    </Card>
+                  )}
+
+                  {/* Fast Moving Items */}
+                  <Card>
+                    <CardHeader>
+                      <CardTitle>Fast Moving Items</CardTitle>
+                      <CardDescription>High volume products</CardDescription>
+                    </CardHeader>
+                    <CardContent>
+                      <Table>
+                        <TableHeader>
+                          <TableRow>
+                            <TableHead>Product</TableHead>
+                            <TableHead className="text-right">Stock</TableHead>
+                            <TableHead className="text-right">Sold</TableHead>
+                          </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                          {inventoryData.fastMoving
+                            .slice(0, 5)
+                            .map((item, idx) => (
+                              <TableRow key={idx}>
+                                <TableCell className="font-medium">
+                                  {item.name}
+                                </TableCell>
+                                <TableCell className="text-right">
+                                  {item.stock}
+                                </TableCell>
+                                <TableCell className="text-right">
+                                  <Badge>{item.sold} units</Badge>
+                                </TableCell>
+                              </TableRow>
+                            ))}
+                        </TableBody>
+                      </Table>
+                    </CardContent>
+                  </Card>
+
+                  {/* Slow Moving Items */}
+                  <Card>
+                    <CardHeader>
+                      <CardTitle>Slow Moving Items</CardTitle>
+                      <CardDescription>
+                        Consider promotions or discounts
+                      </CardDescription>
+                    </CardHeader>
+                    <CardContent>
+                      <Table>
+                        <TableHeader>
+                          <TableRow>
+                            <TableHead>Product</TableHead>
+                            <TableHead className="text-right">Stock</TableHead>
+                            <TableHead className="text-right">Value</TableHead>
+                          </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                          {inventoryData.slowMoving
+                            .slice(0, 5)
+                            .map((item, idx) => (
+                              <TableRow key={idx}>
+                                <TableCell className="font-medium">
+                                  {item.name}
+                                </TableCell>
+                                <TableCell className="text-right">
+                                  {item.stock}
+                                </TableCell>
+                                <TableCell className="text-right">
+                                  {formatCurrency(item.value)}
+                                </TableCell>
+                              </TableRow>
+                            ))}
+                        </TableBody>
+                      </Table>
+                    </CardContent>
+                  </Card>
+                </div>
+              </TabsContent>
+            </>
+          )}
         </Tabs>
       </div>
     </DashboardLayout>

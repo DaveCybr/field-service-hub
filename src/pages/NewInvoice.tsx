@@ -182,7 +182,7 @@ export default function NewInvoice() {
         description: `Invoice ${invoice.invoice_number} created successfully`,
       });
 
-      navigate(`/invoices/${invoice.id}`);
+      navigate(`/invoices/${invoice.invoice_number}`);
     } catch (error: any) {
       console.error("Error creating invoice:", error);
       toast({

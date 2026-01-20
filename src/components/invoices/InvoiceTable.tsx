@@ -209,7 +209,7 @@ export function InvoiceTable({
               </TableHead>
               <TableHead>Status</TableHead>
               <TableHead>Payment</TableHead>
-              <TableHead className="w-12"></TableHead>
+              {/* <TableHead className="w-12"></TableHead> */}
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -255,7 +255,7 @@ export function InvoiceTable({
                 </TableCell>
                 <TableCell>{getStatusBadge(invoice.status)}</TableCell>
                 <TableCell>{getPaymentBadge(invoice.payment_status)}</TableCell>
-                <TableCell onClick={(e) => e.stopPropagation()}>
+                {/* <TableCell onClick={(e) => e.stopPropagation()}>
                   <DropdownMenu>
                     <DropdownMenuTrigger asChild>
                       <Button variant="ghost" size="icon" className="h-8 w-8">
@@ -279,7 +279,7 @@ export function InvoiceTable({
                       </DropdownMenuItem>
                     </DropdownMenuContent>
                   </DropdownMenu>
-                </TableCell>
+                </TableCell> */}
               </TableRow>
             ))}
           </TableBody>

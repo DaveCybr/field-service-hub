@@ -12,29 +12,35 @@ import {
 } from "@/components/ui/select";
 import { CurrencyInput } from "@/components/ui/currency-input";
 import { LocationPicker } from "@/components/jobs/LocationPicker";
-import { MapPin, AlertCircle, Sparkles } from "lucide-react";
+import { MapPin, AlertCircle, Sparkles, Plus } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
-import type { ServiceItem, Unit, Technician } from "@/types/invoice";
+import { QuickRegisterUnitModal } from "@/components/units/QuickRegisterUnitModal";
+import type { ServiceItem, Unit } from "@/types/invoice";
 
 interface ServiceFormProps {
   units: Unit[];
-  technicians: Technician[];
   customerId: string;
+  customerName?: string;
   onSubmit: (service: Omit<ServiceItem, "id">) => void;
   onCancel: () => void;
+  onUnitsRefresh?: () => void;
 }
 
-interface TechnicianWithWorkload extends Technician {
+interface FreeTechnician {
+  id: string;
+  name: string;
+  email: string;
   active_jobs_count: number;
 }
 
 export function ServiceForm({
   units,
-  technicians,
   customerId,
+  customerName,
   onSubmit,
   onCancel,
+  onUnitsRefresh,
 }: ServiceFormProps) {
   const { toast } = useToast();
   const [formData, setFormData] = useState<Partial<ServiceItem>>({
@@ -43,10 +49,9 @@ export function ServiceForm({
     priority: "normal",
     estimated_duration: 60,
   });
-  const [freeTechnicians, setFreeTechnicians] = useState<
-    TechnicianWithWorkload[]
-  >([]);
+  const [freeTechnicians, setFreeTechnicians] = useState<FreeTechnician[]>([]);
   const [loadingTechs, setLoadingTechs] = useState(false);
+  const [quickRegisterOpen, setQuickRegisterOpen] = useState(false);
 
   // Fetch free technicians on mount
   useEffect(() => {
@@ -60,24 +65,21 @@ export function ServiceForm({
         .from("employees")
         .select(
           `
-        id,
-        name,
-        email,
-        status,
-        active_jobs:invoice_services!assigned_technician_id(count)
-      `,
+          id,
+          name,
+          email,
+          active_jobs:invoice_services!assigned_technician_id(count)
+        `,
         )
         .eq("role", "technician")
         .in("status", ["available", "off_duty"]);
 
       if (error) throw error;
 
-      // Filter only free technicians (0 active jobs)
       const techsWithWorkload = (data || []).map((tech: any) => ({
         id: tech.id,
         name: tech.name,
         email: tech.email,
-        status: tech.status, // ✅ ADD THIS
         active_jobs_count: tech.active_jobs?.[0]?.count || 0,
       }));
 
@@ -109,12 +111,27 @@ export function ServiceForm({
     setFormData((prev) => ({ ...prev, [field]: value }));
   };
 
+  const handleUnitRegistered = (unitId: string) => {
+    // Auto-select the newly registered unit
+    updateField("unit_id", unitId);
+
+    // Refresh units list if callback provided
+    if (onUnitsRefresh) {
+      onUnitsRefresh();
+    }
+
+    toast({
+      title: "Unit Selected",
+      description: "The newly registered unit has been selected",
+    });
+  };
+
   // Filter units by selected customer
   const customerUnits = units.filter((unit) => {
     if (customerId) {
-      return unit.customer_id === customerId; // Filter by customer!
+      return unit.customer_id === customerId;
     }
-    return false; // No customer = no units
+    return false;
   });
 
   return (
@@ -141,27 +158,70 @@ export function ServiceForm({
           />
         </div>
 
-        {/* Unit Selection */}
+        {/* Unit Selection with Quick Register */}
         <div className="space-y-2">
           <Label>Unit (Optional)</Label>
-          <Select
-            value={formData.unit_id || ""}
-            onValueChange={(value) => updateField("unit_id", value)}
-          >
-            <SelectTrigger>
-              <SelectValue placeholder="Select unit" />
-            </SelectTrigger>
-            <SelectContent>
-              {customerUnits.map((unit) => (
-                <SelectItem key={unit.id} value={unit.id}>
-                  {unit.unit_type} - {unit.brand}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+          <div className="flex gap-2">
+            <Select
+              value={formData.unit_id || ""}
+              onValueChange={(value) => updateField("unit_id", value)}
+              disabled={!customerId}
+            >
+              <SelectTrigger className="flex-1">
+                <SelectValue
+                  placeholder={
+                    !customerId
+                      ? "Select customer first"
+                      : customerUnits.length === 0
+                        ? "No units found"
+                        : "Select unit"
+                  }
+                />
+              </SelectTrigger>
+              <SelectContent>
+                {customerUnits.length === 0 ? (
+                  <div className="px-2 py-3 text-xs text-muted-foreground text-center">
+                    No units registered for this customer
+                  </div>
+                ) : (
+                  customerUnits.map((unit) => (
+                    <SelectItem key={unit.id} value={unit.id}>
+                      {unit.unit_type} - {unit.brand || "Unknown Brand"}
+                      {unit.model && ` (${unit.model})`}
+                    </SelectItem>
+                  ))
+                )}
+              </SelectContent>
+            </Select>
+
+            {/* Quick Register Button */}
+            {customerId && (
+              <Button
+                type="button"
+                variant="outline"
+                size="icon"
+                onClick={() => setQuickRegisterOpen(true)}
+                title="Quick register unit"
+              >
+                <Plus className="h-4 w-4" />
+              </Button>
+            )}
+          </div>
+
+          {/* Helper Text */}
+          {!customerId ? (
+            <p className="text-xs text-muted-foreground">
+              Please select a customer first
+            </p>
+          ) : customerUnits.length === 0 ? (
+            <p className="text-xs text-muted-foreground flex items-center gap-1">
+              <Plus className="h-3 w-3" />
+              No units found. Click + to register a new unit
+            </p>
+          ) : null}
         </div>
 
-        {/* Technician Selection - UPDATED */}
+        {/* Technician Selection */}
         <div className="space-y-2">
           <Label>Technician Assignment</Label>
           <Select
@@ -327,6 +387,15 @@ export function ServiceForm({
           Cancel
         </Button>
       </div>
+
+      {/* Quick Register Modal */}
+      <QuickRegisterUnitModal
+        open={quickRegisterOpen}
+        onOpenChange={setQuickRegisterOpen}
+        customerId={customerId}
+        customerName={customerName}
+        onUnitRegistered={handleUnitRegistered}
+      />
     </div>
   );
 }

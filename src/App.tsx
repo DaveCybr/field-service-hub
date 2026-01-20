@@ -39,6 +39,8 @@ import TechnicianJobsList from "./pages/TechnicianJobsList";
 import TechnicianJobDetail from "./pages/TechnicianJoDetail";
 import Jobs from "./pages/Jobs";
 import JobsDetail from "./pages/JobsDetail";
+import UnitDetail from "./pages/UnitDetail";
+import CustomerDetail from "./pages/CustomerDetail";
 
 const queryClient = new QueryClient();
 
@@ -307,6 +309,18 @@ function StaffRoutes() {
         }
       />
       <Route
+        path="/customers/:id"
+        element={
+          <SetupRoute>
+            <RoleProtectedRoute
+              allowedRoles={["superadmin", "admin", "manager"]}
+            >
+              <CustomerDetail />
+            </RoleProtectedRoute>
+          </SetupRoute>
+        }
+      />
+      <Route
         path="/units"
         element={
           <SetupRoute>
@@ -314,6 +328,18 @@ function StaffRoutes() {
               allowedRoles={["superadmin", "admin", "manager", "technician"]}
             >
               <Units />
+            </RoleProtectedRoute>
+          </SetupRoute>
+        }
+      />
+      <Route
+        path="/units/:id"
+        element={
+          <SetupRoute>
+            <RoleProtectedRoute
+              allowedRoles={["superadmin", "admin", "manager"]}
+            >
+              <UnitDetail />
             </RoleProtectedRoute>
           </SetupRoute>
         }

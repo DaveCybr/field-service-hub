@@ -82,7 +82,7 @@ export function ProductForm({
                 <SelectItem key={product.id} value={product.id}>
                   <div className="flex items-center justify-between w-full">
                     <span>{product.name}</span>
-                    <span className="ml-2 text-xs text-muted-foreground">
+                    <span className="ml-2 text-xs ">
                       {formatCurrency(product.sell_price)} • Stock:{" "}
                       {product.stock}
                     </span>
@@ -128,7 +128,7 @@ export function ProductForm({
               <span>Subtotal:</span>
               <span className="text-primary">
                 {formatCurrency(
-                  selectedProduct.sell_price * (parseInt(quantity) || 0)
+                  selectedProduct.sell_price * (parseInt(quantity) || 0),
                 )}
               </span>
             </div>

@@ -1,15 +1,21 @@
-import { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { supabase } from '@/integrations/supabase/client';
-import DashboardLayout from '@/components/layout/DashboardLayout';
-import QRScanner from '@/components/units/QRScanner';
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Badge } from '@/components/ui/badge';
-import { Separator } from '@/components/ui/separator';
-import { useToast } from '@/hooks/use-toast';
-import { format } from 'date-fns';
+import { useState } from "react";
+import { useNavigate } from "react-router-dom";
+import { supabase } from "@/integrations/supabase/client";
+import DashboardLayout from "@/components/layout/DashboardLayout";
+import QRScanner from "@/components/units/QRScanner";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
+import { Separator } from "@/components/ui/separator";
+import { useToast } from "@/hooks/use-toast";
+import { format } from "date-fns";
 import {
   QrCode,
   Search,
@@ -21,7 +27,8 @@ import {
   Plus,
   History,
   ArrowRight,
-} from 'lucide-react';
+  ExternalLink,
+} from "lucide-react";
 
 interface UnitDetails {
   id: string;
@@ -41,19 +48,23 @@ interface UnitDetails {
     phone: string;
     address: string | null;
   };
-  recent_jobs: Array<{
+  recent_services: Array<{
     id: string;
-    job_number: string;
     title: string;
     status: string;
+    priority: string;
     scheduled_date: string | null;
+    service_cost: number;
+    invoice: {
+      invoice_number: string;
+    };
   }>;
 }
 
 export default function ScanUnit() {
   const [unit, setUnit] = useState<UnitDetails | null>(null);
   const [loading, setLoading] = useState(false);
-  const [manualCode, setManualCode] = useState('');
+  const [manualCode, setManualCode] = useState("");
   const { toast } = useToast();
   const navigate = useNavigate();
 
@@ -62,10 +73,11 @@ export default function ScanUnit() {
     setUnit(null);
 
     try {
-      // Fetch unit with customer info
+      // ✅ FIXED: Fetch unit with customer info
       const { data: unitData, error: unitError } = await supabase
-        .from('units')
-        .select(`
+        .from("units")
+        .select(
+          `
           *,
           customers (
             id,
@@ -73,44 +85,59 @@ export default function ScanUnit() {
             phone,
             address
           )
-        `)
-        .eq('qr_code', qrCode)
+        `,
+        )
+        .eq("qr_code", qrCode)
         .single();
 
       if (unitError || !unitData) {
         toast({
-          variant: 'destructive',
-          title: 'Unit Not Found',
+          variant: "destructive",
+          title: "Unit Not Found",
           description: `No unit found with QR code: ${qrCode}`,
         });
         setLoading(false);
         return;
       }
 
-      // Fetch recent jobs for this unit
-      const { data: jobsData } = await supabase
-        .from('service_jobs')
-        .select('id, job_number, title, status, scheduled_date')
-        .eq('unit_id', unitData.id)
-        .order('created_at', { ascending: false })
+      // ✅ FIXED: Query correct table (invoice_services)
+      const { data: servicesData } = await supabase
+        .from("invoice_services")
+        .select(
+          `
+          id,
+          title,
+          status,
+          priority,
+          scheduled_date,
+          service_cost,
+          invoice:invoices!inner(invoice_number)
+        `,
+        )
+        .eq("unit_id", unitData.id)
+        .order("created_at", { ascending: false })
         .limit(5);
 
       setUnit({
         ...unitData,
         customer: unitData.customers as any,
-        recent_jobs: jobsData || [],
+        recent_services:
+          servicesData?.map((s) => ({
+            ...s,
+            invoice: Array.isArray(s.invoice) ? s.invoice[0] : s.invoice,
+          })) || [],
       });
 
       toast({
-        title: 'Unit Found',
+        title: "Unit Found",
         description: `${unitData.unit_type} - ${unitData.qr_code}`,
       });
     } catch (error: any) {
-      console.error('Lookup error:', error);
+      console.error("Lookup error:", error);
       toast({
-        variant: 'destructive',
-        title: 'Error',
-        description: 'Failed to lookup unit.',
+        variant: "destructive",
+        title: "Error",
+        description: "Failed to lookup unit.",
       });
     } finally {
       setLoading(false);
@@ -133,22 +160,24 @@ export default function ScanUnit() {
   };
 
   const getStatusColor = (status: string) => {
-    switch (status) {
-      case 'completed':
-      case 'completed_paid':
-        return 'bg-green-500/10 text-green-500';
-      case 'in_progress':
-        return 'bg-blue-500/10 text-blue-500';
-      case 'approved':
-        return 'bg-purple-500/10 text-purple-500';
-      case 'pending_assignment':
-      case 'pending_approval':
-        return 'bg-yellow-500/10 text-yellow-500';
-      case 'cancelled':
-        return 'bg-red-500/10 text-red-500';
-      default:
-        return 'bg-muted text-muted-foreground';
-    }
+    const statusColors: Record<string, string> = {
+      completed: "bg-green-100 text-green-800",
+      in_progress: "bg-blue-100 text-blue-800",
+      assigned: "bg-purple-100 text-purple-800",
+      pending: "bg-yellow-100 text-yellow-800",
+      cancelled: "bg-red-100 text-red-800",
+    };
+    return statusColors[status] || "bg-gray-100 text-gray-800";
+  };
+
+  const getPriorityColor = (priority: string) => {
+    const priorityColors: Record<string, string> = {
+      urgent: "bg-red-100 text-red-800",
+      high: "bg-orange-100 text-orange-800",
+      normal: "bg-blue-100 text-blue-800",
+      low: "bg-gray-100 text-gray-800",
+    };
+    return priorityColors[priority] || "bg-gray-100 text-gray-800";
   };
 
   return (
@@ -156,7 +185,9 @@ export default function ScanUnit() {
       <div className="space-y-6 animate-fade-in max-w-2xl mx-auto">
         {/* Header */}
         <div className="text-center">
-          <h1 className="text-2xl font-bold tracking-tight">Scan Unit QR Code</h1>
+          <h1 className="text-2xl font-bold tracking-tight">
+            Scan Unit QR Code
+          </h1>
           <p className="text-muted-foreground">
             Scan a QR code or enter it manually to lookup unit details
           </p>
@@ -179,9 +210,12 @@ export default function ScanUnit() {
                 placeholder="e.g., RT-M1234-ABC123"
                 value={manualCode}
                 onChange={(e) => setManualCode(e.target.value.toUpperCase())}
-                onKeyDown={(e) => e.key === 'Enter' && handleManualSearch()}
+                onKeyDown={(e) => e.key === "Enter" && handleManualSearch()}
               />
-              <Button onClick={handleManualSearch} disabled={!manualCode.trim() || loading}>
+              <Button
+                onClick={handleManualSearch}
+                disabled={!manualCode.trim() || loading}
+              >
                 <Search className="h-4 w-4" />
               </Button>
             </div>
@@ -214,9 +248,17 @@ export default function ScanUnit() {
                   </div>
                 </div>
                 {unit.warranty_expiry_date && (
-                  <Badge variant={isWarrantyActive(unit.warranty_expiry_date) ? 'default' : 'secondary'}>
+                  <Badge
+                    variant={
+                      isWarrantyActive(unit.warranty_expiry_date)
+                        ? "default"
+                        : "secondary"
+                    }
+                  >
                     <Shield className="mr-1 h-3 w-3" />
-                    {isWarrantyActive(unit.warranty_expiry_date) ? 'Warranty Active' : 'Warranty Expired'}
+                    {isWarrantyActive(unit.warranty_expiry_date)
+                      ? "Warranty Active"
+                      : "Warranty Expired"}
                   </Badge>
                 )}
               </div>
@@ -239,7 +281,9 @@ export default function ScanUnit() {
                 {unit.serial_number && (
                   <div>
                     <p className="text-muted-foreground">Serial Number</p>
-                    <p className="font-medium font-mono">{unit.serial_number}</p>
+                    <p className="font-medium font-mono">
+                      {unit.serial_number}
+                    </p>
                   </div>
                 )}
                 {unit.capacity && (
@@ -259,9 +303,13 @@ export default function ScanUnit() {
                 </div>
                 <div className="flex-1">
                   <p className="font-medium">{unit.customer.name}</p>
-                  <p className="text-sm text-muted-foreground">{unit.customer.phone}</p>
+                  <p className="text-sm text-muted-foreground">
+                    {unit.customer.phone}
+                  </p>
                   {unit.customer.address && (
-                    <p className="text-sm text-muted-foreground">{unit.customer.address}</p>
+                    <p className="text-sm text-muted-foreground">
+                      {unit.customer.address}
+                    </p>
                   )}
                 </div>
               </div>
@@ -269,7 +317,7 @@ export default function ScanUnit() {
               <Separator />
 
               {/* Service Stats */}
-              <div className="flex items-center gap-6 text-sm">
+              <div className="flex items-center gap-6 text-sm flex-wrap">
                 <div className="flex items-center gap-2">
                   <Wrench className="h-4 w-4 text-muted-foreground" />
                   <span>{unit.total_services || 0} services</span>
@@ -277,40 +325,77 @@ export default function ScanUnit() {
                 {unit.last_service_date && (
                   <div className="flex items-center gap-2">
                     <Calendar className="h-4 w-4 text-muted-foreground" />
-                    <span>Last: {format(new Date(unit.last_service_date), 'dd MMM yyyy')}</span>
+                    <span>
+                      Last:{" "}
+                      {format(new Date(unit.last_service_date), "dd MMM yyyy")}
+                    </span>
                   </div>
                 )}
                 {unit.warranty_expiry_date && (
                   <div className="flex items-center gap-2">
                     <Shield className="h-4 w-4 text-muted-foreground" />
-                    <span>Expires: {format(new Date(unit.warranty_expiry_date), 'dd MMM yyyy')}</span>
+                    <span>
+                      Expires:{" "}
+                      {format(
+                        new Date(unit.warranty_expiry_date),
+                        "dd MMM yyyy",
+                      )}
+                    </span>
                   </div>
                 )}
               </div>
 
-              {/* Recent Jobs */}
-              {unit.recent_jobs.length > 0 && (
+              {/* Recent Services */}
+              {unit.recent_services.length > 0 && (
                 <>
                   <Separator />
                   <div>
                     <div className="flex items-center gap-2 mb-3">
                       <History className="h-4 w-4 text-muted-foreground" />
-                      <h4 className="font-medium">Recent Jobs</h4>
+                      <h4 className="font-medium">Recent Services</h4>
                     </div>
                     <div className="space-y-2">
-                      {unit.recent_jobs.map((job) => (
+                      {unit.recent_services.map((service) => (
                         <button
-                          key={job.id}
-                          onClick={() => navigate(`/jobs/${job.id}`)}
-                          className="w-full flex items-center justify-between p-2 rounded-lg hover:bg-muted transition-colors text-left"
+                          key={service.id}
+                          onClick={() => navigate(`/jobs/${service.id}`)}
+                          className="w-full flex items-center justify-between p-3 rounded-lg hover:bg-muted transition-colors text-left border"
                         >
-                          <div>
-                            <p className="font-medium text-sm">{job.job_number}</p>
-                            <p className="text-xs text-muted-foreground">{job.title}</p>
+                          <div className="flex-1">
+                            <div className="flex items-center gap-2 mb-1">
+                              <p className="font-medium text-sm">
+                                {service.title}
+                              </p>
+                              <Badge
+                                variant="outline"
+                                className={getPriorityColor(service.priority)}
+                              >
+                                {service.priority}
+                              </Badge>
+                            </div>
+                            <div className="flex items-center gap-3 text-xs text-muted-foreground">
+                              <span className="font-mono">
+                                {service.invoice.invoice_number}
+                              </span>
+                              {service.scheduled_date && (
+                                <>
+                                  <span>•</span>
+                                  <span>
+                                    {format(
+                                      new Date(service.scheduled_date),
+                                      "dd MMM yyyy",
+                                    )}
+                                  </span>
+                                </>
+                              )}
+                            </div>
                           </div>
                           <div className="flex items-center gap-2">
-                            <Badge variant="outline" className={getStatusColor(job.status)}>
-                              {job.status.replace(/_/g, ' ')}
+                            <Badge
+                              variant="outline"
+                              className={getStatusColor(service.status)}
+                            >
+                              {service.status.replace(/_/g, " ")}
                             </Badge>
                             <ArrowRight className="h-4 w-4 text-muted-foreground" />
                           </div>
@@ -324,21 +409,23 @@ export default function ScanUnit() {
               <Separator />
 
               {/* Actions */}
-              <div className="flex gap-2">
-                <Button 
-                  className="flex-1" 
-                  onClick={() => navigate(`/jobs/new?unit_id=${unit.id}&customer_id=${unit.customer.id}`)}
+              <div className="grid grid-cols-2 gap-2">
+                <Button
+                  variant="outline"
+                  onClick={() => navigate(`/units/${unit.id}`)}
+                >
+                  <ExternalLink className="mr-2 h-4 w-4" />
+                  View Details
+                </Button>
+                <Button
+                  onClick={() =>
+                    navigate(
+                      `/invoices/new?customer_id=${unit.customer.id}&unit_id=${unit.id}`,
+                    )
+                  }
                 >
                   <Plus className="mr-2 h-4 w-4" />
-                  Create Job
-                </Button>
-                <Button 
-                  variant="outline" 
-                  className="flex-1"
-                  onClick={() => navigate('/units')}
-                >
-                  <Package className="mr-2 h-4 w-4" />
-                  View All Units
+                  New Service
                 </Button>
               </div>
             </CardContent>
