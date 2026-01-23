@@ -69,7 +69,7 @@ export default function InvoiceDetail() {
 
   const remainingAmount = Math.max(
     0,
-    invoice.grand_total - (invoice.amount_paid || 0)
+    invoice.grand_total - (invoice.amount_paid || 0),
   );
 
   return (
