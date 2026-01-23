@@ -106,6 +106,8 @@ export default function NewInvoice() {
             tax: taxAmount,
             notes: invoiceNotes,
             created_by: employee?.id,
+            created_at: new Date().toISOString(), // ✅ Add this
+            updated_at: new Date().toISOString(), // ✅ Add this
           },
         ])
         .select()

@@ -55,6 +55,9 @@ import {
   ComposedChart,
 } from "recharts";
 import * as XLSX from "xlsx";
+import { DateRangePicker } from "@/components/reports/DateRangePicker";
+import { format } from "date-fns";
+import { id } from "date-fns/locale";
 
 const COLORS = {
   primary: "#3b82f6",
@@ -747,22 +750,17 @@ export default function Reports() {
               Analytics Dashboard
             </h1>
             <p className="text-muted-foreground">
-              {dateRange.from.toLocaleDateString("id-ID", {
-                day: "numeric",
-                month: "long",
-              })}{" "}
-              -{" "}
-              {dateRange.to.toLocaleDateString("id-ID", {
-                day: "numeric",
-                month: "long",
-                year: "numeric",
-              })}
+              {format(dateRange.from, "d MMMM yyyy", { locale: id })} -{" "}
+              {format(dateRange.to, "d MMMM yyyy", { locale: id })}
             </p>
           </div>
-          <Button onClick={exportToExcel} size="lg">
-            <Download className="mr-2 h-4 w-4" />
-            Export Excel
-          </Button>
+          <div className="flex gap-2">
+            <DateRangePicker value={dateRange} onChange={setDateRange} />
+            <Button onClick={exportToExcel} size="lg">
+              <Download className="mr-2 h-4 w-4" />
+              Export Excel
+            </Button>
+          </div>
         </div>
 
         {/* Tabs */}

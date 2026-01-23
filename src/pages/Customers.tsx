@@ -44,6 +44,10 @@ import {
   Edit,
   Trash2,
   ExternalLink,
+  ChevronLeft,
+  ChevronRight,
+  ChevronsLeft,
+  ChevronsRight,
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { EditCustomerModal } from "@/components/customers/EditCustomerModal";
@@ -55,12 +59,15 @@ interface Customer {
   phone: string;
   email: string | null;
   address: string | null;
-  category: string;
+  category: "retail" | "project";
   payment_terms_days: number;
   current_outstanding: number;
   blacklisted: boolean;
   created_at: string;
+  updated_at: string;
 }
+
+const ITEMS_PER_PAGE = 10;
 
 export default function Customers() {
   const { t } = useTranslation();
@@ -71,6 +78,10 @@ export default function Customers() {
   const [categoryFilter, setCategoryFilter] = useState("all");
   const [dialogOpen, setDialogOpen] = useState(false);
   const [creating, setCreating] = useState(false);
+
+  // ✅ Pagination states
+  const [currentPage, setCurrentPage] = useState(1);
+  const [totalCount, setTotalCount] = useState(0);
 
   // CRUD states
   const [editingCustomer, setEditingCustomer] = useState<Customer | null>(null);
@@ -91,21 +102,39 @@ export default function Customers() {
 
   useEffect(() => {
     fetchCustomers();
-  }, [categoryFilter]);
+  }, [categoryFilter, searchQuery, currentPage]);
 
   const fetchCustomers = async () => {
     setLoading(true);
     try {
-      let query = supabase.from("customers").select("*").order("name");
+      // ✅ Build query with pagination
+      let query = supabase
+        .from("customers")
+        .select("*", { count: "exact" })
+        .order("updated_at", { ascending: false }); // ✅ Order by updated_at DESC
 
+      // Apply category filter
       if (categoryFilter !== "all") {
         query = query.eq("category", categoryFilter as "retail" | "project");
       }
 
-      const { data, error } = await query;
+      // Apply search filter
+      if (searchQuery) {
+        query = query.or(
+          `name.ilike.%${searchQuery}%,phone.ilike.%${searchQuery}%`,
+        );
+      }
+
+      // ✅ Apply pagination
+      const offset = (currentPage - 1) * ITEMS_PER_PAGE;
+      query = query.range(offset, offset + ITEMS_PER_PAGE - 1);
+
+      const { data, error, count } = await query;
 
       if (error) throw error;
+
       setCustomers(data || []);
+      setTotalCount(count || 0);
     } catch (error) {
       console.error("Error fetching customers:", error);
       toast({
@@ -131,6 +160,8 @@ export default function Customers() {
     setCreating(true);
     try {
       const customerCategory = formData.category as "retail" | "project";
+
+      // ✅ Add timestamps explicitly
       const { error } = await supabase.from("customers").insert([
         {
           name: formData.name,
@@ -139,6 +170,8 @@ export default function Customers() {
           address: formData.address || null,
           category: customerCategory,
           payment_terms_days: parseInt(formData.payment_terms_days) || 0,
+          created_at: new Date().toISOString(), // ✅ Set timestamp
+          updated_at: new Date().toISOString(), // ✅ Set timestamp
         },
       ]);
 
@@ -158,6 +191,9 @@ export default function Customers() {
         category: "retail",
         payment_terms_days: "0",
       });
+
+      // ✅ Reset to first page and fetch
+      setCurrentPage(1);
       fetchCustomers();
     } catch (error: any) {
       console.error("Error creating customer:", error);
@@ -179,12 +215,6 @@ export default function Customers() {
     }).format(amount);
   };
 
-  const filteredCustomers = customers.filter(
-    (customer) =>
-      customer.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      customer.phone.includes(searchQuery),
-  );
-
   const handleRowClick = (customerId: string) => {
     navigate(`/customers/${customerId}`);
   };
@@ -197,6 +227,16 @@ export default function Customers() {
   const handleDeleteSuccess = () => {
     setDeletingCustomer(null);
     fetchCustomers();
+  };
+
+  // ✅ Pagination calculations
+  const totalPages = Math.ceil(totalCount / ITEMS_PER_PAGE);
+  const startIndex = (currentPage - 1) * ITEMS_PER_PAGE + 1;
+  const endIndex = Math.min(currentPage * ITEMS_PER_PAGE, totalCount);
+
+  const goToPage = (page: number) => {
+    const pageNum = Math.max(1, Math.min(page, totalPages || 1));
+    setCurrentPage(pageNum);
   };
 
   return (
@@ -347,11 +387,20 @@ export default function Customers() {
                 <Input
                   placeholder={t("customers.searchCustomers")}
                   value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
+                  onChange={(e) => {
+                    setSearchQuery(e.target.value);
+                    setCurrentPage(1); // Reset to first page on search
+                  }}
                   className="pl-9"
                 />
               </div>
-              <Select value={categoryFilter} onValueChange={setCategoryFilter}>
+              <Select
+                value={categoryFilter}
+                onValueChange={(value) => {
+                  setCategoryFilter(value);
+                  setCurrentPage(1); // Reset to first page on filter
+                }}
+              >
                 <SelectTrigger className="w-full sm:w-[150px]">
                   <SelectValue placeholder={t("customers.category")} />
                 </SelectTrigger>
@@ -372,6 +421,19 @@ export default function Customers() {
           </CardContent>
         </Card>
 
+        {/* ✅ Results Summary */}
+        {!loading && totalCount > 0 && (
+          <div className="flex items-center justify-between text-sm text-muted-foreground">
+            <span>
+              Showing {startIndex} to {endIndex} of {totalCount} customer
+              {totalCount !== 1 ? "s" : ""}
+            </span>
+            <span className="text-primary font-medium">
+              {totalCount} results
+            </span>
+          </div>
+        )}
+
         {/* Customers Table */}
         <Card>
           <CardContent className="p-0">
@@ -379,7 +441,7 @@ export default function Customers() {
               <div className="flex items-center justify-center py-12">
                 <div className="h-8 w-8 animate-spin rounded-full border-4 border-primary border-t-transparent" />
               </div>
-            ) : filteredCustomers.length === 0 ? (
+            ) : customers.length === 0 ? (
               <div className="text-center py-12">
                 <h3 className="text-lg font-medium">
                   {t("customers.noCustomersFound")}
@@ -405,7 +467,7 @@ export default function Customers() {
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {filteredCustomers.map((customer) => (
+                    {customers.map((customer) => (
                       <TableRow
                         key={customer.id}
                         className="cursor-pointer hover:bg-muted/50"
@@ -537,6 +599,97 @@ export default function Customers() {
             )}
           </CardContent>
         </Card>
+
+        {/* ✅ Pagination */}
+        {!loading && totalCount > 0 && (
+          <Card className="p-4">
+            <div className="flex items-center justify-between">
+              <div className="text-sm text-muted-foreground">
+                Page {currentPage} of {totalPages}
+              </div>
+
+              <div className="flex items-center gap-2">
+                <Button
+                  variant="outline"
+                  size="icon"
+                  onClick={() => goToPage(1)}
+                  disabled={currentPage === 1}
+                  title="First page"
+                >
+                  <ChevronsLeft className="h-4 w-4" />
+                </Button>
+
+                <Button
+                  variant="outline"
+                  size="icon"
+                  onClick={() => goToPage(currentPage - 1)}
+                  disabled={currentPage === 1}
+                  title="Previous page"
+                >
+                  <ChevronLeft className="h-4 w-4" />
+                </Button>
+
+                {/* Page numbers */}
+                <div className="flex items-center gap-1">
+                  {Array.from({ length: totalPages }, (_, i) => i + 1).map(
+                    (page) => {
+                      const showPage =
+                        page === 1 ||
+                        page === totalPages ||
+                        Math.abs(page - currentPage) <= 1;
+
+                      if (!showPage && Math.abs(page - currentPage) === 2) {
+                        return <span key={page}>...</span>;
+                      }
+
+                      if (showPage) {
+                        return (
+                          <Button
+                            key={page}
+                            variant={
+                              currentPage === page ? "default" : "outline"
+                            }
+                            size="sm"
+                            onClick={() => goToPage(page)}
+                            className="h-8 w-8 p-0"
+                          >
+                            {page}
+                          </Button>
+                        );
+                      }
+
+                      return null;
+                    },
+                  )}
+                </div>
+
+                <Button
+                  variant="outline"
+                  size="icon"
+                  onClick={() => goToPage(currentPage + 1)}
+                  disabled={currentPage === totalPages}
+                  title="Next page"
+                >
+                  <ChevronRight className="h-4 w-4" />
+                </Button>
+
+                <Button
+                  variant="outline"
+                  size="icon"
+                  onClick={() => goToPage(totalPages)}
+                  disabled={currentPage === totalPages}
+                  title="Last page"
+                >
+                  <ChevronsRight className="h-4 w-4" />
+                </Button>
+              </div>
+
+              <div className="text-sm text-muted-foreground">
+                {ITEMS_PER_PAGE} items per page
+              </div>
+            </div>
+          </Card>
+        )}
       </div>
 
       {/* Edit Modal */}

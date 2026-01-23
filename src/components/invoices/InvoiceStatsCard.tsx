@@ -40,47 +40,59 @@ export function InvoiceStatsCards() {
       const monthStart = startOfMonth(now).toISOString();
       const monthEnd = endOfMonth(now).toISOString();
 
-      // Fetch invoices for this month
-      const { data: invoices, error } = await supabase
+      // ✅ FIX 1: Fetch ALL invoices (we'll filter in memory for better control)
+      const { data: allInvoices, error } = await supabase
         .from("invoices")
         .select(
-          "id, grand_total, amount_paid, payment_status, due_date, created_at"
+          "id, invoice_date, grand_total, amount_paid, payment_status, due_date, created_at",
         )
-        .gte("created_at", monthStart)
-        .lte("created_at", monthEnd);
+        .order("invoice_date", { ascending: false });
 
       if (error) throw error;
 
-      // Calculate stats
-      const totalThisMonth = invoices?.length || 0;
+      // ✅ FIX 2: Filter by invoice_date for THIS MONTH (not created_at)
+      const invoicesThisMonth =
+        allInvoices?.filter((inv) => {
+          const invoiceDate = new Date(inv.invoice_date);
+          return (
+            invoiceDate >= new Date(monthStart) &&
+            invoiceDate <= new Date(monthEnd)
+          );
+        }) || [];
 
-      // Pending payments (unpaid + partial)
-      const pendingInvoices =
-        invoices?.filter(
+      // Total invoices this month
+      const totalThisMonth = invoicesThisMonth.length;
+
+      // ✅ FIX 3: Pending payments - ALL invoices (not just this month)
+      // Pending = invoices yang belum lunas (unpaid atau partial)
+      const allPendingInvoices =
+        allInvoices?.filter(
           (inv) =>
-            inv.payment_status === "unpaid" || inv.payment_status === "partial"
+            inv.payment_status === "unpaid" || inv.payment_status === "partial",
         ) || [];
 
-      const pendingPaymentAmount = pendingInvoices.reduce(
+      const pendingPaymentAmount = allPendingInvoices.reduce(
         (sum, inv) => sum + (inv.grand_total - (inv.amount_paid || 0)),
-        0
+        0,
       );
 
-      const pendingPaymentCount = pendingInvoices.length;
+      const pendingPaymentCount = allPendingInvoices.length;
 
-      // Overdue (past due_date and not paid)
+      // ✅ FIX 4: Overdue - ALL invoices (not just this month)
+      // Overdue = invoices yang sudah lewat due_date dan belum paid
       const overdueCount =
-        invoices?.filter((inv) => {
+        allInvoices?.filter((inv) => {
           if (!inv.due_date) return false;
           if (inv.payment_status === "paid") return false;
           return isPast(new Date(inv.due_date));
         }).length || 0;
 
-      // Monthly revenue (all paid invoices)
-      const monthlyRevenue =
-        invoices
-          ?.filter((inv) => inv.payment_status === "paid")
-          .reduce((sum, inv) => sum + inv.grand_total, 0) || 0;
+      // ✅ FIX 5: Revenue THIS MONTH - use amount_paid (actual money received)
+      // Revenue = total uang yang diterima bulan ini
+      const monthlyRevenue = invoicesThisMonth.reduce(
+        (sum, inv) => sum + (inv.amount_paid || 0),
+        0,
+      );
 
       setStats({
         totalThisMonth,
