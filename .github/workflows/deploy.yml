@@ -1,51 +1,51 @@
-name: Deploy to VPS
+# name: Deploy to VPS
 
-on:
-  push:
-    branches: [main] # ganti ke 'master' kalau branch utama kamu master
+# on:
+#   push:
+#     branches: [main] # ganti ke 'master' kalau branch utama kamu master
 
-jobs:
-  deploy:
-    runs-on: ubuntu-latest
+# jobs:
+#   deploy:
+#     runs-on: ubuntu-latest
 
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v3
+#     steps:
+#       - name: Checkout code
+#         uses: actions/checkout@v3
 
-      - name: Setup Node.js
-        uses: actions/setup-node@v3
-        with:
-          node-version: "18"
-          cache: "npm"
+#       - name: Setup Node.js
+#         uses: actions/setup-node@v3
+#         with:
+#           node-version: "18"
+#           cache: "npm"
 
-      - name: Install dependencies
-        run: npm ci
+#       - name: Install dependencies
+#         run: npm ci
 
-      - name: Build project
-        run: npm run build
-        env:
-          VITE_SUPABASE_PROJECT_ID: ${{ secrets.VITE_SUPABASE_PROJECT_ID }}
-          VITE_SUPABASE_PUBLISHABLE_KEY: ${{ secrets.VITE_SUPABASE_PUBLISHABLE_KEY }}
-          VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
+#       - name: Build project
+#         run: npm run build
+#         env:
+#           VITE_SUPABASE_PROJECT_ID: ${{ secrets.VITE_SUPABASE_PROJECT_ID }}
+#           VITE_SUPABASE_PUBLISHABLE_KEY: ${{ secrets.VITE_SUPABASE_PUBLISHABLE_KEY }}
+#           VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
 
-      - name: Deploy to VPS
-        uses: appleboy/scp-action@v0.1.7
-        with:
-          host: ${{ secrets.VPS_HOST }}
-          username: ${{ secrets.VPS_USERNAME }}
-          key: ${{ secrets.VPS_SSH_KEY }}
-          source: "dist/*"
-          target: "/tmp/deploy-temp"
-          strip_components: 1
+#       - name: Deploy to VPS
+#         uses: appleboy/scp-action@v0.1.7
+#         with:
+#           host: ${{ secrets.VPS_HOST }}
+#           username: ${{ secrets.VPS_USERNAME }}
+#           key: ${{ secrets.VPS_SSH_KEY }}
+#           source: "dist/*"
+#           target: "/tmp/deploy-temp"
+#           strip_components: 1
 
-      - name: Move files to public_html
-        uses: appleboy/ssh-action@v1.0.3
-        with:
-          host: ${{ secrets.VPS_HOST }}
-          username: ${{ secrets.VPS_USERNAME }}
-          key: ${{ secrets.VPS_SSH_KEY }}
-          script: |
-            rm -rf /home/satelliteorbit/domains/rekamteknik.satelliteorbit.cloud/public_html/*
-            mv /tmp/deploy-temp/* /home/satelliteorbit/domains/rekamteknik.satelliteorbit.cloud/public_html/
-            rm -rf /tmp/deploy-temp
-            echo "Deploy completed at $(date)"
+#       - name: Move files to public_html
+#         uses: appleboy/ssh-action@v1.0.3
+#         with:
+#           host: ${{ secrets.VPS_HOST }}
+#           username: ${{ secrets.VPS_USERNAME }}
+#           key: ${{ secrets.VPS_SSH_KEY }}
+#           script: |
+#             rm -rf /home/satelliteorbit/domains/rekamteknik.satelliteorbit.cloud/public_html/*
+#             mv /tmp/deploy-temp/* /home/satelliteorbit/domains/rekamteknik.satelliteorbit.cloud/public_html/
+#             rm -rf /tmp/deploy-temp
+#             echo "Deploy completed at $(date)"
