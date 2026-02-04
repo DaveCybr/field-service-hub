@@ -95,37 +95,38 @@ export default function InvoiceDetail() {
           <InvoiceHeader
             invoice={invoice}
             canEdit={canEdit}
-            onStatusChange={async (newStatus) => {
-              try {
-                const { error } = await supabase
-                  .from("invoices")
-                  .update({ status: newStatus })
-                  .eq("id", invoice.id);
+            onRefresh={refetch}
+            // onStatusChange={async (newStatus) => {
+            //   try {
+            //     const { error } = await supabase
+            //       .from("invoices")
+            //       .update({ status: newStatus })
+            //       .eq("id", invoice.id);
 
-                if (error) throw error;
+            //     if (error) throw error;
 
-                await auditLog({
-                  action: "status_change",
-                  entityType: "invoice",
-                  entityId: invoice.id,
-                  oldData: { status: invoice.status },
-                  newData: { status: newStatus },
-                });
+            //     await auditLog({
+            //       action: "status_change",
+            //       entityType: "invoice",
+            //       entityId: invoice.id,
+            //       oldData: { status: invoice.status },
+            //       newData: { status: newStatus },
+            //     });
 
-                toast({
-                  title: "Status Updated",
-                  description: `Invoice status changed to ${newStatus}`,
-                });
+            //     toast({
+            //       title: "Status Updated",
+            //       description: `Invoice status changed to ${newStatus}`,
+            //     });
 
-                refetch();
-              } catch (error: any) {
-                toast({
-                  variant: "destructive",
-                  title: "Error",
-                  description: error.message || "Failed to update status",
-                });
-              }
-            }}
+            //     refetch();
+            //   } catch (error: any) {
+            //     toast({
+            //       variant: "destructive",
+            //       title: "Error",
+            //       description: error.message || "Failed to update status",
+            //     });
+            //   }
+            // }}
             onPrint={handlePrint}
           />
 
@@ -151,7 +152,7 @@ export default function InvoiceDetail() {
 
             {/* Services Tab */}
             <TabsContent value="services">
-              <ServicesTab services={services} />
+              <ServicesTab services={services} invoiceId={invoice.id} />
             </TabsContent>
 
             {/* Products Tab */}

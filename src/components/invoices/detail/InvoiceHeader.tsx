@@ -16,18 +16,21 @@ import { useNavigateWithParams } from "@/hooks/useNavigateWithParams";
 import type { Invoice } from "@/hooks/invoices/useInvoiceDetail";
 import { SendInvoiceEmail } from "../SendInvoiceEmail";
 import { DeleteInvoiceDialog } from "../DeleteInvoiceDialog";
+import { InvoiceStatusActions } from "../InvoiceStatusActions";
 
 interface InvoiceHeaderProps {
   invoice: Invoice;
   canEdit: boolean;
-  onStatusChange: (newStatus: string) => void;
+  // onStatusChange: (newStatus: string) => void;
   onPrint: () => void;
+  onRefresh: () => void;
 }
 
 export function InvoiceHeader({
   invoice,
   canEdit,
-  onStatusChange,
+  // onStatusChange,
+  onRefresh,
   onPrint,
 }: InvoiceHeaderProps) {
   const { goBack } = useNavigateWithParams();
@@ -74,7 +77,6 @@ export function InvoiceHeader({
             <Printer className="h-4 w-4 mr-2" />
             Print
           </Button>
-
           {/* Send Email Button */}
           <Button
             variant="outline"
@@ -84,7 +86,6 @@ export function InvoiceHeader({
             <Mail className="h-4 w-4 mr-2" />
             Send Email
           </Button>
-
           {/* Edit Button - Only for admins */}
           {canEdit && (
             <Button
@@ -96,7 +97,6 @@ export function InvoiceHeader({
               Edit
             </Button>
           )}
-
           {/* Delete Button - Only for admins */}
           {canEdit && (
             <Button
@@ -109,23 +109,8 @@ export function InvoiceHeader({
               Delete
             </Button>
           )}
-
-          {/* Status Dropdown - Only for admins */}
-          {canEdit && (
-            <Select value={invoice.status} onValueChange={onStatusChange}>
-              <SelectTrigger className="w-[140px]">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="draft">Draft</SelectItem>
-                <SelectItem value="pending">Pending</SelectItem>
-                <SelectItem value="in_progress">In Progress</SelectItem>
-                <SelectItem value="completed">Completed</SelectItem>
-                <SelectItem value="paid">Paid</SelectItem>
-                <SelectItem value="cancelled">Cancelled</SelectItem>
-              </SelectContent>
-            </Select>
-          )}
+          <InvoiceStatusActions invoice={invoice} onStatusChanged={onRefresh} />
+          ;
         </div>
       </div>
 
@@ -148,3 +133,158 @@ export function InvoiceHeader({
     </>
   );
 }
+
+// import { Card, CardContent, CardHeader } from "@/components/ui/card";
+// import { Badge } from "@/components/ui/badge";
+// import { Button } from "@/components/ui/button";
+// import { Separator } from "@/components/ui/separator";
+// import { ArrowLeft, Edit, Printer, MoreVertical } from "lucide-react";
+// import { useLocation, useNavigate } from "react-router-dom";
+// import { InvoiceStatusActions } from "@/components/invoices/InvoiceStatusActions";
+// import { formatCurrency } from "@/lib/utils/currency";
+// import { formatDate } from "@fullcalendar/core/index.js";
+// import { Invoice } from "@/hooks/invoices/useInvoiceDetail";
+// import { useNavigateWithParams } from "@/hooks/useNavigateWithParams";
+
+// interface InvoiceHeaderProps {
+//   invoice: Invoice;
+//   onRefresh: () => void;
+// }
+
+// export function InvoiceHeader({ invoice, onRefresh }: InvoiceHeaderProps) {
+//   const { goBack } = useNavigateWithParams();
+//   const navigate = useNavigate();
+//   const location = useLocation();
+
+//   // Check if we have query params to preserve
+//   const hasParams = location.search.length > 0;
+
+//   const getStatusColor = (status: string) => {
+//     const colors: Record<string, string> = {
+//       draft: "gray",
+//       pending: "yellow",
+//       assigned: "blue",
+//       in_progress: "purple",
+//       completed: "emerald",
+//       paid: "green",
+//       closed: "slate",
+//       cancelled: "red",
+//     };
+//     return colors[status] || "gray";
+//   };
+
+//   const getStatusLabel = (status: string) => {
+//     const labels: Record<string, string> = {
+//       draft: "Draft",
+//       pending: "Pending",
+//       assigned: "Assigned",
+//       in_progress: "In Progress",
+//       completed: "Completed",
+//       paid: "Paid",
+//       closed: "Closed",
+//       cancelled: "Cancelled",
+//     };
+//     return labels[status] || status;
+//   };
+
+//   const getPaymentStatusColor = (status: string) => {
+//     const colors: Record<string, string> = {
+//       unpaid: "red",
+//       partial: "amber",
+//       paid: "emerald",
+//     };
+//     return colors[status] || "gray";
+//   };
+
+//   const getPaymentStatusLabel = (status: string) => {
+//     const labels: Record<string, string> = {
+//       unpaid: "Unpaid",
+//       partial: "Partial",
+//       paid: "Paid",
+//     };
+//     return labels[status] || status;
+//   };
+
+//   return (
+//     <>
+//       <div className="flex items-center justify-between">
+//         <div className="flex items-center gap-4">
+//           <Button
+//             variant="ghost"
+//             size="icon"
+//             onClick={goBack}
+//             title={hasParams ? "Back to filtered list" : "Back to invoices"}
+//           >
+//             <ArrowLeft className="h-5 w-5" />
+//           </Button>
+
+//           <div>
+//             <h1 className="text-2xl font-bold">{invoice.invoice_number}</h1>
+//             <p className="text-sm text-muted-foreground">
+//               {formatDate(invoice.invoice_date)}
+//             </p>
+//           </div>
+//         </div>
+
+//         <div className="flex items-center gap-2">
+//           {/* Secondary Actions */}
+//           <Button variant="outline" size="sm">
+//             <Edit className="h-4 w-4 mr-2" />
+//             Edit
+//           </Button>
+//           <Button variant="outline" size="sm">
+//             <Printer className="h-4 w-4 mr-2" />
+//             Print
+//           </Button>
+
+//           {/* ⭐ PRIMARY ACTION: Status Actions */}
+//           <InvoiceStatusActions invoice={invoice} onStatusChanged={onRefresh} />
+//         </div>
+//       </div>
+
+//       <Separator className="my-4" />
+
+//       {/* Bottom Row: Status Badges + Customer + Amount */}
+//       <div className="flex items-center justify-between">
+//         <div className="flex items-center gap-4">
+//           {/* Status Badge */}
+//           <div className="flex items-center gap-2">
+//             <span className="text-sm text-muted-foreground">Status:</span>
+//             <Badge variant={getStatusColor(invoice.status) as any}>
+//               {getStatusLabel(invoice.status)}
+//             </Badge>
+//           </div>
+
+//           {/* Payment Status Badge */}
+//           <div className="flex items-center gap-2">
+//             <span className="text-sm text-muted-foreground">Payment:</span>
+//             <Badge
+//               variant={getPaymentStatusColor(invoice.payment_status) as any}
+//             >
+//               {getPaymentStatusLabel(invoice.payment_status)}
+//             </Badge>
+//           </div>
+
+//           {/* Customer */}
+//           <div className="text-sm">
+//             <span className="text-muted-foreground">Customer: </span>
+//             <span className="font-medium">{invoice.customer.name}</span>
+//           </div>
+//         </div>
+
+//         {/* Grand Total */}
+//         <div className="text-right">
+//           <p className="text-sm text-muted-foreground">Grand Total</p>
+//           <p className="text-2xl font-bold">
+//             {formatCurrency(invoice.grand_total)}
+//           </p>
+//           {invoice.amount_paid > 0 && (
+//             <p className="text-xs text-muted-foreground">
+//               Paid: {formatCurrency(invoice.amount_paid)}
+//             </p>
+//           )}
+//         </div>
+//       </div>
+//     </>
+//   );
+// }

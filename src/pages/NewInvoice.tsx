@@ -106,8 +106,8 @@ export default function NewInvoice() {
             tax: taxAmount,
             notes: invoiceNotes,
             created_by: employee?.id,
-            created_at: new Date().toISOString(), // ✅ Add this
-            updated_at: new Date().toISOString(), // ✅ Add this
+            created_at: new Date().toISOString(),
+            updated_at: new Date().toISOString(),
           },
         ])
         .select()
@@ -129,8 +129,8 @@ export default function NewInvoice() {
           service_longitude: service.service_longitude || null,
           estimated_duration_minutes: service.estimated_duration || 60,
           service_cost: service.service_cost || 0,
-          parts_cost: 0, // Default to 0, can be updated later
-          total_cost: service.service_cost || 0, // Total = service_cost + parts_cost
+          parts_cost: 0,
+          total_cost: service.service_cost || 0,
           priority: service.priority || "normal",
           status: "pending",
         }));
@@ -179,12 +179,20 @@ export default function NewInvoice() {
         },
       });
 
+      // ✅ SUCCESS TOAST dengan hint
       toast({
-        title: "Invoice Created",
-        description: `Invoice ${invoice.invoice_number} created successfully`,
+        title: "Invoice Created Successfully! 🎉",
+        description:
+          services.length > 0
+            ? "You can now assign technician teams in the Services tab"
+            : "Invoice created successfully",
+        duration: 5000,
       });
 
-      navigate(`/invoices/${invoice.invoice_number}`);
+      // ✅ REDIRECT dengan state untuk auto-open Services tab
+      navigate(`/invoices/${invoice.invoice_number}`, {
+        state: { openServicesTab: services.length > 0 }, // Only auto-open if has services
+      });
     } catch (error: any) {
       console.error("Error creating invoice:", error);
       toast({
@@ -196,7 +204,6 @@ export default function NewInvoice() {
       setSubmitting(false);
     }
   };
-
   if (dataLoading) {
     return (
       <DashboardLayout>

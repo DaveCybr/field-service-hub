@@ -67,7 +67,7 @@ export default function EditInvoice() {
   const calculateServiceTotal = () => {
     return services.reduce(
       (sum, service) => sum + (service.service_cost || 0),
-      0
+      0,
     );
   };
 
@@ -109,7 +109,7 @@ export default function EditInvoice() {
           `
           *,
           customer:customers(id, name)
-        `
+        `,
         )
         .eq("id", invoiceId)
         .single();
@@ -154,7 +154,7 @@ export default function EditInvoice() {
           estimated_duration: service.estimated_duration_minutes || 60,
           service_cost: service.service_cost || 0,
           priority: service.priority || "normal",
-        })
+        }),
       );
       setServices(mappedServices);
 
@@ -340,7 +340,7 @@ export default function EditInvoice() {
         {/* Header */}
         <div className="flex items-center gap-4">
           <Button variant="ghost" size="icon" asChild>
-            <Link to={`/invoices/${id}`}>
+            <Link to={`/invoices/${invoice.invoice_number}`}>
               <ArrowLeft className="h-5 w-5" />
             </Link>
           </Button>

@@ -10,9 +10,10 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { Alert, AlertDescription } from "@/components/ui/alert";
 import { CurrencyInput } from "@/components/ui/currency-input";
 import { LocationPicker } from "@/components/jobs/LocationPicker";
-import { MapPin, AlertCircle, Sparkles, Plus } from "lucide-react";
+import { MapPin, Info, Plus } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import { QuickRegisterUnitModal } from "@/components/units/QuickRegisterUnitModal";
@@ -25,13 +26,6 @@ interface ServiceFormProps {
   onSubmit: (service: Omit<ServiceItem, "id">) => void;
   onCancel: () => void;
   onUnitsRefresh?: () => void;
-}
-
-interface FreeTechnician {
-  id: string;
-  name: string;
-  email: string;
-  active_jobs_count: number;
 }
 
 export function ServiceForm({
@@ -49,50 +43,7 @@ export function ServiceForm({
     priority: "normal",
     estimated_duration: 60,
   });
-  const [freeTechnicians, setFreeTechnicians] = useState<FreeTechnician[]>([]);
-  const [loadingTechs, setLoadingTechs] = useState(false);
   const [quickRegisterOpen, setQuickRegisterOpen] = useState(false);
-
-  // Fetch free technicians on mount
-  useEffect(() => {
-    fetchFreeTechnicians();
-  }, []);
-
-  const fetchFreeTechnicians = async () => {
-    setLoadingTechs(true);
-    try {
-      const { data, error } = await supabase
-        .from("employees")
-        .select(
-          `
-          id,
-          name,
-          email,
-          active_jobs:invoice_services!assigned_technician_id(count)
-        `,
-        )
-        .eq("role", "technician")
-        .in("status", ["available", "off_duty"]);
-
-      if (error) throw error;
-
-      const techsWithWorkload = (data || []).map((tech: any) => ({
-        id: tech.id,
-        name: tech.name,
-        email: tech.email,
-        active_jobs_count: tech.active_jobs?.[0]?.count || 0,
-      }));
-
-      const freeTechs = techsWithWorkload.filter(
-        (t) => t.active_jobs_count === 0,
-      );
-      setFreeTechnicians(freeTechs);
-    } catch (error) {
-      console.error("Error fetching technicians:", error);
-    } finally {
-      setLoadingTechs(false);
-    }
-  };
 
   const handleSubmit = () => {
     if (!formData.title?.trim()) {
@@ -139,9 +90,11 @@ export function ServiceForm({
       <div className="grid grid-cols-2 gap-4">
         {/* Service Title */}
         <div className="col-span-2 space-y-2">
-          <Label>Service Title *</Label>
+          <Label>
+            Service Title <span className="text-destructive">*</span>
+          </Label>
           <Input
-            placeholder="e.g., AC Repair"
+            placeholder="e.g., AC Repair, Refrigerator Maintenance"
             value={formData.title || ""}
             onChange={(e) => updateField("title", e.target.value)}
           />
@@ -151,7 +104,7 @@ export function ServiceForm({
         <div className="col-span-2 space-y-2">
           <Label>Description</Label>
           <Textarea
-            placeholder="Service details..."
+            placeholder="Detailed service description..."
             value={formData.description || ""}
             onChange={(e) => updateField("description", e.target.value)}
             rows={2}
@@ -221,72 +174,8 @@ export function ServiceForm({
           ) : null}
         </div>
 
-        {/* Technician Selection */}
-        <div className="space-y-2">
-          <Label>Technician Assignment</Label>
-          <Select
-            value={formData.technician_id || "auto"}
-            onValueChange={(value) =>
-              updateField("technician_id", value === "auto" ? null : value)
-            }
-            disabled={loadingTechs}
-          >
-            <SelectTrigger>
-              <SelectValue
-                placeholder={loadingTechs ? "Loading..." : "Select technician"}
-              />
-            </SelectTrigger>
-            <SelectContent>
-              {/* Auto-Assign Option */}
-              <SelectItem value="auto">
-                <div className="flex items-center gap-2">
-                  <Sparkles className="h-4 w-4 text-primary" />
-                  <span className="font-medium">Auto-Assign (Recommended)</span>
-                </div>
-              </SelectItem>
-
-              {/* Free Technicians */}
-              {freeTechnicians.length > 0 ? (
-                <>
-                  <div className="px-2 py-1.5 text-xs font-medium text-muted-foreground">
-                    Available Technicians
-                  </div>
-                  {freeTechnicians.map((tech) => (
-                    <SelectItem key={tech.id} value={tech.id}>
-                      <div className="flex items-center gap-2">
-                        <div className="h-2 w-2 rounded-full bg-green-500" />
-                        <span>{tech.name}</span>
-                      </div>
-                    </SelectItem>
-                  ))}
-                </>
-              ) : (
-                <div className="px-2 py-3 text-xs text-muted-foreground text-center">
-                  No available technicians. Will auto-assign when one becomes
-                  free.
-                </div>
-              )}
-            </SelectContent>
-          </Select>
-
-          {/* Helper Text */}
-          {formData.technician_id === null && (
-            <p className="text-xs text-muted-foreground flex items-center gap-1">
-              <Sparkles className="h-3 w-3 text-primary" />
-              System will auto-assign to next available technician
-            </p>
-          )}
-
-          {freeTechnicians.length === 0 && (
-            <div className="text-xs text-amber-600 bg-amber-50 border border-amber-200 rounded p-2 flex items-start gap-2">
-              <AlertCircle className="h-4 w-4 mt-0.5 flex-shrink-0" />
-              <span>
-                All technicians are currently busy. Job will be pending until a
-                technician becomes available.
-              </span>
-            </div>
-          )}
-        </div>
+        {/* ⭐ REMOVED: Single Technician Assignment */}
+        {/* Now handled by multi-technician system after invoice creation */}
 
         {/* Service Cost */}
         <CurrencyInput
@@ -295,7 +184,7 @@ export function ServiceForm({
           onValueChange={(value) => updateField("service_cost", value)}
           min={0}
           required
-          helperText="Biaya service (tanpa spare parts)"
+          helperText="Service fee (excluding spare parts)"
         />
 
         {/* Priority */}
@@ -317,16 +206,6 @@ export function ServiceForm({
           </Select>
         </div>
 
-        {/* Scheduled Date */}
-        <div className="space-y-2">
-          <Label>Scheduled Date</Label>
-          <Input
-            type="datetime-local"
-            value={formData.scheduled_date || ""}
-            onChange={(e) => updateField("scheduled_date", e.target.value)}
-          />
-        </div>
-
         {/* Estimated Duration */}
         <div className="space-y-2">
           <Label>Duration (minutes)</Label>
@@ -338,6 +217,16 @@ export function ServiceForm({
             onChange={(e) =>
               updateField("estimated_duration", parseInt(e.target.value) || 60)
             }
+          />
+        </div>
+
+        {/* Scheduled Date */}
+        <div className="space-y-2 col-span-2">
+          <Label>Scheduled Date</Label>
+          <Input
+            type="datetime-local"
+            value={formData.scheduled_date || ""}
+            onChange={(e) => updateField("scheduled_date", e.target.value)}
           />
         </div>
 
@@ -370,6 +259,18 @@ export function ServiceForm({
               updateField("service_address", addr);
             }}
           />
+        </div>
+
+        {/* ⭐ NEW: Info about Team Assignment */}
+        <div className="col-span-2">
+          <Alert className="border-blue-200 bg-blue-50/30">
+            <Info className="h-4 w-4 text-blue-600" />
+            <AlertDescription className="text-xs text-blue-800">
+              <strong>Technician Assignment:</strong> You can assign multiple
+              technicians with different roles (Lead, Senior, Junior, Helper)
+              after creating the invoice in the Services tab.
+            </AlertDescription>
+          </Alert>
         </div>
       </div>
 
