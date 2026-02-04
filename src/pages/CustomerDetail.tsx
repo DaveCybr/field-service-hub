@@ -604,8 +604,8 @@ export default function CustomerDetail() {
         open={deleteDialogOpen}
         onOpenChange={setDeleteDialogOpen}
         customer={customer}
-        unitCount={units.length}
-        invoiceCount={invoices.length}
+        unitsCount={units.length}
+        invoicesCount={invoices.length}
         onSuccess={handleDeleteSuccess}
       />
 

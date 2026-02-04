@@ -18,6 +18,8 @@ export interface Invoice {
   amount_paid: number;
   notes?: string;
   admin_notes?: string;
+  created_at: string;
+  updated_at: string;
   customer?: {
     name: string;
     phone: string;

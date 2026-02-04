@@ -7,7 +7,6 @@ import { EventDropArg, EventClickArg } from '@fullcalendar/core';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
-import { Badge } from '@/components/ui/badge';
 import {
   Dialog,
   DialogContent,
@@ -19,26 +18,27 @@ import {
 import { Button } from '@/components/ui/button';
 import { format } from 'date-fns';
 
-interface Job {
+interface Service {
   id: string;
-  job_number: string;
   title: string;
   status: string;
   priority: string;
   scheduled_date: string | null;
+  invoice_id: string;
+  invoice_number: string;
   customer_name: string;
   technician_name: string | null;
   total_cost: number;
 }
 
 interface JobCalendarProps {
-  jobs: Job[];
+  jobs: Service[];
   onJobUpdated: () => void;
 }
 
 interface RescheduleInfo {
-  jobId: string;
-  jobNumber: string;
+  serviceId: string;
+  invoiceNumber: string;
   title: string;
   oldDate: Date;
   newDate: Date;
@@ -62,12 +62,10 @@ export default function JobCalendar({ jobs, onJobUpdated }: JobCalendarProps) {
 
   const getStatusBorderColor = (status: string) => {
     const colors: Record<string, string> = {
-      pending_assignment: 'hsl(var(--muted-foreground))',
-      pending_approval: 'hsl(var(--chart-1))',
-      approved: 'hsl(var(--chart-2))',
+      pending: 'hsl(var(--muted-foreground))',
+      assigned: 'hsl(var(--chart-1))',
       in_progress: 'hsl(var(--chart-3))',
       completed: 'hsl(var(--chart-4))',
-      completed_paid: 'hsl(var(--chart-5))',
       cancelled: 'hsl(var(--destructive))',
     };
     return colors[status] || 'hsl(var(--border))';
@@ -77,13 +75,14 @@ export default function JobCalendar({ jobs, onJobUpdated }: JobCalendarProps) {
     .filter(job => job.scheduled_date)
     .map(job => ({
       id: job.id,
-      title: `${job.job_number} - ${job.title}`,
+      title: `${job.invoice_number} - ${job.title}`,
       start: job.scheduled_date!,
       allDay: true,
       backgroundColor: getPriorityColor(job.priority),
       borderColor: getStatusBorderColor(job.status),
       extendedProps: {
-        job_number: job.job_number,
+        invoice_number: job.invoice_number,
+        invoice_id: job.invoice_id,
         customer_name: job.customer_name,
         technician_name: job.technician_name,
         status: job.status,
@@ -92,7 +91,8 @@ export default function JobCalendar({ jobs, onJobUpdated }: JobCalendarProps) {
     }));
 
   const handleEventClick = useCallback((info: EventClickArg) => {
-    navigate(`/jobs/${info.event.id}`);
+    const invoiceId = info.event.extendedProps.invoice_id;
+    navigate(`/invoices/${invoiceId}`);
   }, [navigate]);
 
   const handleEventDrop = useCallback((info: EventDropArg) => {
@@ -100,8 +100,8 @@ export default function JobCalendar({ jobs, onJobUpdated }: JobCalendarProps) {
     if (!job) return;
 
     setRescheduleInfo({
-      jobId: info.event.id,
-      jobNumber: job.job_number,
+      serviceId: info.event.id,
+      invoiceNumber: job.invoice_number,
       title: job.title,
       oldDate: info.oldEvent.start!,
       newDate: info.event.start!,
@@ -114,26 +114,26 @@ export default function JobCalendar({ jobs, onJobUpdated }: JobCalendarProps) {
     setIsRescheduling(true);
     try {
       const { error } = await supabase
-        .from('service_jobs')
-        .update({ scheduled_date: rescheduleInfo.newDate.toISOString().split('T')[0] })
-        .eq('id', rescheduleInfo.jobId);
+        .from('invoice_services')
+        .update({ scheduled_date: rescheduleInfo.newDate.toISOString() })
+        .eq('id', rescheduleInfo.serviceId);
 
       if (error) throw error;
 
       toast({
-        title: 'Job Rescheduled',
-        description: `${rescheduleInfo.jobNumber} moved to ${format(rescheduleInfo.newDate, 'MMM d, yyyy')}`,
+        title: 'Service Rescheduled',
+        description: `Service moved to ${format(rescheduleInfo.newDate, 'MMM d, yyyy')}`,
       });
 
       onJobUpdated();
     } catch (error) {
-      console.error('Error rescheduling job:', error);
+      console.error('Error rescheduling service:', error);
       toast({
         variant: 'destructive',
         title: 'Reschedule Failed',
-        description: 'Failed to reschedule the job. Please try again.',
+        description: 'Failed to reschedule the service. Please try again.',
       });
-      onJobUpdated(); // Refresh to revert the visual change
+      onJobUpdated();
     } finally {
       setIsRescheduling(false);
       setRescheduleInfo(null);
@@ -142,7 +142,7 @@ export default function JobCalendar({ jobs, onJobUpdated }: JobCalendarProps) {
 
   const cancelReschedule = () => {
     setRescheduleInfo(null);
-    onJobUpdated(); // Refresh to revert the visual change
+    onJobUpdated();
   };
 
   const renderEventContent = (eventInfo: any) => {
@@ -150,7 +150,7 @@ export default function JobCalendar({ jobs, onJobUpdated }: JobCalendarProps) {
     return (
       <div className="p-1 overflow-hidden cursor-pointer">
         <div className="font-medium text-xs truncate text-white">
-          {eventInfo.event.extendedProps.job_number}
+          {extendedProps.invoice_number}
         </div>
         <div className="text-xs truncate opacity-90 text-white">
           {extendedProps.customer_name}
@@ -192,7 +192,7 @@ export default function JobCalendar({ jobs, onJobUpdated }: JobCalendarProps) {
           <DialogHeader>
             <DialogTitle>Confirm Reschedule</DialogTitle>
             <DialogDescription>
-              Are you sure you want to reschedule this job?
+              Are you sure you want to reschedule this service?
             </DialogDescription>
           </DialogHeader>
           
@@ -200,11 +200,11 @@ export default function JobCalendar({ jobs, onJobUpdated }: JobCalendarProps) {
             <div className="space-y-4 py-4">
               <div className="grid grid-cols-2 gap-4 text-sm">
                 <div>
-                  <span className="text-muted-foreground">Job:</span>
-                  <p className="font-medium">{rescheduleInfo.jobNumber}</p>
+                  <span className="text-muted-foreground">Invoice:</span>
+                  <p className="font-medium">{rescheduleInfo.invoiceNumber}</p>
                 </div>
                 <div>
-                  <span className="text-muted-foreground">Title:</span>
+                  <span className="text-muted-foreground">Service:</span>
                   <p className="font-medium">{rescheduleInfo.title}</p>
                 </div>
               </div>

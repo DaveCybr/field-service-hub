@@ -14,30 +14,35 @@ import {
   Calendar,
   ChevronRight,
   ArrowUpRight,
+  FileText,
 } from 'lucide-react';
 import { format } from 'date-fns';
 
-interface Job {
+interface InvoiceWithServices {
   id: string;
-  job_number: string;
-  title: string;
+  invoice_number: string;
   status: string;
-  scheduled_date: string | null;
   created_at: string;
+  services: {
+    id: string;
+    title: string;
+    status: string;
+    scheduled_date: string | null;
+  }[];
 }
 
 interface Stats {
-  activeJobs: number;
-  completedJobs: number;
+  activeServices: number;
+  completedServices: number;
   totalUnits: number;
-  pendingApproval: number;
+  pendingInvoices: number;
 }
 
 export default function CustomerDashboard() {
   const { customerName, customerId } = useCustomerAuth();
   const [loading, setLoading] = useState(true);
-  const [stats, setStats] = useState<Stats>({ activeJobs: 0, completedJobs: 0, totalUnits: 0, pendingApproval: 0 });
-  const [recentJobs, setRecentJobs] = useState<Job[]>([]);
+  const [stats, setStats] = useState<Stats>({ activeServices: 0, completedServices: 0, totalUnits: 0, pendingInvoices: 0 });
+  const [recentInvoices, setRecentInvoices] = useState<InvoiceWithServices[]>([]);
 
   useEffect(() => {
     if (customerId) {
@@ -48,10 +53,21 @@ export default function CustomerDashboard() {
   const fetchDashboardData = async () => {
     setLoading(true);
     try {
-      // Fetch jobs
-      const { data: jobs } = await supabase
-        .from('service_jobs')
-        .select('id, job_number, title, status, scheduled_date, created_at')
+      // Fetch invoices with services
+      const { data: invoices } = await supabase
+        .from('invoices')
+        .select(`
+          id, 
+          invoice_number, 
+          status, 
+          created_at,
+          invoice_services (
+            id,
+            title,
+            status,
+            scheduled_date
+          )
+        `)
         .eq('customer_id', customerId)
         .order('created_at', { ascending: false })
         .limit(5);
@@ -62,21 +78,37 @@ export default function CustomerDashboard() {
         .select('*', { count: 'exact', head: true })
         .eq('customer_id', customerId);
 
-      // Calculate stats
-      const allJobs = jobs || [];
-      const activeStatuses = ['pending_assignment', 'pending_approval', 'approved', 'in_progress'];
-      const activeJobs = allJobs.filter(j => activeStatuses.includes(j.status)).length;
-      const completedJobs = allJobs.filter(j => j.status === 'completed' || j.status === 'completed_paid').length;
-      const pendingApproval = allJobs.filter(j => j.status === 'pending_approval').length;
-
-      setStats({
-        activeJobs,
-        completedJobs,
-        totalUnits: unitsCount || 0,
-        pendingApproval,
+      // Calculate stats from invoices and services
+      const allInvoices = invoices || [];
+      let activeServices = 0;
+      let completedServices = 0;
+      
+      allInvoices.forEach(inv => {
+        const services = inv.invoice_services || [];
+        services.forEach((s: any) => {
+          if (s.status === 'completed') {
+            completedServices++;
+          } else if (s.status !== 'cancelled') {
+            activeServices++;
+          }
+        });
       });
 
-      setRecentJobs(jobs || []);
+      const pendingInvoices = allInvoices.filter(inv => 
+        inv.status === 'pending' || inv.status === 'in_progress'
+      ).length;
+
+      setStats({
+        activeServices,
+        completedServices,
+        totalUnits: unitsCount || 0,
+        pendingInvoices,
+      });
+
+      setRecentInvoices(allInvoices.map(inv => ({
+        ...inv,
+        services: inv.invoice_services || [],
+      })));
     } catch (error) {
       console.error('Error fetching dashboard:', error);
     } finally {
@@ -86,12 +118,11 @@ export default function CustomerDashboard() {
 
   const getStatusConfig = (status: string) => {
     const config: Record<string, { label: string; className: string; icon: any }> = {
-      pending_assignment: { label: 'Pending', className: 'bg-amber-100 text-amber-800', icon: Clock },
-      pending_approval: { label: 'Awaiting Approval', className: 'bg-orange-100 text-orange-800', icon: Clock },
-      approved: { label: 'Scheduled', className: 'bg-sky-100 text-sky-800', icon: Calendar },
+      draft: { label: 'Draft', className: 'bg-gray-100 text-gray-800', icon: FileText },
+      pending: { label: 'Pending', className: 'bg-amber-100 text-amber-800', icon: Clock },
       in_progress: { label: 'In Progress', className: 'bg-blue-100 text-blue-800', icon: Wrench },
       completed: { label: 'Completed', className: 'bg-emerald-100 text-emerald-800', icon: CheckCircle2 },
-      completed_paid: { label: 'Completed', className: 'bg-emerald-100 text-emerald-800', icon: CheckCircle2 },
+      paid: { label: 'Paid', className: 'bg-emerald-100 text-emerald-800', icon: CheckCircle2 },
       cancelled: { label: 'Cancelled', className: 'bg-gray-100 text-gray-800', icon: Clock },
     };
     return config[status] || { label: status, className: '', icon: Clock };
@@ -116,8 +147,8 @@ export default function CustomerDashboard() {
             <CardContent className="pt-6">
               <div className="flex items-center justify-between">
                 <div>
-                  <p className="text-sm text-muted-foreground">Active Jobs</p>
-                  <p className="text-3xl font-bold">{stats.activeJobs}</p>
+                  <p className="text-sm text-muted-foreground">Active Services</p>
+                  <p className="text-3xl font-bold">{stats.activeServices}</p>
                 </div>
                 <div className="h-12 w-12 rounded-full bg-blue-100 flex items-center justify-center">
                   <Briefcase className="h-6 w-6 text-blue-600" />
@@ -130,8 +161,8 @@ export default function CustomerDashboard() {
             <CardContent className="pt-6">
               <div className="flex items-center justify-between">
                 <div>
-                  <p className="text-sm text-muted-foreground">Needs Approval</p>
-                  <p className="text-3xl font-bold">{stats.pendingApproval}</p>
+                  <p className="text-sm text-muted-foreground">Pending Invoices</p>
+                  <p className="text-3xl font-bold">{stats.pendingInvoices}</p>
                 </div>
                 <div className="h-12 w-12 rounded-full bg-orange-100 flex items-center justify-center">
                   <Clock className="h-6 w-6 text-orange-600" />
@@ -144,8 +175,8 @@ export default function CustomerDashboard() {
             <CardContent className="pt-6">
               <div className="flex items-center justify-between">
                 <div>
-                  <p className="text-sm text-muted-foreground">Completed Jobs</p>
-                  <p className="text-3xl font-bold">{stats.completedJobs}</p>
+                  <p className="text-sm text-muted-foreground">Completed Services</p>
+                  <p className="text-3xl font-bold">{stats.completedServices}</p>
                 </div>
                 <div className="h-12 w-12 rounded-full bg-emerald-100 flex items-center justify-center">
                   <CheckCircle2 className="h-6 w-6 text-emerald-600" />
@@ -169,12 +200,12 @@ export default function CustomerDashboard() {
           </Card>
         </div>
 
-        {/* Recent Jobs */}
+        {/* Recent Invoices */}
         <Card>
           <CardHeader className="flex flex-row items-center justify-between">
             <div>
-              <CardTitle>Recent Service Jobs</CardTitle>
-              <CardDescription>Your latest service requests</CardDescription>
+              <CardTitle>Recent Invoices</CardTitle>
+              <CardDescription>Your latest service invoices</CardDescription>
             </div>
             <Button variant="outline" size="sm" asChild>
               <Link to="/portal/jobs">
@@ -188,23 +219,25 @@ export default function CustomerDashboard() {
               <div className="flex items-center justify-center py-8">
                 <div className="h-8 w-8 animate-spin rounded-full border-4 border-primary border-t-transparent" />
               </div>
-            ) : recentJobs.length === 0 ? (
+            ) : recentInvoices.length === 0 ? (
               <div className="text-center py-8">
                 <Briefcase className="h-12 w-12 mx-auto text-muted-foreground mb-3" />
-                <h3 className="font-medium">No service jobs yet</h3>
+                <h3 className="font-medium">No invoices yet</h3>
                 <p className="text-sm text-muted-foreground mt-1">
-                  Your service requests will appear here
+                  Your service invoices will appear here
                 </p>
               </div>
             ) : (
               <div className="space-y-3">
-                {recentJobs.map((job) => {
-                  const statusConfig = getStatusConfig(job.status);
+                {recentInvoices.map((invoice) => {
+                  const statusConfig = getStatusConfig(invoice.status);
                   const StatusIcon = statusConfig.icon;
+                  const serviceCount = invoice.services.length;
+                  
                   return (
                     <Link
-                      key={job.id}
-                      to={`/portal/jobs/${job.id}`}
+                      key={invoice.id}
+                      to={`/portal/jobs/${invoice.invoice_number}`}
                       className="flex items-center justify-between p-4 rounded-lg border hover:bg-muted/50 transition-colors"
                     >
                       <div className="flex items-center gap-4">
@@ -212,9 +245,9 @@ export default function CustomerDashboard() {
                           <StatusIcon className="h-5 w-5" />
                         </div>
                         <div>
-                          <p className="font-medium">{job.title}</p>
+                          <p className="font-medium">{invoice.invoice_number}</p>
                           <p className="text-sm text-muted-foreground">
-                            {job.job_number} • {format(new Date(job.created_at), 'MMM d, yyyy')}
+                            {serviceCount} service{serviceCount !== 1 ? 's' : ''} • {format(new Date(invoice.created_at), 'MMM d, yyyy')}
                           </p>
                         </div>
                       </div>

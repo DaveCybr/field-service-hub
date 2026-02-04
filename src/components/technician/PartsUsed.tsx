@@ -45,22 +45,22 @@ interface PartUsed {
   id: string;
   product_id: string;
   quantity: number;
-  unit_cost: number;
-  total_cost: number;
-  product: {
-    name: string;
-    sku: string;
-  };
+  unit_price: number;
+  total_price: number;
+  product_name: string;
+  product_sku: string;
 }
 
 interface PartsUsedProps {
   serviceId: string;
+  invoiceId: string;
   disabled?: boolean;
   onPartsChange?: () => void;
 }
 
 export function PartsUsed({
   serviceId,
+  invoiceId,
   disabled = false,
   onPartsChange,
 }: PartsUsedProps) {
@@ -84,24 +84,30 @@ export function PartsUsed({
   useEffect(() => {
     loadParts();
     loadProducts();
-  }, [serviceId]);
+  }, [serviceId, invoiceId]);
 
   const loadParts = async () => {
     try {
+      // Load parts from invoice_items linked to this service/invoice
       const { data, error } = await supabase
-        .from("service_parts_used")
-        .select(
-          `
-          *,
-          product:products(name, sku)
-        `
-        )
-        .eq("service_id", serviceId)
+        .from("invoice_items")
+        .select("*")
+        .eq("invoice_id", invoiceId)
         .order("created_at", { ascending: false });
 
       if (error) throw error;
 
-      setParts(data || []);
+      const formattedParts: PartUsed[] = (data || []).map((item) => ({
+        id: item.id,
+        product_id: item.product_id || "",
+        quantity: item.quantity,
+        unit_price: Number(item.unit_price),
+        total_price: Number(item.total_price),
+        product_name: item.product_name,
+        product_sku: item.product_sku || "",
+      }));
+
+      setParts(formattedParts);
     } catch (error: any) {
       console.error("Error loading parts:", error);
       toast({
@@ -161,16 +167,27 @@ export function PartsUsed({
         return;
       }
 
-      // Add part
-      const { error } = await supabase.from("service_parts_used").insert({
-        service_id: serviceId,
+      const totalPrice = selectedProduct.sell_price * qty;
+
+      // Add as invoice_item
+      const { error } = await supabase.from("invoice_items").insert({
+        invoice_id: invoiceId,
         product_id: selectedProductId,
+        product_name: selectedProduct.name,
+        product_sku: selectedProduct.sku,
         quantity: qty,
-        unit_cost: selectedProduct.sell_price,
-        added_by: employee?.id,
+        unit_price: selectedProduct.sell_price,
+        discount: 0,
+        total_price: totalPrice,
       });
 
       if (error) throw error;
+
+      // Update product stock
+      await supabase
+        .from("products")
+        .update({ stock: selectedProduct.stock - qty })
+        .eq("id", selectedProductId);
 
       // Reset form
       setSelectedProductId("");
@@ -203,12 +220,25 @@ export function PartsUsed({
     if (!deletingPartId) return;
 
     try {
+      const partToDelete = parts.find((p) => p.id === deletingPartId);
+      
       const { error } = await supabase
-        .from("service_parts_used")
+        .from("invoice_items")
         .delete()
         .eq("id", deletingPartId);
 
       if (error) throw error;
+
+      // Restore product stock if we have product_id
+      if (partToDelete?.product_id) {
+        const product = products.find((p) => p.id === partToDelete.product_id);
+        if (product) {
+          await supabase
+            .from("products")
+            .update({ stock: product.stock + partToDelete.quantity })
+            .eq("id", partToDelete.product_id);
+        }
+      }
 
       // Reload data
       await loadParts();
@@ -233,7 +263,7 @@ export function PartsUsed({
     }
   };
 
-  const totalPartsCost = parts.reduce((sum, part) => sum + part.total_cost, 0);
+  const totalPartsCost = parts.reduce((sum, part) => sum + part.total_price, 0);
 
   if (loading) {
     return (
@@ -269,16 +299,18 @@ export function PartsUsed({
             >
               <div className="flex-1">
                 <div className="flex items-center gap-2">
-                  <p className="font-medium">{part.product.name}</p>
-                  <span className="text-xs text-muted-foreground">
-                    ({part.product.sku})
-                  </span>
+                  <p className="font-medium">{part.product_name}</p>
+                  {part.product_sku && (
+                    <span className="text-xs text-muted-foreground">
+                      ({part.product_sku})
+                    </span>
+                  )}
                 </div>
                 <div className="flex items-center gap-4 mt-1 text-sm text-muted-foreground">
                   <span>Qty: {part.quantity}</span>
-                  <span>@{formatCurrency(part.unit_cost)}</span>
+                  <span>@{formatCurrency(part.unit_price)}</span>
                   <span className="font-medium text-foreground">
-                    = {formatCurrency(part.total_cost)}
+                    = {formatCurrency(part.total_price)}
                   </span>
                 </div>
               </div>
@@ -337,8 +369,7 @@ export function PartsUsed({
                   ) : (
                     products.map((product) => (
                       <SelectItem key={product.id} value={product.id}>
-                        {product.name} ({product.sku}) - Stock: {product.stock}{" "}
-                        - {formatCurrency(product.sell_price)}
+                        {product.name} ({product.sku}) - Stock: {product.stock} - {formatCurrency(product.sell_price)}
                       </SelectItem>
                     ))
                   )}
@@ -357,9 +388,7 @@ export function PartsUsed({
               />
               {selectedProductId && (
                 <p className="text-xs text-muted-foreground">
-                  Available stock:{" "}
-                  {products.find((p) => p.id === selectedProductId)?.stock}{" "}
-                  units
+                  Available stock: {products.find((p) => p.id === selectedProductId)?.stock} units
                 </p>
               )}
             </div>
@@ -370,9 +399,7 @@ export function PartsUsed({
                 <div className="space-y-1 text-sm">
                   <div className="flex justify-between">
                     <span className="text-muted-foreground">Product:</span>
-                    <span>
-                      {products.find((p) => p.id === selectedProductId)?.name}
-                    </span>
+                    <span>{products.find((p) => p.id === selectedProductId)?.name}</span>
                   </div>
                   <div className="flex justify-between">
                     <span className="text-muted-foreground">Quantity:</span>
@@ -381,18 +408,14 @@ export function PartsUsed({
                   <div className="flex justify-between">
                     <span className="text-muted-foreground">Unit Price:</span>
                     <span>
-                      {formatCurrency(
-                        products.find((p) => p.id === selectedProductId)
-                          ?.sell_price || 0
-                      )}
+                      {formatCurrency(products.find((p) => p.id === selectedProductId)?.sell_price || 0)}
                     </span>
                   </div>
                   <div className="flex justify-between font-semibold pt-2 border-t">
                     <span>Total:</span>
                     <span>
                       {formatCurrency(
-                        (products.find((p) => p.id === selectedProductId)
-                          ?.sell_price || 0) * parseInt(quantity)
+                        (products.find((p) => p.id === selectedProductId)?.sell_price || 0) * parseInt(quantity)
                       )}
                     </span>
                   </div>
@@ -413,10 +436,7 @@ export function PartsUsed({
             >
               Cancel
             </Button>
-            <Button
-              onClick={handleAddPart}
-              disabled={adding || !selectedProductId}
-            >
+            <Button onClick={handleAddPart} disabled={adding || !selectedProductId}>
               {adding ? (
                 <>
                   <Loader2 className="mr-2 h-4 w-4 animate-spin" />
@@ -436,8 +456,7 @@ export function PartsUsed({
           <AlertDialogHeader>
             <AlertDialogTitle>Remove Part</AlertDialogTitle>
             <AlertDialogDescription>
-              Are you sure you want to remove this part? The stock will be
-              restored.
+              Are you sure you want to remove this part? The stock will be restored.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
