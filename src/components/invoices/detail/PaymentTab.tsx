@@ -19,14 +19,11 @@ import { formatCurrency } from "@/lib/utils/currency";
 import {
   DollarSign,
   Receipt,
-  Upload,
   Loader2,
   Check,
   FileText,
   Calendar,
   User,
-  CreditCard,
-  Image as ImageIcon,
 } from "lucide-react";
 import { format } from "date-fns";
 import type { Invoice } from "@/hooks/invoices/useInvoiceDetail";
@@ -38,13 +35,8 @@ interface PaymentRecord {
   payment_date: string;
   payment_method: string;
   reference_number?: string;
-  payment_proof_url?: string;
   notes?: string;
-  status: string;
-  processed_by?: string;
-  employee?: {
-    name: string;
-  };
+  employee_name?: string;
 }
 
 interface PaymentTabProps {
@@ -63,8 +55,6 @@ export function PaymentTab({ invoice, onPaymentRecorded }: PaymentTabProps) {
   const [paymentMethod, setPaymentMethod] = useState<string>("");
   const [referenceNumber, setReferenceNumber] = useState<string>("");
   const [notes, setNotes] = useState<string>("");
-  const [proofFile, setProofFile] = useState<File | null>(null);
-  const [proofPreview, setProofPreview] = useState<string>("");
 
   const remainingBalance = invoice.grand_total - (invoice.amount_paid || 0);
   const isPaid = invoice.payment_status === "paid";
@@ -76,70 +66,40 @@ export function PaymentTab({ invoice, onPaymentRecorded }: PaymentTabProps) {
   const fetchPayments = async () => {
     setLoading(true);
     try {
+      // Fetch payment history from audit_logs
       const { data, error } = await supabase
-        .from("invoice_payments")
-        .select(
-          `
+        .from("audit_logs")
+        .select(`
           *,
-          employee:employees!invoice_payments_processed_by_fkey (
-            name
-          )
-        `
-        )
-        .eq("invoice_id", invoice.id)
-        .order("payment_date", { ascending: false });
+          employee:employees!audit_logs_employee_id_fkey (name)
+        `)
+        .eq("entity_type", "invoices")
+        .eq("entity_id", invoice.id)
+        .eq("action", "PAYMENT")
+        .order("created_at", { ascending: false });
 
       if (error) throw error;
-      setPayments(data || []);
+
+      // Transform audit logs to payment records
+      const paymentRecords: PaymentRecord[] = (data || []).map((log: any) => {
+        const newData = log.new_data || {};
+        return {
+          id: log.id,
+          amount: (newData.amount_paid || 0) - (log.old_data?.amount_paid || 0),
+          payment_date: log.created_at,
+          payment_method: newData.payment_method || "cash",
+          reference_number: newData.payment_reference,
+          notes: newData.payment_notes,
+          employee_name: log.employee?.name,
+        };
+      });
+
+      setPayments(paymentRecords);
     } catch (error: any) {
       console.error("Error fetching payments:", error);
-      toast({
-        variant: "destructive",
-        title: "Error",
-        description: "Failed to load payment history",
-      });
+      // Silently fail - payment history is optional
     } finally {
       setLoading(false);
-    }
-  };
-
-  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (file) {
-      setProofFile(file);
-      const reader = new FileReader();
-      reader.onloadend = () => {
-        setProofPreview(reader.result as string);
-      };
-      reader.readAsDataURL(file);
-    }
-  };
-
-  const uploadProof = async (): Promise<string | null> => {
-    if (!proofFile) return null;
-
-    try {
-      const fileExt = proofFile.name.split(".").pop();
-      const fileName = `${invoice.id}-${Date.now()}.${fileExt}`;
-      const filePath = `payment-proofs/${fileName}`;
-
-      const { error: uploadError } = await supabase.storage
-        .from("invoices")
-        .upload(filePath, proofFile);
-
-      if (uploadError) throw uploadError;
-
-      const { data } = supabase.storage.from("invoices").getPublicUrl(filePath);
-
-      return data.publicUrl;
-    } catch (error: any) {
-      console.error("Error uploading proof:", error);
-      toast({
-        variant: "destructive",
-        title: "Upload Failed",
-        description: "Failed to upload payment proof",
-      });
-      return null;
     }
   };
 
@@ -166,60 +126,65 @@ export function PaymentTab({ invoice, onPaymentRecorded }: PaymentTabProps) {
       toast({
         variant: "destructive",
         title: "Amount Too High",
-        description: `Payment amount cannot exceed remaining balance of ${formatCurrency(
-          remainingBalance
-        )}`,
+        description: `Payment amount cannot exceed remaining balance of ${formatCurrency(remainingBalance)}`,
       });
       return;
     }
 
     setSubmitting(true);
     try {
-      // Upload proof if provided
-      let proofUrl = null;
-      if (proofFile) {
-        proofUrl = await uploadProof();
-      }
-
       // Get current user and their employee record
-      const {
-        data: { user },
-      } = await supabase.auth.getUser();
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) throw new Error("User not authenticated");
 
-      if (!user) {
-        throw new Error("User not authenticated");
-      }
-
-      // Get employee ID from user_id
-      const { data: employee, error: empError } = await supabase
+      // Get employee ID
+      const { data: employee } = await supabase
         .from("employees")
         .select("id")
         .eq("user_id", user.id)
-        .single();
+        .maybeSingle();
 
-      if (empError) {
-        console.warn("Employee not found, recording without processor");
-      }
+      // Calculate new payment status
+      const newAmountPaid = (invoice.amount_paid || 0) + amount;
+      const newPaymentStatus =
+        newAmountPaid >= invoice.grand_total
+          ? "paid"
+          : newAmountPaid > 0
+            ? "partial"
+            : "unpaid";
 
-      // Insert payment record
-      const { error } = await supabase.from("invoice_payments").insert({
-        invoice_id: invoice.id,
-        amount,
-        payment_method: paymentMethod,
-        reference_number: referenceNumber || null,
-        payment_proof_url: proofUrl,
-        notes: notes || null,
-        processed_by: employee?.id || null, // Use employee.id, not user.id
-        status: "completed",
-      });
+      // Update invoice
+      const { error } = await supabase
+        .from("invoices")
+        .update({
+          amount_paid: newAmountPaid,
+          payment_status: newPaymentStatus,
+          status: newPaymentStatus === "paid" ? "paid" : invoice.status,
+          updated_at: new Date().toISOString(),
+        })
+        .eq("id", invoice.id);
 
       if (error) throw error;
 
+      // Log to audit_logs
+      await supabase.from("audit_logs").insert({
+        entity_type: "invoices",
+        entity_id: invoice.id,
+        action: "PAYMENT",
+        old_data: { amount_paid: invoice.amount_paid, payment_status: invoice.payment_status },
+        new_data: {
+          amount_paid: newAmountPaid,
+          payment_status: newPaymentStatus,
+          payment_method: paymentMethod,
+          payment_reference: referenceNumber,
+          payment_notes: notes,
+        },
+        employee_id: employee?.id || null,
+      });
+
       toast({
         title: "Payment Recorded",
-        description: `Successfully recorded payment of ${formatCurrency(
-          amount
-        )}`,
+        description: `Successfully recorded payment of ${formatCurrency(amount)}`,
       });
 
       // Reset form
@@ -227,8 +192,6 @@ export function PaymentTab({ invoice, onPaymentRecorded }: PaymentTabProps) {
       setPaymentMethod("");
       setReferenceNumber("");
       setNotes("");
-      setProofFile(null);
-      setProofPreview("");
 
       // Refresh data
       await fetchPayments();
@@ -276,11 +239,7 @@ export function PaymentTab({ invoice, onPaymentRecorded }: PaymentTabProps) {
             </div>
             <div>
               <p className="text-sm text-muted-foreground">Remaining Balance</p>
-              <p
-                className={`text-2xl font-bold ${
-                  remainingBalance > 0 ? "text-destructive" : "text-emerald-600"
-                }`}
-              >
+              <p className={`text-2xl font-bold ${remainingBalance > 0 ? "text-destructive" : "text-emerald-600"}`}>
                 {formatCurrency(remainingBalance)}
               </p>
             </div>
@@ -294,9 +253,7 @@ export function PaymentTab({ invoice, onPaymentRecorded }: PaymentTabProps) {
                   </Badge>
                 ) : (
                   <Badge variant="destructive">
-                    {invoice.payment_status === "partial"
-                      ? "Partially Paid"
-                      : "Unpaid"}
+                    {invoice.payment_status === "partial" ? "Partially Paid" : "Unpaid"}
                   </Badge>
                 )}
               </div>
@@ -325,36 +282,16 @@ export function PaymentTab({ invoice, onPaymentRecorded }: PaymentTabProps) {
 
             {/* Quick Amount Buttons */}
             <div className="flex gap-2">
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                onClick={() => setQuickAmount(25)}
-              >
+              <Button type="button" variant="outline" size="sm" onClick={() => setQuickAmount(25)}>
                 25%
               </Button>
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                onClick={() => setQuickAmount(50)}
-              >
+              <Button type="button" variant="outline" size="sm" onClick={() => setQuickAmount(50)}>
                 50%
               </Button>
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                onClick={() => setQuickAmount(75)}
-              >
+              <Button type="button" variant="outline" size="sm" onClick={() => setQuickAmount(75)}>
                 75%
               </Button>
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                onClick={() => setAmount(remainingBalance)}
-              >
+              <Button type="button" variant="outline" size="sm" onClick={() => setAmount(remainingBalance)}>
                 Full Amount
               </Button>
             </div>
@@ -415,30 +352,6 @@ export function PaymentTab({ invoice, onPaymentRecorded }: PaymentTabProps) {
               />
             </div>
 
-            {/* Payment Proof Upload */}
-            <div className="space-y-2">
-              <Label htmlFor="proof">Payment Proof (Optional)</Label>
-              <div className="flex items-center gap-2">
-                <Input
-                  id="proof"
-                  type="file"
-                  accept="image/*"
-                  onChange={handleFileChange}
-                  className="flex-1"
-                />
-                {proofPreview && (
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="icon"
-                    onClick={() => window.open(proofPreview, "_blank")}
-                  >
-                    <ImageIcon className="h-4 w-4" />
-                  </Button>
-                )}
-              </div>
-            </div>
-
             {/* Submit Button */}
             <Button
               onClick={handleSubmitPayment}
@@ -486,10 +399,7 @@ export function PaymentTab({ invoice, onPaymentRecorded }: PaymentTabProps) {
           ) : (
             <div className="space-y-4">
               {payments.map((payment) => (
-                <div
-                  key={payment.id}
-                  className="flex items-start gap-4 p-4 border rounded-lg"
-                >
+                <div key={payment.id} className="flex items-start gap-4 p-4 border rounded-lg">
                   <div className="h-10 w-10 rounded-full bg-primary/10 flex items-center justify-center shrink-0">
                     <DollarSign className="h-5 w-5 text-primary" />
                   </div>
@@ -499,65 +409,25 @@ export function PaymentTab({ invoice, onPaymentRecorded }: PaymentTabProps) {
                         <p className="font-semibold text-lg">
                           {formatCurrency(payment.amount)}
                         </p>
-                        <p className="text-sm text-muted-foreground capitalize">
-                          {payment.payment_method.replace("_", " ")}
-                        </p>
+                        <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                          <Calendar className="h-3 w-3" />
+                          {format(new Date(payment.payment_date), "PPP")}
+                        </div>
                       </div>
-                      <Badge
-                        variant={
-                          payment.status === "completed"
-                            ? "default"
-                            : payment.status === "pending"
-                            ? "secondary"
-                            : "destructive"
-                        }
-                      >
-                        {payment.status}
+                      <Badge variant="outline" className="capitalize">
+                        {payment.payment_method.replace("_", " ")}
                       </Badge>
                     </div>
-
-                    {payment.reference_number && (
-                      <div className="flex items-center gap-2 text-sm">
-                        <CreditCard className="h-3 w-3" />
-                        <span className="text-muted-foreground">
-                          Ref: {payment.reference_number}
-                        </span>
-                      </div>
-                    )}
-
-                    <div className="flex items-center gap-2 text-sm">
-                      <Calendar className="h-3 w-3" />
-                      <span className="text-muted-foreground">
-                        {format(new Date(payment.payment_date), "PPP 'at' p")}
-                      </span>
-                    </div>
-
-                    {payment.employee && (
-                      <div className="flex items-center gap-2 text-sm">
+                    {payment.employee_name && (
+                      <div className="flex items-center gap-2 text-sm text-muted-foreground">
                         <User className="h-3 w-3" />
-                        <span className="text-muted-foreground">
-                          By {payment.employee.name}
-                        </span>
+                        Recorded by {payment.employee_name}
                       </div>
                     )}
-
                     {payment.notes && (
                       <p className="text-sm text-muted-foreground mt-2">
                         {payment.notes}
                       </p>
-                    )}
-
-                    {payment.payment_proof_url && (
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() =>
-                          window.open(payment.payment_proof_url!, "_blank")
-                        }
-                      >
-                        <ImageIcon className="h-3 w-3 mr-2" />
-                        View Proof
-                      </Button>
                     )}
                   </div>
                 </div>

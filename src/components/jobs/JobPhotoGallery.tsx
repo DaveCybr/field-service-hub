@@ -13,14 +13,14 @@ import { Camera, Upload, X, Loader2, ChevronLeft, ChevronRight, Trash2, Image } 
 import { useToast } from '@/hooks/use-toast';
 
 interface JobPhotoGalleryProps {
-  jobId: string;
+  serviceId: string;
   beforePhotos: string[];
   afterPhotos: string[];
   onPhotosUpdated: () => void;
 }
 
 export default function JobPhotoGallery({
-  jobId,
+  serviceId,
   beforePhotos,
   afterPhotos,
   onPhotosUpdated,
@@ -41,7 +41,7 @@ export default function JobPhotoGallery({
     type: 'before' | 'after'
   ): Promise<string | null> => {
     const fileExt = file.name.split('.').pop();
-    const fileName = `${jobId}/${type}/${Date.now()}.${fileExt}`;
+    const fileName = `${serviceId}/${type}/${Date.now()}.${fileExt}`;
 
     const { data, error } = await supabase.storage
       .from('job-photos')
@@ -81,14 +81,14 @@ export default function JobPhotoGallery({
         throw new Error('No files were uploaded successfully');
       }
 
-      // Update the job with new photos
+      // Update the service with new photos
       const currentPhotos = type === 'before' ? beforePhotos : afterPhotos;
       const columnName = type === 'before' ? 'before_photos' : 'after_photos';
       
       const { error } = await supabase
-        .from('service_jobs')
+        .from('invoice_services')
         .update({ [columnName]: [...currentPhotos, ...validUrls] })
-        .eq('id', jobId);
+        .eq('id', serviceId);
 
       if (error) throw error;
 
@@ -107,7 +107,6 @@ export default function JobPhotoGallery({
       });
     } finally {
       setUploading(false);
-      // Reset the input
       if (type === 'before' && beforeInputRef.current) {
         beforeInputRef.current.value = '';
       } else if (afterInputRef.current) {
@@ -120,7 +119,6 @@ export default function JobPhotoGallery({
     setDeleting(photoUrl);
 
     try {
-      // Extract the path from the URL
       const urlObj = new URL(photoUrl);
       const pathParts = urlObj.pathname.split('/storage/v1/object/public/job-photos/');
       if (pathParts.length < 2) {
@@ -128,7 +126,6 @@ export default function JobPhotoGallery({
       }
       const filePath = decodeURIComponent(pathParts[1]);
 
-      // Delete from storage
       const { error: storageError } = await supabase.storage
         .from('job-photos')
         .remove([filePath]);
@@ -137,15 +134,14 @@ export default function JobPhotoGallery({
         console.warn('Storage delete warning:', storageError);
       }
 
-      // Update the job to remove the photo
       const currentPhotos = type === 'before' ? beforePhotos : afterPhotos;
       const columnName = type === 'before' ? 'before_photos' : 'after_photos';
       const updatedPhotos = currentPhotos.filter((p) => p !== photoUrl);
 
       const { error } = await supabase
-        .from('service_jobs')
+        .from('invoice_services')
         .update({ [columnName]: updatedPhotos })
-        .eq('id', jobId);
+        .eq('id', serviceId);
 
       if (error) throw error;
 
@@ -154,7 +150,6 @@ export default function JobPhotoGallery({
         description: 'Photo has been removed.',
       });
 
-      // Close gallery if viewing deleted photo
       if (selectedImage === photoUrl) {
         setSelectedImage(null);
       }

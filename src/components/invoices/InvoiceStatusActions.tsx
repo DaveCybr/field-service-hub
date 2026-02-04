@@ -29,7 +29,6 @@ import {
   DollarSign,
   Archive,
   Ban,
-  AlertCircle,
   Loader2,
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
@@ -62,13 +61,13 @@ export function InvoiceStatusActions({
   const [cancelDialogOpen, setCancelDialogOpen] = useState(false);
 
   const [action, setAction] = useState<"confirm" | "archive" | "cancel" | null>(
-    null,
+    null
   );
   const [cancelReason, setCancelReason] = useState("");
 
   // Payment form state
   const [paymentAmount, setPaymentAmount] = useState(
-    invoice.grand_total - invoice.amount_paid,
+    invoice.grand_total - invoice.amount_paid
   );
   const [paymentMethod, setPaymentMethod] = useState("cash");
   const [paymentReference, setPaymentReference] = useState("");
@@ -94,20 +93,20 @@ export function InvoiceStatusActions({
         .from("invoices")
         .update({
           status: "pending",
-          status_updated_at: new Date().toISOString(),
-          status_updated_by: employee?.id,
+          updated_at: new Date().toISOString(),
         })
         .eq("id", invoice.id);
 
       if (error) throw error;
 
-      // Log status history
-      await supabase.from("invoice_status_history").insert({
-        invoice_id: invoice.id,
-        old_status: invoice.status,
-        new_status: "pending",
-        changed_by: employee?.id,
-        reason: "Invoice confirmed by admin",
+      // Log to audit_logs instead of invoice_status_history
+      await supabase.from("audit_logs").insert({
+        entity_type: "invoices",
+        entity_id: invoice.id,
+        action: "STATUS_CHANGE",
+        old_data: { status: invoice.status },
+        new_data: { status: "pending" },
+        employee_id: employee?.id,
       });
 
       toast({
@@ -145,22 +144,7 @@ export function InvoiceStatusActions({
         return;
       }
 
-      // Insert payment record
-      const { error: paymentError } = await supabase
-        .from("invoice_payments")
-        .insert({
-          invoice_id: invoice.id,
-          amount: paymentAmount,
-          payment_method: paymentMethod,
-          reference_number: paymentReference || null,
-          notes: paymentNotes || null,
-          processed_by: employee?.id,
-          status: "completed",
-        });
-
-      if (paymentError) throw paymentError;
-
-      // Update invoice payment status
+      // Update invoice payment status directly (no separate payments table)
       const newAmountPaid = invoice.amount_paid + paymentAmount;
       const newPaymentStatus =
         newAmountPaid >= invoice.grand_total
@@ -175,23 +159,27 @@ export function InvoiceStatusActions({
           amount_paid: newAmountPaid,
           payment_status: newPaymentStatus,
           status: newPaymentStatus === "paid" ? "paid" : invoice.status,
-          status_updated_at: new Date().toISOString(),
-          status_updated_by: employee?.id,
+          updated_at: new Date().toISOString(),
         })
         .eq("id", invoice.id);
 
       if (invoiceError) throw invoiceError;
 
-      // Log status history if status changed to paid
-      if (newPaymentStatus === "paid") {
-        await supabase.from("invoice_status_history").insert({
-          invoice_id: invoice.id,
-          old_status: invoice.status,
-          new_status: "paid",
-          changed_by: employee?.id,
-          reason: "Payment received - invoice fully paid",
-        });
-      }
+      // Log payment to audit_logs
+      await supabase.from("audit_logs").insert({
+        entity_type: "invoices",
+        entity_id: invoice.id,
+        action: "PAYMENT",
+        old_data: { amount_paid: invoice.amount_paid, payment_status: invoice.payment_status },
+        new_data: { 
+          amount_paid: newAmountPaid, 
+          payment_status: newPaymentStatus,
+          payment_method: paymentMethod,
+          payment_reference: paymentReference,
+          payment_notes: paymentNotes,
+        },
+        employee_id: employee?.id,
+      });
 
       toast({
         title: "Payment Received",
@@ -227,20 +215,20 @@ export function InvoiceStatusActions({
         .from("invoices")
         .update({
           status: "closed",
-          status_updated_at: new Date().toISOString(),
-          status_updated_by: employee?.id,
+          updated_at: new Date().toISOString(),
         })
         .eq("id", invoice.id);
 
       if (error) throw error;
 
-      // Log status history
-      await supabase.from("invoice_status_history").insert({
-        invoice_id: invoice.id,
-        old_status: invoice.status,
-        new_status: "closed",
-        changed_by: employee?.id,
-        reason: "Invoice archived",
+      // Log to audit_logs
+      await supabase.from("audit_logs").insert({
+        entity_type: "invoices",
+        entity_id: invoice.id,
+        action: "STATUS_CHANGE",
+        old_data: { status: invoice.status },
+        new_data: { status: "closed" },
+        employee_id: employee?.id,
       });
 
       toast({
@@ -280,20 +268,21 @@ export function InvoiceStatusActions({
         .from("invoices")
         .update({
           status: "cancelled",
-          status_updated_at: new Date().toISOString(),
-          status_updated_by: employee?.id,
+          admin_notes: cancelReason,
+          updated_at: new Date().toISOString(),
         })
         .eq("id", invoice.id);
 
       if (error) throw error;
 
-      // Log status history
-      await supabase.from("invoice_status_history").insert({
-        invoice_id: invoice.id,
-        old_status: invoice.status,
-        new_status: "cancelled",
-        changed_by: employee?.id,
-        reason: cancelReason,
+      // Log to audit_logs
+      await supabase.from("audit_logs").insert({
+        entity_type: "invoices",
+        entity_id: invoice.id,
+        action: "STATUS_CHANGE",
+        old_data: { status: invoice.status },
+        new_data: { status: "cancelled", reason: cancelReason },
+        employee_id: employee?.id,
       });
 
       toast({
@@ -497,14 +486,12 @@ export function InvoiceStatusActions({
 
             {/* Reference Number */}
             <div className="space-y-2">
-              <Label htmlFor="payment-reference">
-                Reference Number (Optional)
-              </Label>
+              <Label htmlFor="payment-reference">Reference Number (Optional)</Label>
               <Input
                 id="payment-reference"
-                placeholder="e.g., TRX123456, Transfer receipt #"
                 value={paymentReference}
                 onChange={(e) => setPaymentReference(e.target.value)}
+                placeholder="Transaction ID, Check #, etc."
               />
             </div>
 
@@ -513,10 +500,9 @@ export function InvoiceStatusActions({
               <Label htmlFor="payment-notes">Notes (Optional)</Label>
               <Textarea
                 id="payment-notes"
-                placeholder="Additional notes..."
-                rows={2}
                 value={paymentNotes}
                 onChange={(e) => setPaymentNotes(e.target.value)}
+                rows={2}
               />
             </div>
           </div>
@@ -531,7 +517,7 @@ export function InvoiceStatusActions({
             </Button>
             <Button onClick={handleReceivePayment} disabled={loading}>
               {loading && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
-              Receive Payment
+              Record Payment
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -541,10 +527,7 @@ export function InvoiceStatusActions({
       <Dialog open={cancelDialogOpen} onOpenChange={setCancelDialogOpen}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle className="flex items-center gap-2 text-destructive">
-              <AlertCircle className="h-5 w-5" />
-              Cancel Invoice
-            </DialogTitle>
+            <DialogTitle>Cancel Invoice</DialogTitle>
             <DialogDescription>
               Are you sure you want to cancel invoice {invoice.invoice_number}?
               This action cannot be undone.
@@ -554,15 +537,14 @@ export function InvoiceStatusActions({
           <div className="space-y-4 py-4">
             <div className="space-y-2">
               <Label htmlFor="cancel-reason">
-                Cancellation Reason <span className="text-destructive">*</span>
+                Reason for cancellation <span className="text-destructive">*</span>
               </Label>
               <Textarea
                 id="cancel-reason"
-                placeholder="Please provide a reason for cancelling this invoice..."
-                rows={3}
                 value={cancelReason}
                 onChange={(e) => setCancelReason(e.target.value)}
-                className="resize-none"
+                placeholder="Explain why this invoice is being cancelled..."
+                rows={3}
               />
             </div>
           </div>
@@ -570,13 +552,10 @@ export function InvoiceStatusActions({
           <DialogFooter>
             <Button
               variant="outline"
-              onClick={() => {
-                setCancelDialogOpen(false);
-                setCancelReason("");
-              }}
+              onClick={() => setCancelDialogOpen(false)}
               disabled={loading}
             >
-              No, Keep Invoice
+              Keep Invoice
             </Button>
             <Button
               variant="destructive"
@@ -584,7 +563,7 @@ export function InvoiceStatusActions({
               disabled={loading || !cancelReason.trim()}
             >
               {loading && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
-              Yes, Cancel Invoice
+              Cancel Invoice
             </Button>
           </DialogFooter>
         </DialogContent>

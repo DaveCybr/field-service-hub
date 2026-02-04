@@ -9,7 +9,6 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { Button } from "@/components/ui/button";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { useNavigate } from "react-router-dom";
@@ -35,11 +34,7 @@ export function DeleteInvoiceDialog({
   const handleDelete = async () => {
     setDeleting(true);
     try {
-      // Delete related records first (cascade should handle this, but be safe)
-      await supabase
-        .from("invoice_payments")
-        .delete()
-        .eq("invoice_id", invoiceId);
+      // Delete related records first (services and items - cascade should handle)
       await supabase
         .from("invoice_services")
         .delete()
@@ -87,7 +82,6 @@ export function DeleteInvoiceDialog({
             This will also delete:
             <ul className="list-disc list-inside mt-2 space-y-1">
               <li>All services and products</li>
-              <li>Payment records</li>
               <li>Related documents</li>
             </ul>
             <br />
