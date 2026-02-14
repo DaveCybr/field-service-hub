@@ -1,6 +1,6 @@
 // ============================================
 // SERVICE TEAM MANAGER
-// src/components/technician/ServiceTeamManager.tsx
+// src/components/service/ServiceTeamManager.tsx
 // Integrates all team management features
 // ============================================
 
@@ -25,20 +25,30 @@ interface ServiceTeamManagerProps {
   serviceName?: string;
   canManage?: boolean; // Permission to add/remove team members
   compact?: boolean;
+  onTeamUpdated?: () => void; // ✅ Add callback prop
 }
 
 export function ServiceTeamManager({
   invoiceId,
   serviceId,
   serviceName,
-  canManage = false,
+  canManage = true, // ✅ Default to true for Jobs page usage
   compact = false,
+  onTeamUpdated, // ✅ Destructure callback
 }: ServiceTeamManagerProps) {
   const [assignDialogOpen, setAssignDialogOpen] = useState(false);
   const { team, loading, error, refetch } = useServiceTeam(
     invoiceId,
     serviceId,
   );
+
+  // ✅ Enhanced refetch that calls both internal refetch AND parent callback
+  const handleTeamUpdate = async () => {
+    await refetch();
+    if (onTeamUpdated) {
+      onTeamUpdated();
+    }
+  };
 
   const serviceTeam = {
     service_id: serviceId,
@@ -73,7 +83,7 @@ export function ServiceTeamManager({
           </CardDescription>
         </CardHeader>
         <CardContent>
-          <Button onClick={refetch} variant="outline">
+          <Button onClick={handleTeamUpdate} variant="outline">
             Coba Lagi
           </Button>
         </CardContent>
@@ -98,7 +108,7 @@ export function ServiceTeamManager({
             invoiceId={invoiceId}
             serviceId={serviceId}
             serviceName={serviceName}
-            onSuccess={refetch}
+            onSuccess={handleTeamUpdate} // ✅ Use enhanced handler
           />
         )}
       </>
@@ -121,7 +131,7 @@ export function ServiceTeamManager({
           invoiceId={invoiceId}
           serviceId={serviceId}
           serviceName={serviceName}
-          onSuccess={refetch}
+          onSuccess={handleTeamUpdate} // ✅ Use enhanced handler
         />
       )}
     </>

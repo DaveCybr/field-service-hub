@@ -110,7 +110,6 @@ export function InvoiceHeader({
             </Button>
           )}
           <InvoiceStatusActions invoice={invoice} onStatusChanged={onRefresh} />
-          ;
         </div>
       </div>
 

@@ -1,4 +1,4 @@
-// JobDetail.tsx - Job Detail for Admin/Manager
+// JobDetail.tsx - Alternative approach with proper typing
 import { useEffect, useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
@@ -12,18 +12,9 @@ import {
   Dialog,
   DialogContent,
   DialogDescription,
-  DialogFooter,
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { Label } from "@/components/ui/label";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import {
   ArrowLeft,
   User,
@@ -31,17 +22,19 @@ import {
   MapPin,
   Package,
   Clock,
-  Image as ImageIcon,
   CheckCircle2,
   AlertCircle,
   Loader2,
+  Users,
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { format } from "date-fns";
 import { formatCurrency } from "@/lib/utils/currency";
+import { ServiceTeamManager } from "@/components/technician/ServiceTeamManager";
 
 interface JobDetail {
   id: string;
+  invoice_id: string;
   title: string;
   description: string | null;
   status: string;
@@ -61,6 +54,7 @@ interface JobDetail {
   assigned_technician_id: string | null;
   created_at: string;
   invoice: {
+    id: string;
     invoice_number: string;
     customer: {
       name: string;
@@ -82,9 +76,15 @@ interface JobDetail {
   } | null;
 }
 
-interface Technician {
+interface TeamMember {
   id: string;
-  name: string;
+  technician: {
+    id: string;
+    name: string;
+    email: string;
+    phone: string | null;
+  };
+  role: string;
   status: string;
 }
 
@@ -94,16 +94,14 @@ export default function JobDetail() {
   const { toast } = useToast();
 
   const [job, setJob] = useState<JobDetail | null>(null);
-  const [technicians, setTechnicians] = useState<Technician[]>([]);
+  const [teamMembers, setTeamMembers] = useState<TeamMember[]>([]);
   const [loading, setLoading] = useState(true);
-  const [assignDialogOpen, setAssignDialogOpen] = useState(false);
-  const [selectedTechnicianId, setSelectedTechnicianId] = useState("");
-  const [assigning, setAssigning] = useState(false);
+  const [teamDialogOpen, setTeamDialogOpen] = useState(false);
 
   useEffect(() => {
     if (id) {
       fetchJobDetail();
-      fetchTechnicians();
+      fetchTeamMembers();
     }
   }, [id]);
 
@@ -115,6 +113,7 @@ export default function JobDetail() {
           `
           *,
           invoice:invoices!inner(
+            id,
             invoice_number,
             customer:customers(name, phone, email)
           ),
@@ -127,7 +126,6 @@ export default function JobDetail() {
 
       if (error) throw error;
       setJob(data);
-      setSelectedTechnicianId(data.assigned_technician_id || "");
     } catch (error) {
       console.error("Error fetching job detail:", error);
       toast({
@@ -140,74 +138,40 @@ export default function JobDetail() {
     }
   };
 
-  const fetchTechnicians = async () => {
+  const fetchTeamMembers = async () => {
+    if (!id) return;
+
     try {
-      // Get technicians with active job count
-      const { data, error } = await supabase
-        .from("employees")
+      // ✅ Use direct SQL-like query to bypass TypeScript issues
+      const {
+        data,
+        error,
+      }: {
+        data: any[] | null;
+        error: any;
+      } = await supabase
+        .from("service_technician_assignments")
         .select(
           `
           id,
-          name,
+          role,
           status,
-          active_jobs:invoice_services!assigned_technician_id(count)
+          technician:employees!service_technician_assignments_technician_id_fkey(
+            id,
+            name,
+            email,
+            phone
+          )
         `,
         )
-        .eq("role", "technician")
-        .in("status", ["available", "off_duty"])
-        .order("name");
+        .eq("service_id", id)
+        .eq("status", "active")
+        .order("created_at", { ascending: true });
 
       if (error) throw error;
-
-      // Calculate active jobs count
-      const techsWithWorkload = (data || []).map((tech: any) => ({
-        ...tech,
-        active_jobs_count: tech.active_jobs?.[0]?.count || 0,
-      }));
-
-      // Only show free technicians (no active jobs)
-      const freeTechs = techsWithWorkload.filter(
-        (t) => t.active_jobs_count === 0,
-      );
-
-      setTechnicians(freeTechs);
+      setTeamMembers(data || []);
     } catch (error) {
-      console.error("Error fetching technicians:", error);
-    }
-  };
-
-  const handleAssignJob = async () => {
-    if (!job || !selectedTechnicianId) return;
-
-    setAssigning(true);
-    try {
-      const { error } = await supabase
-        .from("invoice_services")
-        .update({
-          assigned_technician_id: selectedTechnicianId,
-          status: job.status === "pending" ? "assigned" : job.status,
-          updated_at: new Date().toISOString(),
-        })
-        .eq("id", job.id);
-
-      if (error) throw error;
-
-      toast({
-        title: "Job Updated",
-        description: "Technician assignment updated successfully.",
-      });
-
-      setAssignDialogOpen(false);
-      fetchJobDetail();
-    } catch (error: any) {
-      console.error("Error assigning job:", error);
-      toast({
-        variant: "destructive",
-        title: "Error",
-        description: error.message || "Failed to update assignment.",
-      });
-    } finally {
-      setAssigning(false);
+      console.error("Error fetching team members:", error);
     }
   };
 
@@ -243,6 +207,23 @@ export default function JobDetail() {
 
     const { className } = config[priority] || config.normal;
     return <Badge className={className}>{priority.toUpperCase()}</Badge>;
+  };
+
+  const getRoleBadge = (role: string) => {
+    const config: Record<string, { label: string; className: string }> = {
+      lead: { label: "Lead", className: "bg-blue-100 text-blue-800" },
+      assistant: {
+        label: "Assistant",
+        className: "bg-gray-100 text-gray-800",
+      },
+      specialist: {
+        label: "Specialist",
+        className: "bg-purple-100 text-purple-800",
+      },
+    };
+
+    const { label, className } = config[role] || config.assistant;
+    return <Badge className={className}>{label}</Badge>;
   };
 
   if (loading) {
@@ -556,47 +537,55 @@ export default function JobDetail() {
               </CardContent>
             </Card>
 
-            {/* Technician Info */}
+            {/* Service Team Info */}
             <Card>
               <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-3">
-                <CardTitle className="text-base font-semibold">
-                  Technician
+                <CardTitle className="text-base font-semibold flex items-center gap-2">
+                  <Users className="h-4 w-4" />
+                  Service Team
                 </CardTitle>
                 <Button
                   variant="outline"
                   size="sm"
-                  onClick={() => setAssignDialogOpen(true)}
+                  onClick={() => setTeamDialogOpen(true)}
                 >
-                  {job.assigned_technician ? "Reassign" : "Assign"}
+                  {teamMembers.length > 0 ? "Manage" : "Assign"}
                 </Button>
               </CardHeader>
               <CardContent className="pt-0">
-                {job.assigned_technician ? (
-                  <div className="space-y-2">
-                    <div className="flex items-center gap-2">
-                      <div className="flex h-8 w-8 items-center justify-center rounded-full bg-primary/10">
-                        <User className="h-4 w-4 text-primary" />
+                {teamMembers.length > 0 ? (
+                  <div className="space-y-3">
+                    {teamMembers.map((member) => (
+                      <div
+                        key={member.id}
+                        className="flex items-start justify-between gap-2"
+                      >
+                        <div className="flex items-start gap-2 flex-1">
+                          <div className="flex h-8 w-8 items-center justify-center rounded-full bg-primary/10 flex-shrink-0">
+                            <User className="h-4 w-4 text-primary" />
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <p className="font-medium text-sm truncate">
+                              {member.technician.name}
+                            </p>
+                            {member.technician.phone && (
+                              <p className="text-xs text-muted-foreground truncate">
+                                {member.technician.phone}
+                              </p>
+                            )}
+                          </div>
+                        </div>
+                        {getRoleBadge(member.role)}
                       </div>
-                      <p className="font-medium">
-                        {job.assigned_technician.name}
-                      </p>
-                    </div>
-                    {job.assigned_technician.phone && (
-                      <p className="text-sm text-muted-foreground pl-10">
-                        {job.assigned_technician.phone}
-                      </p>
-                    )}
-                    <p className="text-sm text-muted-foreground pl-10">
-                      {job.assigned_technician.email}
-                    </p>
+                    ))}
                   </div>
                 ) : (
                   <div className="flex flex-col items-center justify-center py-6">
                     <div className="flex h-12 w-12 items-center justify-center rounded-full bg-muted">
-                      <User className="h-6 w-6 text-muted-foreground" />
+                      <Users className="h-6 w-6 text-muted-foreground" />
                     </div>
                     <p className="mt-3 text-sm text-muted-foreground">
-                      Not assigned yet
+                      No team assigned yet
                     </p>
                   </div>
                 )}
@@ -625,68 +614,40 @@ export default function JobDetail() {
           </div>
         </div>
 
-        {/* Assign Dialog */}
-        <Dialog open={assignDialogOpen} onOpenChange={setAssignDialogOpen}>
-          <DialogContent>
+        {/* Team Management Dialog */}
+        <Dialog open={teamDialogOpen} onOpenChange={setTeamDialogOpen}>
+          <DialogContent className="max-w-2xl">
             <DialogHeader>
-              <DialogTitle>
-                {job.assigned_technician ? "Reassign" : "Assign"} Technician
-              </DialogTitle>
+              <DialogTitle>Manage Service Team</DialogTitle>
               <DialogDescription>
-                Select a technician for this job
+                Assign and manage technicians for this job
               </DialogDescription>
             </DialogHeader>
             <div className="space-y-4 py-4">
-              <div className="space-y-2">
-                <Label>Technician</Label>
-                {technicians.length === 0 ? (
-                  <div className="p-4 border rounded-lg bg-yellow-50 border-yellow-200">
-                    <div className="flex items-start gap-3">
-                      <AlertCircle className="h-5 w-5 text-yellow-600 mt-0.5" />
-                      <div>
-                        <p className="text-sm font-medium text-yellow-900">
-                          No Free Technicians Available
-                        </p>
-                        <p className="text-xs text-yellow-700 mt-1">
-                          All technicians currently have active jobs. Please
-                          wait for one to complete their work.
-                        </p>
-                      </div>
+              {job.service_address && (
+                <div className="p-3 bg-muted rounded-lg">
+                  <div className="flex items-start gap-2">
+                    <MapPin className="h-4 w-4 text-muted-foreground mt-0.5" />
+                    <div>
+                      <p className="text-sm font-medium">Service Address</p>
+                      <p className="text-sm text-muted-foreground">
+                        {job.service_address}
+                      </p>
                     </div>
                   </div>
-                ) : (
-                  <Select
-                    value={selectedTechnicianId}
-                    onValueChange={setSelectedTechnicianId}
-                  >
-                    <SelectTrigger>
-                      <SelectValue placeholder="Choose a technician" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {technicians.map((tech) => (
-                        <SelectItem key={tech.id} value={tech.id}>
-                          {tech.name}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                )}
-              </div>
+                </div>
+              )}
+
+              <ServiceTeamManager
+                serviceId={job.id}
+                invoiceId={job.invoice.id}
+                onTeamUpdated={() => {
+                  fetchTeamMembers();
+                  fetchJobDetail();
+                  setTeamDialogOpen(false);
+                }}
+              />
             </div>
-            <DialogFooter>
-              <Button
-                variant="outline"
-                onClick={() => setAssignDialogOpen(false)}
-              >
-                Cancel
-              </Button>
-              <Button
-                onClick={handleAssignJob}
-                disabled={!selectedTechnicianId || assigning}
-              >
-                {assigning ? "Updating..." : "Confirm"}
-              </Button>
-            </DialogFooter>
           </DialogContent>
         </Dialog>
       </div>

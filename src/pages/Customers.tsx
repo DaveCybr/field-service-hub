@@ -1,20 +1,11 @@
-import { useEffect, useState } from "react";
+// Customers.tsx - Customer Management with SERVER-SIDE Pagination
+import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
-import { useTranslation } from "react-i18next";
 import { supabase } from "@/integrations/supabase/client";
 import DashboardLayout from "@/components/layout/DashboardLayout";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
 import {
   Dialog,
   DialogContent,
@@ -25,6 +16,16 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog";
 import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import {
   Select,
   SelectContent,
   SelectItem,
@@ -32,180 +33,294 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Label } from "@/components/ui/label";
+import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import {
   Plus,
-  Search,
-  Phone,
-  MapPin,
   RefreshCw,
+  Users,
   Building2,
-  User,
-  Edit,
-  Trash2,
-  ExternalLink,
-  ChevronLeft,
-  ChevronRight,
-  ChevronsLeft,
-  ChevronsRight,
+  TrendingUp,
+  UserPlus,
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
-import { EditCustomerModal } from "@/components/customers/EditCustomerModal";
-import { DeleteCustomerDialog } from "@/components/customers/DeleteCustomerDialog";
-
-interface Customer {
-  id: string;
-  name: string;
-  phone: string;
-  email: string | null;
-  address: string | null;
-  category: "retail" | "project";
-  payment_terms_days: number;
-  current_outstanding: number;
-  blacklisted: boolean;
-  created_at: string;
-  updated_at: string;
-}
-
-const ITEMS_PER_PAGE = 10;
+import { DataTableServer } from "@/components/ui/data-table";
+import {
+  createCustomerColumns,
+  Customer,
+  CustomerColumnActions,
+} from "@/components/customers/columns";
+import { useServerPagination } from "@/hooks/useServerPagination";
 
 export default function Customers() {
-  const { t } = useTranslation();
   const navigate = useNavigate();
-  const [customers, setCustomers] = useState<Customer[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [searchQuery, setSearchQuery] = useState("");
-  const [categoryFilter, setCategoryFilter] = useState("all");
-  const [dialogOpen, setDialogOpen] = useState(false);
-  const [creating, setCreating] = useState(false);
-
-  // ✅ Pagination states
-  const [currentPage, setCurrentPage] = useState(1);
-  const [totalCount, setTotalCount] = useState(0);
-
-  // CRUD states
-  const [editingCustomer, setEditingCustomer] = useState<Customer | null>(null);
-  const [deletingCustomer, setDeletingCustomer] = useState<Customer | null>(
-    null,
-  );
-
-  const [formData, setFormData] = useState({
-    name: "",
-    phone: "",
-    email: "",
-    address: "",
-    category: "retail",
-    payment_terms_days: "0",
-  });
-
   const { toast } = useToast();
 
+  const [searchValue, setSearchValue] = useState("");
+  const [categoryFilter, setCategoryFilter] = useState("all");
+  const [dialogOpen, setDialogOpen] = useState(false);
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [selectedCustomer, setSelectedCustomer] = useState<Customer | null>(
+    null,
+  );
+  const [selectedCustomers, setSelectedCustomers] = useState<Customer[]>([]);
+
+  // Form states
+  const [formData, setFormData] = useState({
+    name: "",
+    email: "",
+    phone: "",
+    address: "",
+    category: "retail" as "retail" | "project",
+    payment_terms_days: 0,
+  });
+  const [submitting, setSubmitting] = useState(false);
+
+  // ✅ Server-side pagination with filters
+  const {
+    data: customers,
+    loading,
+    pageCount,
+    totalRows,
+    pagination,
+    setPagination,
+    refetch,
+  } = useServerPagination<Customer>({
+    table: "customers",
+    select: "*",
+    orderBy: { column: "updated_at", ascending: false },
+    filters:
+      categoryFilter !== "all" ? { category: categoryFilter } : undefined,
+    searchColumn: "name",
+    searchValue: searchValue,
+    initialPageSize: 10,
+  });
+
+  // Fetch stats (separate from pagination)
+  const [stats, setStats] = useState({
+    total: 0,
+    individual: 0,
+    company: 0,
+    totalRevenue: 0,
+  });
+
   useEffect(() => {
-    fetchCustomers();
-  }, [categoryFilter, searchQuery, currentPage]);
+    fetchStats();
+  }, []);
 
-  const fetchCustomers = async () => {
-    setLoading(true);
-    try {
-      // ✅ Build query with pagination
-      let query = supabase
-        .from("customers")
-        .select("*", { count: "exact" })
-        .order("updated_at", { ascending: false }); // ✅ Order by updated_at DESC
+  const fetchStats = async () => {
+    // Total customers
+    const { count: totalCount } = await supabase
+      .from("customers")
+      .select("*", { count: "exact", head: true });
 
-      // Apply category filter
-      if (categoryFilter !== "all") {
-        query = query.eq("category", categoryFilter as "retail" | "project");
-      }
+    // Individual customers
+    const { count: individualCount } = await supabase
+      .from("customers")
+      .select("*", { count: "exact", head: true })
+      .eq("category", "retail");
 
-      // Apply search filter
-      if (searchQuery) {
-        query = query.or(
-          `name.ilike.%${searchQuery}%,phone.ilike.%${searchQuery}%`,
-        );
-      }
+    // Company customers
+    const { count: companyCount } = await supabase
+      .from("customers")
+      .select("*", { count: "exact", head: true })
+      .eq("category", "project");
 
-      // ✅ Apply pagination
-      const offset = (currentPage - 1) * ITEMS_PER_PAGE;
-      query = query.range(offset, offset + ITEMS_PER_PAGE - 1);
+    // Total revenue (sum of current_outstanding)
+    const { data: revenueData } = await supabase
+      .from("customers")
+      .select("current_outstanding");
 
-      const { data, error, count } = await query;
+    const totalRevenue =
+      revenueData?.reduce((sum, c) => sum + (c.current_outstanding || 0), 0) ||
+      0;
 
-      if (error) throw error;
+    setStats({
+      total: totalCount || 0,
+      individual: individualCount || 0,
+      company: companyCount || 0,
+      totalRevenue,
+    });
+  };
 
-      setCustomers(data || []);
-      setTotalCount(count || 0);
-    } catch (error) {
-      console.error("Error fetching customers:", error);
-      toast({
-        variant: "destructive",
-        title: t("common.error"),
-        description: t("messages.loadFailed"),
-      });
-    } finally {
-      setLoading(false);
-    }
+  const resetForm = () => {
+    setFormData({
+      name: "",
+      email: "",
+      phone: "",
+      address: "",
+      category: "retail",
+      payment_terms_days: 0,
+    });
+    setSelectedCustomer(null);
   };
 
   const handleCreateCustomer = async () => {
     if (!formData.name || !formData.phone) {
       toast({
         variant: "destructive",
-        title: t("common.error"),
-        description: t("validation.namePhoneRequired"),
+        title: "Validation Error",
+        description: "Name and phone are required.",
       });
       return;
     }
 
-    setCreating(true);
+    setSubmitting(true);
     try {
-      const customerCategory = formData.category as "retail" | "project";
-
-      // ✅ Add timestamps explicitly
       const { error } = await supabase.from("customers").insert([
         {
           name: formData.name,
-          phone: formData.phone,
           email: formData.email || null,
+          phone: formData.phone,
           address: formData.address || null,
-          category: customerCategory,
-          payment_terms_days: parseInt(formData.payment_terms_days) || 0,
-          created_at: new Date().toISOString(), // ✅ Set timestamp
-          updated_at: new Date().toISOString(), // ✅ Set timestamp
+          category: formData.category,
+          payment_terms_days: formData.payment_terms_days,
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
         },
       ]);
 
       if (error) throw error;
 
       toast({
-        title: t("customers.customerAdded"),
-        description: t("customers.customerAddedDesc", { name: formData.name }),
+        title: "Customer Added",
+        description: `${formData.name} has been added successfully.`,
       });
 
       setDialogOpen(false);
-      setFormData({
-        name: "",
-        phone: "",
-        email: "",
-        address: "",
-        category: "retail",
-        payment_terms_days: "0",
-      });
-
-      // ✅ Reset to first page and fetch
-      setCurrentPage(1);
-      fetchCustomers();
+      resetForm();
+      refetch();
+      fetchStats();
     } catch (error: any) {
       console.error("Error creating customer:", error);
       toast({
         variant: "destructive",
-        title: t("common.error"),
-        description: error.message || t("messages.saveFailed"),
+        title: "Error",
+        description: error.message || "Failed to add customer.",
       });
     } finally {
-      setCreating(false);
+      setSubmitting(false);
     }
   };
+
+  const handleUpdateCustomer = async () => {
+    if (!selectedCustomer) return;
+
+    if (!formData.name || !formData.phone) {
+      toast({
+        variant: "destructive",
+        title: "Validation Error",
+        description: "Name and phone are required.",
+      });
+      return;
+    }
+
+    setSubmitting(true);
+    try {
+      const { error } = await supabase
+        .from("customers")
+        .update({
+          name: formData.name,
+          email: formData.email || null,
+          phone: formData.phone,
+          address: formData.address || null,
+          category: formData.category,
+          payment_terms_days: formData.payment_terms_days,
+          updated_at: new Date().toISOString(),
+        })
+        .eq("id", selectedCustomer.id);
+
+      if (error) throw error;
+
+      toast({
+        title: "Customer Updated",
+        description: `${formData.name} has been updated successfully.`,
+      });
+
+      setDialogOpen(false);
+      resetForm();
+      refetch();
+      fetchStats();
+    } catch (error: any) {
+      console.error("Error updating customer:", error);
+      toast({
+        variant: "destructive",
+        title: "Error",
+        description: error.message || "Failed to update customer.",
+      });
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const handleDeleteCustomer = async () => {
+    if (!selectedCustomer) return;
+
+    setSubmitting(true);
+    try {
+      const { error } = await supabase
+        .from("customers")
+        .delete()
+        .eq("id", selectedCustomer.id);
+
+      if (error) throw error;
+
+      toast({
+        title: "Customer Deleted",
+        description: `${selectedCustomer.name} has been deleted.`,
+      });
+
+      setDeleteDialogOpen(false);
+      setSelectedCustomer(null);
+      refetch();
+      fetchStats();
+    } catch (error: any) {
+      console.error("Error deleting customer:", error);
+      toast({
+        variant: "destructive",
+        title: "Error",
+        description: error.message || "Failed to delete customer.",
+      });
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const handleRowClick = (customer: Customer) => {
+    navigate(`/customers/${customer.id}`);
+  };
+
+  const handleSelectionChange = (selectedRows: Customer[]) => {
+    setSelectedCustomers(selectedRows);
+  };
+
+  // Column action handlers
+  const columnActions: CustomerColumnActions = {
+    onViewDetails: (customer) => {
+      navigate(`/customers/${customer.id}`);
+    },
+    onEdit: (customer) => {
+      setSelectedCustomer(customer);
+      setFormData({
+        name: customer.name,
+        email: customer.email || "",
+        phone: customer.phone || "",
+        address: customer.address || "",
+        category: customer.category || "retail",
+        payment_terms_days: customer.payment_terms_days || 0,
+      });
+      setDialogOpen(true);
+    },
+    onViewServices: (customer) => {
+      navigate(`/services?customer=${customer.id}`);
+    },
+    onDelete: (customer) => {
+      setSelectedCustomer(customer);
+      setDeleteDialogOpen(true);
+    },
+  };
+
+  const columns = createCustomerColumns(columnActions);
 
   const formatCurrency = (amount: number) => {
     return new Intl.NumberFormat("id-ID", {
@@ -215,107 +330,51 @@ export default function Customers() {
     }).format(amount);
   };
 
-  const handleRowClick = (customerId: string) => {
-    navigate(`/customers/${customerId}`);
-  };
-
-  const handleEditSuccess = () => {
-    setEditingCustomer(null);
-    fetchCustomers();
-  };
-
-  const handleDeleteSuccess = () => {
-    setDeletingCustomer(null);
-    fetchCustomers();
-  };
-
-  // ✅ Pagination calculations
-  const totalPages = Math.ceil(totalCount / ITEMS_PER_PAGE);
-  const startIndex = (currentPage - 1) * ITEMS_PER_PAGE + 1;
-  const endIndex = Math.min(currentPage * ITEMS_PER_PAGE, totalCount);
-
-  const goToPage = (page: number) => {
-    const pageNum = Math.max(1, Math.min(page, totalPages || 1));
-    setCurrentPage(pageNum);
-  };
-
   return (
     <DashboardLayout>
       <div className="space-y-6 animate-fade-in">
         {/* Header */}
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
           <div>
-            <h1 className="text-2xl font-bold tracking-tight">
-              {t("customers.title")}
-            </h1>
-            <p className="text-muted-foreground">{t("customers.subtitle")}</p>
+            <h1 className="text-2xl font-bold tracking-tight">Customers</h1>
+            <p className="text-muted-foreground">
+              Manage customer database and service history
+            </p>
           </div>
           <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
             <DialogTrigger asChild>
-              <Button>
+              <Button onClick={resetForm}>
                 <Plus className="mr-2 h-4 w-4" />
-                {t("customers.addCustomer")}
+                Add Customer
               </Button>
             </DialogTrigger>
-            <DialogContent className="max-w-md">
+            <DialogContent className="max-w-2xl">
               <DialogHeader>
-                <DialogTitle>{t("customers.newCustomer")}</DialogTitle>
+                <DialogTitle>
+                  {selectedCustomer ? "Edit Customer" : "New Customer"}
+                </DialogTitle>
                 <DialogDescription>
-                  {t("customers.enterDetails")}
+                  Enter the customer details below.
                 </DialogDescription>
               </DialogHeader>
               <div className="space-y-4 py-4">
-                <div className="space-y-2">
-                  <Label htmlFor="name">{t("common.name")} *</Label>
-                  <Input
-                    id="name"
-                    placeholder={t("customers.customerName")}
-                    value={formData.name}
-                    onChange={(e) =>
-                      setFormData({ ...formData, name: e.target.value })
-                    }
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="phone">{t("common.phone")} *</Label>
-                  <Input
-                    id="phone"
-                    placeholder="+62 812 3456 7890"
-                    value={formData.phone}
-                    onChange={(e) =>
-                      setFormData({ ...formData, phone: e.target.value })
-                    }
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="email">{t("common.email")}</Label>
-                  <Input
-                    id="email"
-                    type="email"
-                    placeholder="customer@example.com"
-                    value={formData.email}
-                    onChange={(e) =>
-                      setFormData({ ...formData, email: e.target.value })
-                    }
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="address">{t("common.address")}</Label>
-                  <Textarea
-                    id="address"
-                    placeholder={t("common.address")}
-                    value={formData.address}
-                    onChange={(e) =>
-                      setFormData({ ...formData, address: e.target.value })
-                    }
-                  />
-                </div>
                 <div className="grid grid-cols-2 gap-4">
                   <div className="space-y-2">
-                    <Label htmlFor="category">{t("customers.category")}</Label>
+                    <Label htmlFor="name">Full Name *</Label>
+                    <Input
+                      id="name"
+                      placeholder="John Doe"
+                      value={formData.name}
+                      onChange={(e) =>
+                        setFormData({ ...formData, name: e.target.value })
+                      }
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="category">Category</Label>
                     <Select
                       value={formData.category}
-                      onValueChange={(value) =>
+                      onValueChange={(value: "retail" | "project") =>
                         setFormData({ ...formData, category: value })
                       }
                     >
@@ -323,390 +382,259 @@ export default function Customers() {
                         <SelectValue />
                       </SelectTrigger>
                       <SelectContent>
-                        <SelectItem value="retail">
-                          {t("customers.retail")}
-                        </SelectItem>
-                        <SelectItem value="project">
-                          {t("customers.project")}
-                        </SelectItem>
+                        <SelectItem value="retail">Retail</SelectItem>
+                        <SelectItem value="project">Project</SelectItem>
                       </SelectContent>
                     </Select>
                   </div>
-                  {formData.category === "project" && (
-                    <div className="space-y-2">
-                      <Label htmlFor="terms">
-                        {t("customers.paymentTermsDays")}
-                      </Label>
-                      <Select
-                        value={formData.payment_terms_days}
-                        onValueChange={(value) =>
-                          setFormData({
-                            ...formData,
-                            payment_terms_days: value,
-                          })
-                        }
-                      >
-                        <SelectTrigger>
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="7">7 {t("time.days")}</SelectItem>
-                          <SelectItem value="14">
-                            14 {t("time.days")}
-                          </SelectItem>
-                          <SelectItem value="30">
-                            30 {t("time.days")}
-                          </SelectItem>
-                          <SelectItem value="60">
-                            60 {t("time.days")}
-                          </SelectItem>
-                        </SelectContent>
-                      </Select>
-                    </div>
-                  )}
                 </div>
+
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="email">Email</Label>
+                    <Input
+                      id="email"
+                      type="email"
+                      placeholder="john@example.com"
+                      value={formData.email}
+                      onChange={(e) =>
+                        setFormData({ ...formData, email: e.target.value })
+                      }
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="phone">Phone *</Label>
+                    <Input
+                      id="phone"
+                      placeholder="+62 812 3456 7890"
+                      value={formData.phone}
+                      onChange={(e) =>
+                        setFormData({ ...formData, phone: e.target.value })
+                      }
+                    />
+                  </div>
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="address">Address</Label>
+                  <Textarea
+                    id="address"
+                    placeholder="Street address"
+                    value={formData.address}
+                    onChange={(e) =>
+                      setFormData({ ...formData, address: e.target.value })
+                    }
+                    rows={2}
+                  />
+                </div>
+
+                {formData.category === "project" && (
+                  <div className="space-y-2">
+                    <Label htmlFor="payment_terms">Payment Terms (Days)</Label>
+                    <Select
+                      value={formData.payment_terms_days.toString()}
+                      onValueChange={(value) =>
+                        setFormData({
+                          ...formData,
+                          payment_terms_days: parseInt(value),
+                        })
+                      }
+                    >
+                      <SelectTrigger>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="0">Immediate</SelectItem>
+                        <SelectItem value="7">7 Days</SelectItem>
+                        <SelectItem value="14">14 Days</SelectItem>
+                        <SelectItem value="30">30 Days</SelectItem>
+                        <SelectItem value="60">60 Days</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                )}
               </div>
               <DialogFooter>
-                <Button variant="outline" onClick={() => setDialogOpen(false)}>
-                  {t("common.cancel")}
+                <Button
+                  variant="outline"
+                  onClick={() => {
+                    setDialogOpen(false);
+                    resetForm();
+                  }}
+                >
+                  Cancel
                 </Button>
-                <Button onClick={handleCreateCustomer} disabled={creating}>
-                  {creating ? t("common.adding") : t("customers.addCustomer")}
+                <Button
+                  onClick={
+                    selectedCustomer
+                      ? handleUpdateCustomer
+                      : handleCreateCustomer
+                  }
+                  disabled={submitting}
+                >
+                  {submitting
+                    ? "Saving..."
+                    : selectedCustomer
+                      ? "Update Customer"
+                      : "Add Customer"}
                 </Button>
               </DialogFooter>
             </DialogContent>
           </Dialog>
         </div>
 
+        {/* Stats Cards */}
+        <div className="grid gap-4 sm:grid-cols-4">
+          <Card>
+            <CardContent className="p-6">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-sm font-medium text-muted-foreground">
+                    Total Customers
+                  </p>
+                  <p className="text-3xl font-bold mt-1">{stats.total}</p>
+                </div>
+                <div className="rounded-lg p-3 bg-blue-100">
+                  <Users className="h-6 w-6 text-blue-600" />
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardContent className="p-6">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-sm font-medium text-muted-foreground">
+                    Retail
+                  </p>
+                  <p className="text-3xl font-bold mt-1">{stats.individual}</p>
+                </div>
+                <div className="rounded-lg p-3 bg-green-100">
+                  <UserPlus className="h-6 w-6 text-green-600" />
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardContent className="p-6">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-sm font-medium text-muted-foreground">
+                    Project
+                  </p>
+                  <p className="text-3xl font-bold mt-1">{stats.company}</p>
+                </div>
+                <div className="rounded-lg p-3 bg-purple-100">
+                  <Building2 className="h-6 w-6 text-purple-600" />
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardContent className="p-6">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-sm font-medium text-muted-foreground">
+                    Outstanding
+                  </p>
+                  <p className="text-2xl font-bold mt-1">
+                    {formatCurrency(stats.totalRevenue)}
+                  </p>
+                </div>
+                <div className="rounded-lg p-3 bg-amber-100">
+                  <TrendingUp className="h-6 w-6 text-amber-600" />
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+
         {/* Filters */}
         <Card>
           <CardContent className="pt-6">
-            <div className="flex flex-col sm:flex-row gap-4">
-              <div className="relative flex-1">
-                <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-                <Input
-                  placeholder={t("customers.searchCustomers")}
-                  value={searchQuery}
-                  onChange={(e) => {
-                    setSearchQuery(e.target.value);
-                    setCurrentPage(1); // Reset to first page on search
-                  }}
-                  className="pl-9"
-                />
+            <div className="flex items-center justify-between gap-4">
+              <div className="flex items-center gap-4">
+                <Select
+                  value={categoryFilter}
+                  onValueChange={setCategoryFilter}
+                >
+                  <SelectTrigger className="w-[200px]">
+                    <SelectValue placeholder="Category" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All Categories</SelectItem>
+                    <SelectItem value="retail">Retail</SelectItem>
+                    <SelectItem value="project">Project</SelectItem>
+                  </SelectContent>
+                </Select>
+
+                {selectedCustomers.length > 0 && (
+                  <Badge variant="secondary">
+                    {selectedCustomers.length} selected
+                  </Badge>
+                )}
               </div>
-              <Select
-                value={categoryFilter}
-                onValueChange={(value) => {
-                  setCategoryFilter(value);
-                  setCurrentPage(1); // Reset to first page on filter
-                }}
-              >
-                <SelectTrigger className="w-full sm:w-[150px]">
-                  <SelectValue placeholder={t("customers.category")} />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">{t("common.all")}</SelectItem>
-                  <SelectItem value="retail">
-                    {t("customers.retail")}
-                  </SelectItem>
-                  <SelectItem value="project">
-                    {t("customers.project")}
-                  </SelectItem>
-                </SelectContent>
-              </Select>
-              <Button variant="outline" onClick={fetchCustomers}>
-                <RefreshCw className="h-4 w-4" />
+
+              <Button variant="outline" onClick={refetch} disabled={loading}>
+                <RefreshCw
+                  className={`h-4 w-4 ${loading ? "animate-spin" : ""}`}
+                />
               </Button>
             </div>
           </CardContent>
         </Card>
 
-        {/* ✅ Results Summary */}
-        {!loading && totalCount > 0 && (
-          <div className="flex items-center justify-between text-sm text-muted-foreground">
-            <span>
-              Showing {startIndex} to {endIndex} of {totalCount} customer
-              {totalCount !== 1 ? "s" : ""}
-            </span>
-            <span className="text-primary font-medium">
-              {totalCount} results
-            </span>
-          </div>
-        )}
-
-        {/* Customers Table */}
+        {/* Data Table with Server-Side Pagination */}
         <Card>
-          <CardContent className="p-0">
-            {loading ? (
-              <div className="flex items-center justify-center py-12">
-                <div className="h-8 w-8 animate-spin rounded-full border-4 border-primary border-t-transparent" />
-              </div>
-            ) : customers.length === 0 ? (
-              <div className="text-center py-12">
-                <h3 className="text-lg font-medium">
-                  {t("customers.noCustomersFound")}
-                </h3>
-                <p className="mt-2 text-sm text-muted-foreground">
-                  {t("customers.addFirstCustomer")}
-                </p>
-              </div>
-            ) : (
-              <div className="overflow-x-auto">
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>{t("customers.customerName")}</TableHead>
-                      <TableHead>{t("common.contact")}</TableHead>
-                      <TableHead>{t("customers.category")}</TableHead>
-                      <TableHead>{t("customers.paymentTerms")}</TableHead>
-                      <TableHead className="text-right">
-                        {t("customers.outstanding")}
-                      </TableHead>
-                      <TableHead>{t("common.status")}</TableHead>
-                      <TableHead className="text-center">Actions</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {customers.map((customer) => (
-                      <TableRow
-                        key={customer.id}
-                        className="cursor-pointer hover:bg-muted/50"
-                        onClick={() => handleRowClick(customer.id)}
-                      >
-                        <TableCell>
-                          <div className="flex items-center gap-3">
-                            <div
-                              className={`rounded-full p-2 ${
-                                customer.category === "project"
-                                  ? "bg-purple-100 text-purple-600"
-                                  : "bg-blue-100 text-blue-600"
-                              }`}
-                            >
-                              {customer.category === "project" ? (
-                                <Building2 className="h-4 w-4" />
-                              ) : (
-                                <User className="h-4 w-4" />
-                              )}
-                            </div>
-                            <div>
-                              <p className="font-medium">{customer.name}</p>
-                              {customer.email && (
-                                <p className="text-sm text-muted-foreground">
-                                  {customer.email}
-                                </p>
-                              )}
-                            </div>
-                          </div>
-                        </TableCell>
-                        <TableCell>
-                          <div className="space-y-1">
-                            <div className="flex items-center gap-1 text-sm">
-                              <Phone className="h-3 w-3 text-muted-foreground" />
-                              {customer.phone}
-                            </div>
-                            {customer.address && (
-                              <div className="flex items-center gap-1 text-sm text-muted-foreground">
-                                <MapPin className="h-3 w-3" />
-                                <span className="truncate max-w-[200px]">
-                                  {customer.address}
-                                </span>
-                              </div>
-                            )}
-                          </div>
-                        </TableCell>
-                        <TableCell>
-                          <Badge
-                            variant={
-                              customer.category === "project"
-                                ? "default"
-                                : "secondary"
-                            }
-                          >
-                            {t(`customers.${customer.category}`)}
-                          </Badge>
-                        </TableCell>
-                        <TableCell>
-                          {customer.category === "project" &&
-                          customer.payment_terms_days > 0
-                            ? `${customer.payment_terms_days} ${t("time.days")}`
-                            : t("common.immediate")}
-                        </TableCell>
-                        <TableCell className="text-right">
-                          <span
-                            className={
-                              customer.current_outstanding > 0
-                                ? "text-destructive font-medium"
-                                : ""
-                            }
-                          >
-                            {formatCurrency(customer.current_outstanding)}
-                          </span>
-                        </TableCell>
-                        <TableCell>
-                          {customer.blacklisted ? (
-                            <Badge variant="destructive">
-                              {t("customers.blacklisted")}
-                            </Badge>
-                          ) : (
-                            <Badge
-                              variant="outline"
-                              className="bg-emerald-50 text-emerald-700 border-emerald-200"
-                            >
-                              {t("common.active")}
-                            </Badge>
-                          )}
-                        </TableCell>
-                        <TableCell>
-                          <div className="flex items-center justify-center gap-1">
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                navigate(`/customers/${customer.id}`);
-                              }}
-                            >
-                              <ExternalLink className="h-4 w-4" />
-                            </Button>
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                setEditingCustomer(customer);
-                              }}
-                            >
-                              <Edit className="h-4 w-4" />
-                            </Button>
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                setDeletingCustomer(customer);
-                              }}
-                              className="text-destructive hover:bg-destructive/10"
-                            >
-                              <Trash2 className="h-4 w-4" />
-                            </Button>
-                          </div>
-                        </TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-              </div>
-            )}
+          <CardContent className="p-6">
+            <DataTableServer
+              columns={columns}
+              data={customers}
+              pageCount={pageCount}
+              totalRows={totalRows}
+              pagination={pagination}
+              onPaginationChange={setPagination}
+              loading={loading}
+              searchKey="name"
+              searchPlaceholder="Search customers..."
+              searchValue={searchValue}
+              onSearchChange={setSearchValue}
+              onRowClick={handleRowClick}
+              onSelectionChange={handleSelectionChange}
+              enableMultiSelect={true}
+              enableColumnVisibility={true}
+              emptyMessage="No customers found"
+              emptyDescription="Add your first customer to get started."
+            />
           </CardContent>
         </Card>
 
-        {/* ✅ Pagination */}
-        {!loading && totalCount > 0 && (
-          <Card className="p-4">
-            <div className="flex items-center justify-between">
-              <div className="text-sm text-muted-foreground">
-                Page {currentPage} of {totalPages}
-              </div>
-
-              <div className="flex items-center gap-2">
-                <Button
-                  variant="outline"
-                  size="icon"
-                  onClick={() => goToPage(1)}
-                  disabled={currentPage === 1}
-                  title="First page"
-                >
-                  <ChevronsLeft className="h-4 w-4" />
-                </Button>
-
-                <Button
-                  variant="outline"
-                  size="icon"
-                  onClick={() => goToPage(currentPage - 1)}
-                  disabled={currentPage === 1}
-                  title="Previous page"
-                >
-                  <ChevronLeft className="h-4 w-4" />
-                </Button>
-
-                {/* Page numbers */}
-                <div className="flex items-center gap-1">
-                  {Array.from({ length: totalPages }, (_, i) => i + 1).map(
-                    (page) => {
-                      const showPage =
-                        page === 1 ||
-                        page === totalPages ||
-                        Math.abs(page - currentPage) <= 1;
-
-                      if (!showPage && Math.abs(page - currentPage) === 2) {
-                        return <span key={page}>...</span>;
-                      }
-
-                      if (showPage) {
-                        return (
-                          <Button
-                            key={page}
-                            variant={
-                              currentPage === page ? "default" : "outline"
-                            }
-                            size="sm"
-                            onClick={() => goToPage(page)}
-                            className="h-8 w-8 p-0"
-                          >
-                            {page}
-                          </Button>
-                        );
-                      }
-
-                      return null;
-                    },
-                  )}
-                </div>
-
-                <Button
-                  variant="outline"
-                  size="icon"
-                  onClick={() => goToPage(currentPage + 1)}
-                  disabled={currentPage === totalPages}
-                  title="Next page"
-                >
-                  <ChevronRight className="h-4 w-4" />
-                </Button>
-
-                <Button
-                  variant="outline"
-                  size="icon"
-                  onClick={() => goToPage(totalPages)}
-                  disabled={currentPage === totalPages}
-                  title="Last page"
-                >
-                  <ChevronsRight className="h-4 w-4" />
-                </Button>
-              </div>
-
-              <div className="text-sm text-muted-foreground">
-                {ITEMS_PER_PAGE} items per page
-              </div>
-            </div>
-          </Card>
-        )}
+        {/* Delete Confirmation Dialog */}
+        <AlertDialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>Delete Customer</AlertDialogTitle>
+              <AlertDialogDescription>
+                Are you sure you want to delete{" "}
+                <strong>{selectedCustomer?.name}</strong>? This action cannot be
+                undone.
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel>Cancel</AlertDialogCancel>
+              <AlertDialogAction
+                onClick={handleDeleteCustomer}
+                className="bg-red-600 hover:bg-red-700"
+              >
+                {submitting ? "Deleting..." : "Delete"}
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
       </div>
-
-      {/* Edit Modal */}
-      <EditCustomerModal
-        open={!!editingCustomer}
-        onOpenChange={(open) => !open && setEditingCustomer(null)}
-        customer={editingCustomer}
-        onSuccess={handleEditSuccess}
-      />
-
-      {/* Delete Dialog */}
-      <DeleteCustomerDialog
-        open={!!deletingCustomer}
-        onOpenChange={(open) => !open && setDeletingCustomer(null)}
-        customer={deletingCustomer}
-        onSuccess={handleDeleteSuccess}
-      />
     </DashboardLayout>
   );
 }
