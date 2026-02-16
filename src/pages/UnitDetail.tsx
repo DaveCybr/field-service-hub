@@ -6,20 +6,19 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   ArrowLeft,
   QrCode,
   Calendar,
   Shield,
   Wrench,
-  User,
-  DollarSign,
-  Clock,
-  CheckCircle2,
-  AlertCircle,
   Download,
   Edit,
   Trash2,
+  AlertTriangle,
+  Package,
+  History,
 } from "lucide-react";
 import { format } from "date-fns";
 import { formatCurrency } from "@/lib/utils/currency";
@@ -27,6 +26,10 @@ import { QRCodeSVG } from "qrcode.react";
 import { useToast } from "@/hooks/use-toast";
 import { EditUnitModal } from "@/components/units/EditUnitModal";
 import { DeleteUnitDialog } from "@/components/units/DeleteUnitDialog";
+import { RecurringIssuesAlert } from "@/components/units/RecurringIssuesAlert";
+import { PartsHistoryTimeline } from "@/components/units/PartsHistoryTimeline";
+import { ServiceTimeline } from "@/components/units/ServiceTimeline";
+import { useUnitInsights } from "@/hooks/useUnitInsights";
 
 interface UnitDetail {
   id: string;
@@ -86,6 +89,13 @@ export default function UnitDetail() {
   const [showQR, setShowQR] = useState(false);
   const [editModalOpen, setEditModalOpen] = useState(false);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+
+  // Use the new insights hook
+  const {
+    insights,
+    loading: insightsLoading,
+    refetch: refetchInsights,
+  } = useUnitInsights(id);
 
   useEffect(() => {
     if (id) {
@@ -195,55 +205,8 @@ export default function UnitDetail() {
     navigate("/units");
   };
 
-  const getStatusBadge = (status: string) => {
-    const config: Record<
-      string,
-      { label: string; className: string; icon: any }
-    > = {
-      pending: {
-        label: "Pending",
-        className: "bg-yellow-100 text-yellow-800",
-        icon: Clock,
-      },
-      assigned: {
-        label: "Assigned",
-        className: "bg-blue-100 text-blue-800",
-        icon: User,
-      },
-      in_progress: {
-        label: "In Progress",
-        className: "bg-purple-100 text-purple-800",
-        icon: Wrench,
-      },
-      completed: {
-        label: "Completed",
-        className: "bg-green-100 text-green-800",
-        icon: CheckCircle2,
-      },
-      cancelled: {
-        label: "Cancelled",
-        className: "bg-red-100 text-red-800",
-        icon: AlertCircle,
-      },
-    };
-    const { label, className, icon: Icon } = config[status] || config.pending;
-    return (
-      <Badge className={className}>
-        <Icon className="h-3 w-3 mr-1" />
-        {label}
-      </Badge>
-    );
-  };
-
-  const getPriorityBadge = (priority: string) => {
-    const config: Record<string, { className: string }> = {
-      urgent: { className: "bg-red-100 text-red-800" },
-      high: { className: "bg-orange-100 text-orange-800" },
-      normal: { className: "bg-blue-100 text-blue-800" },
-      low: { className: "bg-gray-100 text-gray-800" },
-    };
-    const { className } = config[priority] || config.normal;
-    return <Badge className={className}>{priority.toUpperCase()}</Badge>;
+  const handleIssueResolved = () => {
+    refetchInsights();
   };
 
   const isWarrantyActive = () => {
@@ -363,9 +326,34 @@ export default function UnitDetail() {
           </div>
         </div>
 
+        {/* Alert Badges if there are issues */}
+        {!insightsLoading && insights.criticalIssuesCount > 0 && (
+          <div className="flex gap-2">
+            <Badge variant="destructive" className="animate-pulse">
+              <AlertTriangle className="h-3 w-3 mr-1" />
+              {insights.criticalIssuesCount} Critical Issue
+              {insights.criticalIssuesCount > 1 ? "s" : ""}
+            </Badge>
+            {insights.activeIssuesCount > insights.criticalIssuesCount && (
+              <Badge
+                variant="outline"
+                className="border-yellow-500 text-yellow-700"
+              >
+                <AlertTriangle className="h-3 w-3 mr-1" />
+                {insights.activeIssuesCount - insights.criticalIssuesCount}{" "}
+                Other Active Issue
+                {insights.activeIssuesCount - insights.criticalIssuesCount > 1
+                  ? "s"
+                  : ""}
+              </Badge>
+            )}
+          </div>
+        )}
+
         <div className="grid gap-6 lg:grid-cols-3">
-          {/* Unit Information - Same as before */}
+          {/* Main Content - 2/3 width */}
           <div className="lg:col-span-2 space-y-6">
+            {/* Unit Information */}
             <Card>
               <CardHeader>
                 <CardTitle className="text-base">Unit Information</CardTitle>
@@ -452,150 +440,48 @@ export default function UnitDetail() {
               </CardContent>
             </Card>
 
-            {/* Service History - Same as before */}
-            <Card>
-              <CardHeader>
-                <CardTitle className="text-base flex items-center justify-between">
-                  <span>Service History</span>
-                  <Badge variant="secondary">
-                    {serviceHistory.length} services
-                  </Badge>
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                {serviceHistory.length === 0 ? (
-                  <div className="text-center py-8">
-                    <Wrench className="h-10 w-10 mx-auto text-muted-foreground/50 mb-2" />
-                    <p className="text-sm text-muted-foreground">
-                      No service history yet
-                    </p>
-                  </div>
-                ) : (
-                  <div className="space-y-4">
-                    {serviceHistory.map((service) => (
-                      <div
-                        key={service.id}
-                        className="border rounded-lg p-4 hover:bg-muted/50 transition-colors cursor-pointer"
-                        onClick={() => navigate(`/jobs/${service.id}`)}
-                      >
-                        <div className="flex items-start justify-between gap-4 mb-3">
-                          <div className="flex-1">
-                            <h4 className="font-medium">{service.title}</h4>
-                            {service.description && (
-                              <p className="text-sm text-muted-foreground mt-1">
-                                {service.description}
-                              </p>
-                            )}
-                          </div>
-                          <div className="flex flex-col gap-2">
-                            {getStatusBadge(service.status)}
-                            {getPriorityBadge(service.priority)}
-                          </div>
-                        </div>
+            {/* Recurring Issues Alert */}
+            {!insightsLoading && insights.recurringIssues.length > 0 && (
+              <RecurringIssuesAlert
+                issues={insights.recurringIssues}
+                onIssueResolved={handleIssueResolved}
+              />
+            )}
 
-                        <div className="grid grid-cols-2 gap-3 text-sm">
-                          <div className="flex items-center gap-2">
-                            <Calendar className="h-4 w-4 text-muted-foreground" />
-                            <div>
-                              <p className="text-muted-foreground">Invoice</p>
-                              <p className="font-mono text-xs">
-                                {service.invoice.invoice_number}
-                              </p>
-                            </div>
-                          </div>
-
-                          <div className="flex items-center gap-2">
-                            <User className="h-4 w-4 text-muted-foreground" />
-                            <div>
-                              <p className="text-muted-foreground">
-                                Technician
-                              </p>
-                              <p className="font-medium">
-                                {service.assigned_technician?.name ||
-                                  "Unassigned"}
-                              </p>
-                            </div>
-                          </div>
-
-                          {service.scheduled_date && (
-                            <div className="flex items-center gap-2">
-                              <Clock className="h-4 w-4 text-muted-foreground" />
-                              <div>
-                                <p className="text-muted-foreground">
-                                  Scheduled
-                                </p>
-                                <p className="font-medium">
-                                  {format(
-                                    new Date(service.scheduled_date),
-                                    "MMM d, yyyy HH:mm",
-                                  )}
-                                </p>
-                              </div>
-                            </div>
-                          )}
-
-                          <div className="flex items-center gap-2">
-                            <DollarSign className="h-4 w-4 text-muted-foreground" />
-                            <div>
-                              <p className="text-muted-foreground">
-                                Total Cost
-                              </p>
-                              <p className="font-medium">
-                                {formatCurrency(service.total_cost)}
-                              </p>
-                            </div>
-                          </div>
-                        </div>
-
-                        {(service.actual_checkin_at ||
-                          service.actual_checkout_at) && (
-                          <>
-                            <Separator className="my-3" />
-                            <div className="flex gap-4 text-xs text-muted-foreground">
-                              {service.actual_checkin_at && (
-                                <div>
-                                  Check-in:{" "}
-                                  {format(
-                                    new Date(service.actual_checkin_at),
-                                    "MMM d, HH:mm",
-                                  )}
-                                </div>
-                              )}
-                              {service.actual_checkout_at && (
-                                <div>
-                                  Check-out:{" "}
-                                  {format(
-                                    new Date(service.actual_checkout_at),
-                                    "MMM d, HH:mm",
-                                  )}
-                                </div>
-                              )}
-                            </div>
-                          </>
-                        )}
-
-                        {service.technician_notes && (
-                          <>
-                            <Separator className="my-3" />
-                            <div className="text-sm">
-                              <p className="text-muted-foreground mb-1">
-                                Technician Notes:
-                              </p>
-                              <p className="text-sm">
-                                {service.technician_notes}
-                              </p>
-                            </div>
-                          </>
-                        )}
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </CardContent>
-            </Card>
+            {/* Tabs for Service History & Parts */}
+            <Tabs defaultValue="services" className="w-full">
+              <TabsList className="grid w-full grid-cols-2">
+                <TabsTrigger
+                  value="services"
+                  className="flex items-center gap-2"
+                >
+                  <History className="h-4 w-4" />
+                  Service History
+                </TabsTrigger>
+                <TabsTrigger value="parts" className="flex items-center gap-2">
+                  <Package className="h-4 w-4" />
+                  Parts History
+                  {insights.partsHistory.length > 0 && (
+                    <Badge variant="secondary" className="ml-1">
+                      {insights.partsHistory.length}
+                    </Badge>
+                  )}
+                </TabsTrigger>
+              </TabsList>
+              <TabsContent value="services" className="mt-6">
+                <ServiceTimeline services={serviceHistory} />
+              </TabsContent>
+              <TabsContent value="parts" className="mt-6">
+                <PartsHistoryTimeline
+                  parts={insights.partsHistory}
+                  totalCost={insights.totalPartsCost}
+                  mostReplacedPart={insights.mostReplacedPart}
+                />
+              </TabsContent>
+            </Tabs>
           </div>
 
-          {/* Sidebar - Same as before */}
+          {/* Sidebar - 1/3 width */}
           <div className="space-y-6">
             {showQR && (
               <Card>
@@ -693,9 +579,30 @@ export default function UnitDetail() {
                 <Separator />
                 <div className="flex items-center justify-between">
                   <span className="text-sm text-muted-foreground">
-                    Total Spent
+                    Service Cost
                   </span>
                   <span className="font-bold">
+                    {formatCurrency(
+                      serviceHistory.reduce(
+                        (sum, s) => sum + s.service_cost,
+                        0,
+                      ),
+                    )}
+                  </span>
+                </div>
+                <div className="flex items-center justify-between">
+                  <span className="text-sm text-muted-foreground">
+                    Parts Cost
+                  </span>
+                  <span className="font-bold">
+                    {formatCurrency(insights.totalPartsCost)}
+                  </span>
+                </div>
+                <div className="flex items-center justify-between">
+                  <span className="text-sm text-muted-foreground">
+                    Total Spent
+                  </span>
+                  <span className="font-bold text-primary">
                     {formatCurrency(
                       serviceHistory.reduce((sum, s) => sum + s.total_cost, 0),
                     )}

@@ -32,6 +32,50 @@ interface TimelineTabProps {
   invoice: Invoice;
 }
 
+// ============================================
+// HELPER FUNCTIONS - Handle null/undefined
+// ============================================
+
+const formatStatusLabel = (status: string | null | undefined): string => {
+  if (!status) return "Not Set";
+
+  const statusMap: Record<string, string> = {
+    draft: "Draft",
+    pending: "Pending",
+    in_progress: "In Progress",
+    completed: "Completed",
+    cancelled: "Cancelled",
+  };
+
+  return statusMap[status] || status;
+};
+
+const formatPaymentLabel = (status: string | null | undefined): string => {
+  if (!status) return "Not Set";
+
+  const paymentMap: Record<string, string> = {
+    unpaid: "Unpaid",
+    partial: "Partially Paid",
+    paid: "Paid",
+    overdue: "Overdue",
+  };
+
+  return paymentMap[status] || status;
+};
+
+const formatCurrency = (amount: number | null | undefined): string => {
+  if (!amount) return "Rp 0";
+  return new Intl.NumberFormat("id-ID", {
+    style: "currency",
+    currency: "IDR",
+    minimumFractionDigits: 0,
+  }).format(amount);
+};
+
+// ============================================
+// MAIN COMPONENT
+// ============================================
+
 export function TimelineTab({ invoice }: TimelineTabProps) {
   const { toast } = useToast();
   const [events, setEvents] = useState<TimelineEvent[]>([]);
@@ -50,7 +94,7 @@ export function TimelineTab({ invoice }: TimelineTabProps) {
           `
           *,
           employee:employees!audit_logs_employee_id_fkey(name)
-        `
+        `,
         )
         .eq("entity_type", "invoices")
         .eq("entity_id", invoice.id)
@@ -103,30 +147,95 @@ export function TimelineTab({ invoice }: TimelineTabProps) {
 
   const formatEventDescription = (event: TimelineEvent) => {
     try {
+      // Invoice created
       if (event.action === "INSERT") {
         return "Invoice created";
       }
+
+      // Invoice updated
       if (event.action === "UPDATE") {
         const oldData = event.old_data || {};
         const newData = event.new_data || {};
-        const changes = [];
+        const changes: string[] = [];
 
+        // Status change
         if (oldData.status !== newData.status) {
-          changes.push(`Status: ${oldData.status} → ${newData.status}`);
+          const oldStatus = formatStatusLabel(oldData.status);
+          const newStatus = formatStatusLabel(newData.status);
+
+          // If old status was "Not Set", it's being set for first time
+          if (oldStatus === "Not Set") {
+            changes.push(`Status set to ${newStatus}`);
+          } else {
+            changes.push(`Status: ${oldStatus} → ${newStatus}`);
+          }
         }
+
+        // Payment status change
         if (oldData.payment_status !== newData.payment_status) {
-          changes.push(
-            `Payment: ${oldData.payment_status} → ${newData.payment_status}`
-          );
+          const oldPayment = formatPaymentLabel(oldData.payment_status);
+          const newPayment = formatPaymentLabel(newData.payment_status);
+
+          // If old payment was "Not Set", it's being set for first time
+          if (oldPayment === "Not Set") {
+            changes.push(`Payment status set to ${newPayment}`);
+          } else {
+            changes.push(`Payment: ${oldPayment} → ${newPayment}`);
+          }
         }
+
+        // Total amount change
         if (oldData.grand_total !== newData.grand_total) {
-          changes.push(`Total updated`);
+          const oldTotal = oldData.grand_total;
+          const newTotal = newData.grand_total;
+
+          if (oldTotal && newTotal) {
+            changes.push(
+              `Total: ${formatCurrency(oldTotal)} → ${formatCurrency(newTotal)}`,
+            );
+          } else if (newTotal) {
+            changes.push(`Total set to ${formatCurrency(newTotal)}`);
+          } else {
+            changes.push("Total updated");
+          }
+        }
+
+        // Amount paid change
+        if (oldData.amount_paid !== newData.amount_paid) {
+          const oldPaid = oldData.amount_paid || 0;
+          const newPaid = newData.amount_paid || 0;
+
+          if (newPaid > oldPaid) {
+            const payment = newPaid - oldPaid;
+            changes.push(`Payment received: ${formatCurrency(payment)}`);
+          } else {
+            changes.push(`Amount paid updated to ${formatCurrency(newPaid)}`);
+          }
+        }
+
+        // Services/items changes
+        if (oldData.services_total !== newData.services_total) {
+          changes.push("Services updated");
+        }
+        if (oldData.items_total !== newData.items_total) {
+          changes.push("Items updated");
+        }
+
+        // Discount/tax changes
+        if (oldData.discount !== newData.discount) {
+          changes.push("Discount updated");
+        }
+        if (oldData.tax !== newData.tax) {
+          changes.push("Tax updated");
         }
 
         return changes.length > 0 ? changes.join(", ") : "Invoice updated";
       }
+
+      // Default
       return event.action;
     } catch (e) {
+      console.error("Error formatting event:", e);
       return event.action;
     }
   };
@@ -150,7 +259,7 @@ export function TimelineTab({ invoice }: TimelineTabProps) {
         action: "STATUS_CHANGE",
         entity_type: "invoices",
         created_at: invoice.updated_at,
-        description: `Status: ${invoice.status}`,
+        description: `Status set to ${formatStatusLabel(invoice.status)}`,
       });
     }
 
@@ -162,6 +271,14 @@ export function TimelineTab({ invoice }: TimelineTabProps) {
         entity_type: "invoices",
         created_at: invoice.updated_at,
         description: "Invoice paid in full",
+      });
+    } else if (invoice.payment_status === "partial") {
+      timeline.push({
+        id: "partial",
+        action: "PAYMENT",
+        entity_type: "invoices",
+        created_at: invoice.updated_at,
+        description: `Partial payment received: ${formatCurrency(invoice.amount_paid)}`,
       });
     }
 
@@ -201,7 +318,7 @@ export function TimelineTab({ invoice }: TimelineTabProps) {
                 {/* Icon */}
                 <div
                   className={`absolute left-0 w-12 h-12 rounded-full border-2 flex items-center justify-center ${getEventColor(
-                    event.action
+                    event.action,
                   )}`}
                 >
                   {getEventIcon(event.action)}
