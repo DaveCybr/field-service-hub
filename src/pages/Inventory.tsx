@@ -7,7 +7,19 @@ import { Badge } from "@/components/ui/badge";
 import { StockHistory } from "@/components/inventory/StockHistory";
 import { ProductImageUpload } from "@/components/inventory/ProductImageUpload";
 import { ExportProducts } from "@/components/inventory/ExportProducts";
-import { History, Image as ImageIcon } from "lucide-react";
+import {
+  History,
+  Image as ImageIcon,
+  ChevronLeft,
+  ChevronRight,
+  ChevronsLeft,
+  ChevronsRight,
+  ArrowUpDown,
+  ArrowUp,
+  ArrowDown,
+  MoreHorizontal,
+  Eye,
+} from "lucide-react";
 import {
   Card,
   CardContent,
@@ -39,6 +51,14 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -48,7 +68,6 @@ import {
   RefreshCw,
   Package,
   AlertTriangle,
-  ArrowUpDown,
   Minus,
   TrendingDown,
   TrendingUp,
@@ -84,7 +103,7 @@ interface Product {
   min_stock_threshold: number;
   is_service_item: boolean;
   is_active: boolean;
-  image_url: string | null; // ✅ Add this
+  image_url: string | null;
   created_at: string;
 }
 
@@ -98,6 +117,30 @@ interface StockAlert {
   threshold: number;
   status: string;
   created_at: string;
+}
+
+interface PaginationInfo {
+  currentPage: number;
+  totalPages: number;
+  totalCount: number;
+  itemsPerPage: number;
+  from: number;
+  to: number;
+}
+
+type SortField =
+  | "sku"
+  | "name"
+  | "category"
+  | "cost_price"
+  | "sell_price"
+  | "stock"
+  | "created_at";
+type SortOrder = "asc" | "desc";
+
+interface SortConfig {
+  field: SortField;
+  order: SortOrder;
 }
 
 const CATEGORIES = [
@@ -122,6 +165,23 @@ export default function Inventory() {
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState("");
   const [categoryFilter, setCategoryFilter] = useState("all");
+
+  // Pagination state
+  const [pagination, setPagination] = useState<PaginationInfo>({
+    currentPage: 1,
+    totalPages: 1,
+    totalCount: 0,
+    itemsPerPage: 20,
+    from: 0,
+    to: 0,
+  });
+
+  // Sorting state
+  const [sortConfig, setSortConfig] = useState<SortConfig>({
+    field: "created_at",
+    order: "desc",
+  });
+
   const [dialogOpen, setDialogOpen] = useState(false);
   const [adjustDialogOpen, setAdjustDialogOpen] = useState(false);
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
@@ -155,27 +215,67 @@ export default function Inventory() {
   const { employee } = useAuth();
 
   useEffect(() => {
-    fetchProducts();
     fetchAlerts();
-  }, [categoryFilter]);
+  }, []);
+
+  useEffect(() => {
+    fetchProducts();
+  }, [
+    categoryFilter,
+    pagination.currentPage,
+    pagination.itemsPerPage,
+    sortConfig,
+    searchQuery,
+  ]);
 
   const fetchProducts = async () => {
     setLoading(true);
     try {
+      // Calculate range for pagination
+      const from = (pagination.currentPage - 1) * pagination.itemsPerPage;
+      const to = from + pagination.itemsPerPage - 1;
+
+      // Build query
       let query = supabase
         .from("products")
-        .select("*")
-        .eq("is_active", true)
-        .order("name");
+        .select("*", { count: "exact" })
+        .eq("is_active", true);
 
+      // Apply category filter
       if (categoryFilter !== "all") {
         query = query.eq("category", categoryFilter as any);
       }
 
-      const { data, error } = await query;
+      // Apply search filter
+      if (searchQuery) {
+        query = query.or(
+          `name.ilike.%${searchQuery}%,sku.ilike.%${searchQuery}%`,
+        );
+      }
+
+      // Apply sorting
+      query = query.order(sortConfig.field, {
+        ascending: sortConfig.order === "asc",
+      });
+
+      // Apply pagination
+      const { data, error, count } = await query.range(from, to);
 
       if (error) throw error;
+
       setProducts(data || []);
+
+      // Update pagination info
+      const totalCount = count || 0;
+      const totalPages = Math.ceil(totalCount / pagination.itemsPerPage);
+
+      setPagination((prev) => ({
+        ...prev,
+        totalPages,
+        totalCount,
+        from: totalCount > 0 ? from + 1 : 0,
+        to: Math.min(from + pagination.itemsPerPage, totalCount),
+      }));
     } catch (error) {
       console.error("Error fetching products:", error);
       toast({
@@ -196,7 +296,7 @@ export default function Inventory() {
           `
           *,
           products (name, sku)
-        `
+        `,
         )
         .eq("status", "active")
         .order("created_at", { ascending: false });
@@ -208,12 +308,185 @@ export default function Inventory() {
           ...alert,
           product_name: (alert.products as any)?.name || "Unknown",
           product_sku: (alert.products as any)?.sku || "",
-        })) || []
+        })) || [],
       );
     } catch (error) {
       console.error("Error fetching alerts:", error);
     }
   };
+
+  const handleSort = (field: SortField) => {
+    setSortConfig((prev) => ({
+      field,
+      order: prev.field === field && prev.order === "asc" ? "desc" : "asc",
+    }));
+    setPagination((prev) => ({ ...prev, currentPage: 1 }));
+  };
+
+  const getSortIcon = (field: SortField) => {
+    if (sortConfig.field !== field) {
+      return <ArrowUpDown className="ml-2 h-4 w-4 text-muted-foreground" />;
+    }
+    return sortConfig.order === "asc" ? (
+      <ArrowUp className="ml-2 h-4 w-4" />
+    ) : (
+      <ArrowDown className="ml-2 h-4 w-4" />
+    );
+  };
+
+  const handlePageChange = (newPage: number) => {
+    if (newPage < 1 || newPage > pagination.totalPages) return;
+    setPagination((prev) => ({ ...prev, currentPage: newPage }));
+  };
+
+  const handleItemsPerPageChange = (value: string) => {
+    setPagination((prev) => ({
+      ...prev,
+      itemsPerPage: parseInt(value),
+      currentPage: 1,
+    }));
+  };
+
+  const handleSearch = (value: string) => {
+    setSearchQuery(value);
+    setPagination((prev) => ({ ...prev, currentPage: 1 }));
+  };
+
+  const handleCategoryFilterChange = (value: string) => {
+    setCategoryFilter(value);
+    setPagination((prev) => ({ ...prev, currentPage: 1 }));
+  };
+
+  // Sortable table head component
+  const SortableTableHead = ({
+    field,
+    children,
+    className = "",
+  }: {
+    field: SortField;
+    children: React.ReactNode;
+    className?: string;
+  }) => {
+    return (
+      <TableHead className={className}>
+        <button
+          className="flex items-center hover:text-foreground transition-colors font-medium"
+          onClick={() => handleSort(field)}
+        >
+          {children}
+          {getSortIcon(field)}
+        </button>
+      </TableHead>
+    );
+  };
+
+  // Pagination component
+  const PaginationControls = () => {
+    const maxPageButtons = 5;
+    const pages: number[] = [];
+
+    let startPage = Math.max(
+      1,
+      pagination.currentPage - Math.floor(maxPageButtons / 2),
+    );
+    let endPage = Math.min(
+      pagination.totalPages,
+      startPage + maxPageButtons - 1,
+    );
+
+    if (endPage - startPage < maxPageButtons - 1) {
+      startPage = Math.max(1, endPage - maxPageButtons + 1);
+    }
+
+    for (let i = startPage; i <= endPage; i++) {
+      pages.push(i);
+    }
+
+    return (
+      <div className="flex items-center justify-between gap-4 py-4 border-t">
+        {/* Left: Items per page & info */}
+        <div className="flex items-center gap-4">
+          <div className="flex items-center gap-2 px-4">
+            <span className="text-sm text-muted-foreground">Show:</span>
+            <Select
+              value={pagination.itemsPerPage.toString()}
+              onValueChange={handleItemsPerPageChange}
+            >
+              <SelectTrigger className="w-[70px]">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="10">10</SelectItem>
+                <SelectItem value="20">20</SelectItem>
+                <SelectItem value="50">50</SelectItem>
+                <SelectItem value="100">100</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+          <span className="text-sm text-muted-foreground">
+            Showing {pagination.from}-{pagination.to} of {pagination.totalCount}{" "}
+            products
+          </span>
+        </div>
+
+        {/* Right: Page controls */}
+        <div className="flex items-center gap-2">
+          <Button
+            variant="outline"
+            size="icon"
+            onClick={() => handlePageChange(1)}
+            disabled={pagination.currentPage === 1 || loading}
+          >
+            <ChevronsLeft className="h-4 w-4" />
+          </Button>
+          <Button
+            variant="outline"
+            size="icon"
+            onClick={() => handlePageChange(pagination.currentPage - 1)}
+            disabled={pagination.currentPage === 1 || loading}
+          >
+            <ChevronLeft className="h-4 w-4" />
+          </Button>
+
+          {pages.map((page) => (
+            <Button
+              key={page}
+              variant={page === pagination.currentPage ? "default" : "outline"}
+              size="icon"
+              onClick={() => handlePageChange(page)}
+              disabled={loading}
+            >
+              {page}
+            </Button>
+          ))}
+
+          <Button
+            variant="outline"
+            size="icon"
+            onClick={() => handlePageChange(pagination.currentPage + 1)}
+            disabled={
+              pagination.currentPage === pagination.totalPages || loading
+            }
+          >
+            <ChevronRight className="h-4 w-4" />
+          </Button>
+          <Button
+            variant="outline"
+            size="icon"
+            onClick={() => handlePageChange(pagination.totalPages)}
+            disabled={
+              pagination.currentPage === pagination.totalPages || loading
+            }
+          >
+            <ChevronsRight className="h-4 w-4" />
+          </Button>
+        </div>
+      </div>
+    );
+  };
+
+  // ... [Keep ALL existing functions: generateSKU, handleCreateProduct, handleStockAdjustment, etc.]
+  // I'll continue with the render section where pagination is added
 
   const generateSKU = async (category: string) => {
     const prefix = CATEGORY_PREFIXES[category] || "XX";
@@ -260,17 +533,7 @@ export default function Inventory() {
       });
 
       setDialogOpen(false);
-      setFormData({
-        name: "",
-        description: "",
-        category: "spare_parts",
-        unit: "pcs",
-        cost_price: 0,
-        sell_price: 0,
-        stock: "0",
-        min_stock_threshold: "5",
-        is_service_item: false,
-      });
+      resetForm();
       fetchProducts();
       fetchAlerts();
     } catch (error: any) {
@@ -311,7 +574,6 @@ export default function Inventory() {
     }
 
     try {
-      // Update product stock
       const { error: updateError } = await supabase
         .from("products")
         .update({ stock: newStock })
@@ -319,7 +581,6 @@ export default function Inventory() {
 
       if (updateError) throw updateError;
 
-      // Record transaction - CORRECTED VERSION
       const { error: txError } = await supabase
         .from("inventory_transactions")
         .insert([
@@ -329,11 +590,11 @@ export default function Inventory() {
             quantity: adjustedQty,
             stock_before: selectedProduct.stock,
             stock_after: newStock,
-            reference_id: null, // Optional: untuk referensi ke dokumen lain
+            reference_id: null,
             notes:
               adjustmentNotes ||
               `Stock ${adjustmentType === "add" ? "added" : "removed"}`,
-            created_by: employee?.id, // ✅ This is correct according to schema
+            created_by: employee?.id,
           },
         ]);
 
@@ -341,9 +602,7 @@ export default function Inventory() {
 
       toast({
         title: "Stock Updated",
-        description: `${selectedProduct.name} stock adjusted by ${
-          adjustedQty > 0 ? "+" : ""
-        }${adjustedQty}.`,
+        description: `${selectedProduct.name} stock adjusted by ${adjustedQty > 0 ? "+" : ""}${adjustedQty}.`,
       });
 
       setAdjustDialogOpen(false);
@@ -408,19 +667,13 @@ export default function Inventory() {
     return CATEGORIES.find((c) => c.value === category)?.label || category;
   };
 
-  const filteredProducts = products.filter(
-    (product) =>
-      product.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      product.sku.toLowerCase().includes(searchQuery.toLowerCase())
-  );
-
   const lowStockCount = products.filter(
-    (p) => p.stock <= p.min_stock_threshold && p.stock > 0
+    (p) => p.stock <= p.min_stock_threshold && p.stock > 0,
   ).length;
   const outOfStockCount = products.filter((p) => p.stock === 0).length;
   const totalValue = products.reduce(
     (sum, p) => sum + p.stock * p.cost_price,
-    0
+    0,
   );
 
   const resetForm = () => {
@@ -438,7 +691,6 @@ export default function Inventory() {
     setEditingProduct(null);
   };
 
-  // Handle edit click
   const handleEditClick = (product: Product) => {
     setEditingProduct(product);
     setFormData({
@@ -455,7 +707,6 @@ export default function Inventory() {
     setDialogOpen(true);
   };
 
-  // Handle update product
   const handleUpdateProduct = async () => {
     if (!editingProduct) return;
 
@@ -509,7 +760,6 @@ export default function Inventory() {
     }
   };
 
-  // Unified submit handler
   const handleSubmitProduct = async () => {
     if (editingProduct) {
       await handleUpdateProduct();
@@ -518,7 +768,6 @@ export default function Inventory() {
     }
   };
 
-  // Handle delete product
   const handleDeleteProduct = async () => {
     if (!productToDelete) return;
 
@@ -564,7 +813,6 @@ export default function Inventory() {
             </p>
           </div>
           <div className="flex gap-2">
-            {/* ✅ Add Export Button */}
             <ExportProducts products={products} />
             <Dialog
               open={dialogOpen}
@@ -579,6 +827,7 @@ export default function Inventory() {
                   Add Product
                 </Button>
               </DialogTrigger>
+              {/* ... DialogContent remains the same as original ... */}
               <DialogContent className="max-w-lg">
                 <DialogHeader className="px-4">
                   <DialogTitle>
@@ -590,7 +839,9 @@ export default function Inventory() {
                       : "Enter the product details. SKU will be generated automatically."}
                   </DialogDescription>
                 </DialogHeader>
+                {/* Form content - keeping same as original */}
                 <div className="space-y-4 px-4 py-4 max-h-[60vh] overflow-y-auto">
+                  {/* ... all form fields remain the same ... */}
                   <div className="space-y-2">
                     <Label htmlFor="name">Product Name *</Label>
                     <Input
@@ -731,8 +982,8 @@ export default function Inventory() {
                         ? "Updating..."
                         : "Adding..."
                       : editingProduct
-                      ? "Update Product"
-                      : "Add Product"}
+                        ? "Update Product"
+                        : "Add Product"}
                   </Button>
                 </DialogFooter>
               </DialogContent>
@@ -740,7 +991,7 @@ export default function Inventory() {
           </div>
         </div>
 
-        {/* Stats Cards */}
+        {/* Stats Cards - keeping same as original */}
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
           <Card className="stats-card">
             <CardContent className="p-6">
@@ -749,7 +1000,9 @@ export default function Inventory() {
                   <p className="text-sm font-medium text-muted-foreground">
                     Total Products
                   </p>
-                  <p className="text-3xl font-bold mt-1">{products.length}</p>
+                  <p className="text-3xl font-bold mt-1">
+                    {pagination.totalCount}
+                  </p>
                 </div>
                 <div className="rounded-lg p-3 bg-primary/10">
                   <Package className="h-6 w-6 text-primary" />
@@ -829,13 +1082,13 @@ export default function Inventory() {
                     <Input
                       placeholder="Search by name or SKU..."
                       value={searchQuery}
-                      onChange={(e) => setSearchQuery(e.target.value)}
+                      onChange={(e) => handleSearch(e.target.value)}
                       className="pl-9"
                     />
                   </div>
                   <Select
                     value={categoryFilter}
-                    onValueChange={setCategoryFilter}
+                    onValueChange={handleCategoryFilterChange}
                   >
                     <SelectTrigger className="w-full sm:w-[180px]">
                       <SelectValue placeholder="Category" />
@@ -856,21 +1109,25 @@ export default function Inventory() {
               </CardContent>
             </Card>
 
-            {/* Products Table */}
+            {/* Products Table WITH PAGINATION & SORTING */}
             <Card className="mt-4">
               <CardContent className="p-0">
                 {loading ? (
                   <div className="flex items-center justify-center py-12">
                     <div className="h-8 w-8 animate-spin rounded-full border-4 border-primary border-t-transparent" />
                   </div>
-                ) : filteredProducts.length === 0 ? (
+                ) : products.length === 0 ? (
                   <div className="text-center py-12">
                     <Package className="mx-auto h-12 w-12 text-muted-foreground/50" />
                     <h3 className="mt-4 text-lg font-medium">
-                      No products found
+                      {searchQuery || categoryFilter !== "all"
+                        ? "No products found"
+                        : "No products yet"}
                     </h3>
                     <p className="mt-2 text-sm text-muted-foreground">
-                      Add your first product to start managing inventory.
+                      {searchQuery || categoryFilter !== "all"
+                        ? "Try adjusting your filters"
+                        : "Add your first product to start managing inventory."}
                     </p>
                   </div>
                 ) : (
@@ -879,18 +1136,37 @@ export default function Inventory() {
                       <TableHeader>
                         <TableRow>
                           <TableHead className="w-[80px]">Image</TableHead>
-                          <TableHead>SKU</TableHead>
-                          <TableHead>Product</TableHead>
-                          <TableHead>Category</TableHead>
-                          <TableHead className="text-right">Cost</TableHead>
-                          <TableHead className="text-right">Sell</TableHead>
-                          <TableHead className="text-center">Stock</TableHead>
+                          <SortableTableHead field="sku">SKU</SortableTableHead>
+                          <SortableTableHead field="name">
+                            Product
+                          </SortableTableHead>
+                          <SortableTableHead field="category">
+                            Category
+                          </SortableTableHead>
+                          <SortableTableHead
+                            field="cost_price"
+                            className="text-right"
+                          >
+                            Cost
+                          </SortableTableHead>
+                          <SortableTableHead
+                            field="sell_price"
+                            className="text-right"
+                          >
+                            Sell
+                          </SortableTableHead>
+                          <SortableTableHead
+                            field="stock"
+                            className="text-center"
+                          >
+                            Stock
+                          </SortableTableHead>
                           <TableHead>Status</TableHead>
-                          <TableHead className="w-[100px]">Actions</TableHead>
+                          <TableHead className="w-[50px]"></TableHead>
                         </TableRow>
                       </TableHeader>
                       <TableBody>
-                        {filteredProducts.map((product) => {
+                        {products.map((product) => {
                           const stockStatus = getStockStatus(product);
                           return (
                             <TableRow
@@ -949,75 +1225,79 @@ export default function Inventory() {
                                 </Badge>
                               </TableCell>
                               <TableCell>
-                                <div className="flex gap-1">
-                                  <Button
-                                    variant="ghost"
-                                    size="sm"
-                                    onClick={() => {
-                                      setSelectedProductForHistory(product);
-                                      setHistoryDialogOpen(true);
-                                    }}
-                                    title="View History"
-                                  >
-                                    <History className="h-4 w-4 mr-1" />
-                                    History
-                                  </Button>
-                                  <Button
-                                    variant="ghost"
-                                    size="sm"
-                                    onClick={() => {
-                                      setSelectedProductForImage(product);
-                                      setImageDialogOpen(true);
-                                    }}
-                                    title="Upload Image"
-                                  >
-                                    <ImageIcon className="h-4 w-4 mr-1" />
-                                    Image
-                                  </Button>
-                                  <Button
-                                    variant="ghost"
-                                    size="sm"
-                                    onClick={() => handleEditClick(product)}
-                                  >
-                                    <Pencil className="h-4 w-4 mr-1" />
-                                    Edit
-                                  </Button>
-                                  <Button
-                                    variant="ghost"
-                                    size="sm"
-                                    onClick={() => {
-                                      setSelectedProduct(product);
-                                      setAdjustDialogOpen(true);
-                                    }}
-                                  >
-                                    <ArrowUpDown className="h-4 w-4 mr-1" />
-                                    Adjust
-                                  </Button>
-                                  <Button
-                                    variant="ghost"
-                                    size="sm"
-                                    onClick={() => {
-                                      setProductToDelete(product);
-                                      setDeleteDialogOpen(true);
-                                    }}
-                                    className="text-destructive hover:text-destructive"
-                                  >
-                                    <Trash2 className="h-4 w-4 mr-1" />
-                                    Delete
-                                  </Button>
-                                </div>
+                                <DropdownMenu>
+                                  <DropdownMenuTrigger asChild>
+                                    <Button variant="ghost" size="icon">
+                                      <MoreHorizontal className="h-4 w-4" />
+                                    </Button>
+                                  </DropdownMenuTrigger>
+                                  <DropdownMenuContent align="end">
+                                    <DropdownMenuLabel>
+                                      Actions
+                                    </DropdownMenuLabel>
+                                    <DropdownMenuItem
+                                      onClick={() => {
+                                        setSelectedProductForHistory(product);
+                                        setHistoryDialogOpen(true);
+                                      }}
+                                    >
+                                      <History className="h-4 w-4 mr-2" />
+                                      View History
+                                    </DropdownMenuItem>
+                                    <DropdownMenuItem
+                                      onClick={() => {
+                                        setSelectedProductForImage(product);
+                                        setImageDialogOpen(true);
+                                      }}
+                                    >
+                                      <ImageIcon className="h-4 w-4 mr-2" />
+                                      Upload Image
+                                    </DropdownMenuItem>
+                                    <DropdownMenuSeparator />
+                                    <DropdownMenuItem
+                                      onClick={() => handleEditClick(product)}
+                                    >
+                                      <Pencil className="h-4 w-4 mr-2" />
+                                      Edit Product
+                                    </DropdownMenuItem>
+                                    <DropdownMenuItem
+                                      onClick={() => {
+                                        setSelectedProduct(product);
+                                        setAdjustDialogOpen(true);
+                                      }}
+                                    >
+                                      <ArrowUpDown className="h-4 w-4 mr-2" />
+                                      Adjust Stock
+                                    </DropdownMenuItem>
+                                    <DropdownMenuSeparator />
+                                    <DropdownMenuItem
+                                      onClick={() => {
+                                        setProductToDelete(product);
+                                        setDeleteDialogOpen(true);
+                                      }}
+                                      className="text-destructive focus:text-destructive"
+                                    >
+                                      <Trash2 className="h-4 w-4 mr-2" />
+                                      Delete Product
+                                    </DropdownMenuItem>
+                                  </DropdownMenuContent>
+                                </DropdownMenu>
                               </TableCell>
                             </TableRow>
                           );
                         })}
                       </TableBody>
                     </Table>
+
+                    {/* Pagination Controls */}
+                    {!loading && products.length > 0 && <PaginationControls />}
                   </div>
                 )}
               </CardContent>
             </Card>
           </TabsContent>
 
+          {/* Stock Alerts Tab - keeping same as original */}
           <TabsContent value="alerts">
             <Card>
               <CardHeader>
@@ -1075,7 +1355,7 @@ export default function Inventory() {
                             <p className="text-xs text-muted-foreground mt-1">
                               {format(
                                 new Date(alert.created_at),
-                                "MMM d, yyyy h:mm a"
+                                "MMM d, yyyy h:mm a",
                               )}
                             </p>
                           </div>
@@ -1096,7 +1376,7 @@ export default function Inventory() {
           </TabsContent>
         </Tabs>
 
-        {/* Stock Adjustment Dialog */}
+        {/* All Dialogs - keeping same as original */}
         <Dialog open={adjustDialogOpen} onOpenChange={setAdjustDialogOpen}>
           <DialogContent>
             <DialogHeader>
@@ -1182,7 +1462,6 @@ export default function Inventory() {
           </DialogContent>
         </Dialog>
 
-        {/* Delete Confirmation Dialog */}
         <AlertDialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
           <AlertDialogContent>
             <AlertDialogHeader>
@@ -1214,7 +1493,6 @@ export default function Inventory() {
           onOpenChange={setHistoryDialogOpen}
         />
 
-        {/* Product Image Dialog */}
         <Dialog open={imageDialogOpen} onOpenChange={setImageDialogOpen}>
           <DialogContent className="max-w-md">
             <DialogHeader>
@@ -1230,13 +1508,12 @@ export default function Inventory() {
                 productName={selectedProductForImage.name}
                 currentImageUrl={selectedProductForImage.image_url}
                 onImageUpdate={(imageUrl) => {
-                  // Update local state
                   setProducts((prev) =>
                     prev.map((p) =>
                       p.id === selectedProductForImage.id
                         ? { ...p, image_url: imageUrl }
-                        : p
-                    )
+                        : p,
+                    ),
                   );
                 }}
               />

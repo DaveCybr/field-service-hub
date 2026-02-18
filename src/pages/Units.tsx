@@ -1,11 +1,9 @@
-import { useEffect, useState } from "react";
+import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import DashboardLayout from "@/components/layout/DashboardLayout";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Badge } from "@/components/ui/badge";
-import { Card, CardContent } from "@/components/ui/card";
 import {
   Table,
   TableBody,
@@ -15,51 +13,51 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-  DialogTrigger,
-} from "@/components/ui/dialog";
-import {
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Label } from "@/components/ui/label";
+import { Badge } from "@/components/ui/badge";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
   Plus,
   Search,
-  RefreshCw,
   QrCode,
+  Edit,
+  Trash2,
+  Eye,
   Download,
-  Wrench,
-  Calendar,
-  Shield,
-  ScanLine,
+  ChevronLeft,
+  ChevronRight,
+  ChevronsLeft,
+  ChevronsRight,
+  ArrowUpDown,
+  ArrowUp,
+  ArrowDown,
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
-import { QRCodeSVG } from "qrcode.react";
 import { format } from "date-fns";
+import { QRCodeSVG } from "qrcode.react";
+import { EditUnitModal } from "@/components/units/EditUnitModal";
+import { DeleteUnitDialog } from "@/components/units/DeleteUnitDialog";
 
 interface Unit {
   id: string;
   qr_code: string;
   customer_id: string;
-  customer_name: string;
   unit_type: string;
   brand: string | null;
   model: string | null;
   serial_number: string | null;
   capacity: string | null;
   warranty_expiry_date: string | null;
-  last_service_date: string | null;
-  total_services: number;
   created_at: string;
+  customer: {
+    id: string;
+    name: string;
+  };
 }
 
 interface Customer {
@@ -67,89 +65,78 @@ interface Customer {
   name: string;
 }
 
-const UNIT_TYPES = [
-  "AC Split",
-  "AC Standing",
-  "AC Cassette",
-  "AC Central",
-  "Refrigerator",
-  "Freezer",
-  "Washing Machine",
-  "Dryer",
-  "Water Heater",
-  "Stabilizer",
-  "UPS",
-  "Other",
-];
+interface PaginationInfo {
+  currentPage: number;
+  totalPages: number;
+  totalCount: number;
+  itemsPerPage: number;
+  from: number;
+  to: number;
+}
+
+type SortField =
+  | "qr_code"
+  | "unit_type"
+  | "brand"
+  | "created_at"
+  | "warranty_expiry_date";
+type SortOrder = "asc" | "desc";
+
+interface SortConfig {
+  field: SortField;
+  order: SortOrder;
+}
 
 export default function Units() {
   const navigate = useNavigate();
+  const { toast } = useToast();
+
+  // Data state
   const [units, setUnits] = useState<Unit[]>([]);
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [loading, setLoading] = useState(true);
-  const [searchQuery, setSearchQuery] = useState("");
-  const [typeFilter, setTypeFilter] = useState("all");
-  const [dialogOpen, setDialogOpen] = useState(false);
-  const [qrDialogOpen, setQrDialogOpen] = useState(false);
-  const [selectedUnit, setSelectedUnit] = useState<Unit | null>(null);
-  const [creating, setCreating] = useState(false);
 
-  const [formData, setFormData] = useState({
-    customer_id: "",
-    unit_type: "",
-    brand: "",
-    model: "",
-    serial_number: "",
-    capacity: "",
-    warranty_expiry_date: "",
+  // Pagination state
+  const [pagination, setPagination] = useState<PaginationInfo>({
+    currentPage: 1,
+    totalPages: 1,
+    totalCount: 0,
+    itemsPerPage: 20,
+    from: 0,
+    to: 0,
   });
 
-  const { toast } = useToast();
+  // Sorting state
+  const [sortConfig, setSortConfig] = useState<SortConfig>({
+    field: "created_at",
+    order: "desc",
+  });
+
+  // Filter state
+  const [searchQuery, setSearchQuery] = useState("");
+  const [selectedCustomer, setSelectedCustomer] = useState<string>("all");
+  const [selectedType, setSelectedType] = useState<string>("all");
+
+  // Modal state
+  const [editModalOpen, setEditModalOpen] = useState(false);
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [selectedUnit, setSelectedUnit] = useState<Unit | null>(null);
+  const [showQRUnit, setShowQRUnit] = useState<Unit | null>(null);
+
+  useEffect(() => {
+    fetchCustomers();
+  }, []);
 
   useEffect(() => {
     fetchUnits();
-    fetchCustomers();
-  }, [typeFilter]);
-
-  const fetchUnits = async () => {
-    setLoading(true);
-    try {
-      let query = supabase
-        .from("units")
-        .select(
-          `
-          *,
-          customers (name)
-        `,
-        )
-        .order("created_at", { ascending: false });
-
-      if (typeFilter !== "all") {
-        query = query.eq("unit_type", typeFilter);
-      }
-
-      const { data, error } = await query;
-
-      if (error) throw error;
-
-      setUnits(
-        data?.map((unit) => ({
-          ...unit,
-          customer_name: (unit.customers as any)?.name || "Unknown",
-          total_services: unit.total_services || 0,
-        })) || [],
-      );
-    } catch (error) {
-      console.error("Error fetching units:", error);
-      toast({
-        variant: "destructive",
-        title: "Error",
-        description: "Failed to load units.",
-      });
-    } finally {
-      setLoading(false);
-    }
-  };
+  }, [
+    pagination.currentPage,
+    pagination.itemsPerPage,
+    searchQuery,
+    selectedCustomer,
+    selectedType,
+    sortConfig, // Re-fetch when sort changes
+  ]);
 
   const fetchCustomers = async () => {
     const { data } = await supabase
@@ -160,95 +147,156 @@ export default function Units() {
     if (data) setCustomers(data);
   };
 
-  const generateQRCode = () => {
-    const timestamp = Date.now().toString(36).toUpperCase();
-    const random = Math.random().toString(36).substring(2, 8).toUpperCase();
-    return `RT-${timestamp}-${random}`;
-  };
-
-  const handleCreateUnit = async () => {
-    if (!formData.customer_id || !formData.unit_type) {
-      toast({
-        variant: "destructive",
-        title: "Validation Error",
-        description: "Customer and unit type are required.",
-      });
-      return;
-    }
-
-    setCreating(true);
+  const fetchUnits = async () => {
+    setLoading(true);
     try {
-      const qr_code = generateQRCode();
+      // Calculate range for pagination
+      const from = (pagination.currentPage - 1) * pagination.itemsPerPage;
+      const to = from + pagination.itemsPerPage - 1;
 
-      const { data, error } = await supabase
-        .from("units")
-        .insert([
-          {
-            qr_code,
-            customer_id: formData.customer_id,
-            unit_type: formData.unit_type,
-            brand: formData.brand || null,
-            model: formData.model || null,
-            serial_number: formData.serial_number || null,
-            capacity: formData.capacity || null,
-            warranty_expiry_date: formData.warranty_expiry_date || null,
-          },
-        ])
-        .select(
-          `
+      // Build query
+      let query = supabase.from("units").select(
+        `
           *,
-          customers (name)
+          customer:customers!units_customer_id_fkey (
+            id,
+            name
+          )
         `,
-        )
-        .single();
+        { count: "exact" },
+      );
+
+      // Apply filters
+      if (searchQuery) {
+        query = query.or(
+          `qr_code.ilike.%${searchQuery}%,unit_type.ilike.%${searchQuery}%,brand.ilike.%${searchQuery}%,model.ilike.%${searchQuery}%,serial_number.ilike.%${searchQuery}%`,
+        );
+      }
+
+      if (selectedCustomer !== "all") {
+        query = query.eq("customer_id", selectedCustomer);
+      }
+
+      if (selectedType !== "all") {
+        query = query.eq("unit_type", selectedType);
+      }
+
+      // Apply sorting
+      query = query.order(sortConfig.field, {
+        ascending: sortConfig.order === "asc",
+      });
+
+      // Apply pagination
+      const { data, error, count } = await query.range(from, to);
 
       if (error) throw error;
 
-      toast({
-        title: "Unit Registered",
-        description: `Unit ${qr_code} has been registered successfully.`,
-      });
+      // Process data (handle array from join)
+      const processedData =
+        data?.map((unit) => ({
+          ...unit,
+          customer: Array.isArray(unit.customer)
+            ? unit.customer[0]
+            : unit.customer,
+        })) || [];
 
-      // Show QR code dialog for the new unit
-      setSelectedUnit({
-        ...data,
-        customer_name: (data.customers as any)?.name || "Unknown",
-        total_services: 0,
-      });
-      setDialogOpen(false);
-      setQrDialogOpen(true);
+      setUnits(processedData);
 
-      setFormData({
-        customer_id: "",
-        unit_type: "",
-        brand: "",
-        model: "",
-        serial_number: "",
-        capacity: "",
-        warranty_expiry_date: "",
-      });
-      fetchUnits();
+      // Update pagination info
+      const totalCount = count || 0;
+      const totalPages = Math.ceil(totalCount / pagination.itemsPerPage);
+
+      setPagination((prev) => ({
+        ...prev,
+        totalPages,
+        totalCount,
+        from: totalCount > 0 ? from + 1 : 0,
+        to: Math.min(from + pagination.itemsPerPage, totalCount),
+      }));
     } catch (error: any) {
-      console.error("Error creating unit:", error);
+      console.error("Error fetching units:", error);
       toast({
         variant: "destructive",
         title: "Error",
-        description: error.message || "Failed to register unit.",
+        description: "Failed to load units",
       });
     } finally {
-      setCreating(false);
+      setLoading(false);
     }
   };
 
-  const handleShowQR = (unit: Unit) => {
-    setSelectedUnit(unit);
-    setQrDialogOpen(true);
+  const handleSort = (field: SortField) => {
+    setSortConfig((prev) => ({
+      field,
+      order: prev.field === field && prev.order === "asc" ? "desc" : "asc",
+    }));
+    // Reset to first page when sorting changes
+    setPagination((prev) => ({ ...prev, currentPage: 1 }));
   };
 
-  const handleDownloadQR = () => {
-    if (!selectedUnit) return;
+  const getSortIcon = (field: SortField) => {
+    if (sortConfig.field !== field) {
+      return <ArrowUpDown className="ml-2 h-4 w-4 text-muted-foreground" />;
+    }
+    return sortConfig.order === "asc" ? (
+      <ArrowUp className="ml-2 h-4 w-4" />
+    ) : (
+      <ArrowDown className="ml-2 h-4 w-4" />
+    );
+  };
 
-    const svg = document.getElementById("qr-code-svg");
+  const handlePageChange = (newPage: number) => {
+    if (newPage < 1 || newPage > pagination.totalPages) return;
+    setPagination((prev) => ({ ...prev, currentPage: newPage }));
+  };
+
+  const handleItemsPerPageChange = (value: string) => {
+    setPagination((prev) => ({
+      ...prev,
+      itemsPerPage: parseInt(value),
+      currentPage: 1, // Reset to first page
+    }));
+  };
+
+  const handleSearch = (value: string) => {
+    setSearchQuery(value);
+    setPagination((prev) => ({ ...prev, currentPage: 1 })); // Reset to first page
+  };
+
+  const handleCustomerFilter = (value: string) => {
+    setSelectedCustomer(value);
+    setPagination((prev) => ({ ...prev, currentPage: 1 }));
+  };
+
+  const handleTypeFilter = (value: string) => {
+    setSelectedType(value);
+    setPagination((prev) => ({ ...prev, currentPage: 1 }));
+  };
+
+  const handleEditClick = (unit: Unit) => {
+    setSelectedUnit(unit);
+    setEditModalOpen(true);
+  };
+
+  const handleDeleteClick = (unit: Unit) => {
+    setSelectedUnit(unit);
+    setDeleteDialogOpen(true);
+  };
+
+  const handleViewClick = (unit: Unit) => {
+    navigate(`/units/${unit.id}`);
+  };
+
+  const handleEditSuccess = () => {
+    fetchUnits();
+  };
+
+  const handleDeleteSuccess = () => {
+    fetchUnits();
+  };
+
+  const handleDownloadQR = (unit: Unit) => {
+    const svg = document.getElementById(`qr-${unit.id}`);
     if (!svg) return;
 
     const svgData = new XMLSerializer().serializeToString(svg);
@@ -267,20 +315,20 @@ export default function Units() {
         ctx.fillStyle = "black";
         ctx.font = "bold 14px Arial";
         ctx.textAlign = "center";
-        ctx.fillText(selectedUnit.qr_code, 150, 250);
+        ctx.fillText(unit.qr_code, 150, 250);
         ctx.font = "12px Arial";
-        ctx.fillText(`${selectedUnit.unit_type}`, 150, 275);
-        if (selectedUnit.brand || selectedUnit.model) {
+        ctx.fillText(unit.unit_type, 150, 275);
+        if (unit.brand || unit.model) {
           ctx.fillText(
-            `${selectedUnit.brand || ""} ${selectedUnit.model || ""}`.trim(),
+            `${unit.brand || ""} ${unit.model || ""}`.trim(),
             150,
             295,
           );
         }
-        ctx.fillText(selectedUnit.customer_name, 150, 315);
+        ctx.fillText(unit.customer.name, 150, 315);
 
         const link = document.createElement("a");
-        link.download = `QR-${selectedUnit.qr_code}.png`;
+        link.download = `QR-${unit.qr_code}.png`;
         link.href = canvas.toDataURL("image/png");
         link.click();
       }
@@ -296,376 +344,402 @@ export default function Units() {
     return new Date(date) > new Date();
   };
 
-  const filteredUnits = units.filter(
-    (unit) =>
-      unit.qr_code.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      unit.unit_type.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      unit.customer_name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      (unit.brand &&
-        unit.brand.toLowerCase().includes(searchQuery.toLowerCase())) ||
-      (unit.serial_number &&
-        unit.serial_number.toLowerCase().includes(searchQuery.toLowerCase())),
-  );
+  const getUnitTypes = () => {
+    const types = new Set(units.map((u) => u.unit_type));
+    return Array.from(types);
+  };
+
+  // Sortable table head component
+  const SortableTableHead = ({
+    field,
+    children,
+    className = "",
+  }: {
+    field: SortField;
+    children: React.ReactNode;
+    className?: string;
+  }) => {
+    return (
+      <TableHead className={className}>
+        <button
+          className="flex items-center hover:text-foreground transition-colors font-medium"
+          onClick={() => handleSort(field)}
+        >
+          {children}
+          {getSortIcon(field)}
+        </button>
+      </TableHead>
+    );
+  };
+
+  // Pagination component
+  const PaginationControls = () => {
+    const maxPageButtons = 5;
+    const pages: number[] = [];
+
+    let startPage = Math.max(
+      1,
+      pagination.currentPage - Math.floor(maxPageButtons / 2),
+    );
+    let endPage = Math.min(
+      pagination.totalPages,
+      startPage + maxPageButtons - 1,
+    );
+
+    if (endPage - startPage < maxPageButtons - 1) {
+      startPage = Math.max(1, endPage - maxPageButtons + 1);
+    }
+
+    for (let i = startPage; i <= endPage; i++) {
+      pages.push(i);
+    }
+
+    return (
+      <div className="flex items-center justify-between gap-4 py-4 border-t ">
+        {/* Left: Items per page & info */}
+        <div className="flex items-center gap-4 ">
+          <div className="flex items-center gap-2 px-4 ">
+            <span className="text-sm text-muted-foreground">Show:</span>
+            <Select
+              value={pagination.itemsPerPage.toString()}
+              onValueChange={handleItemsPerPageChange}
+            >
+              <SelectTrigger className="w-[70px]">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="10">10</SelectItem>
+                <SelectItem value="20">20</SelectItem>
+                <SelectItem value="50">50</SelectItem>
+                <SelectItem value="100">100</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+          <span className="text-sm text-muted-foreground">
+            Showing {pagination.from}-{pagination.to} of {pagination.totalCount}{" "}
+            units
+          </span>
+        </div>
+
+        {/* Right: Page controls */}
+        <div className="flex items-center gap-2">
+          <Button
+            variant="outline"
+            size="icon"
+            onClick={() => handlePageChange(1)}
+            disabled={pagination.currentPage === 1 || loading}
+          >
+            <ChevronsLeft className="h-4 w-4" />
+          </Button>
+          <Button
+            variant="outline"
+            size="icon"
+            onClick={() => handlePageChange(pagination.currentPage - 1)}
+            disabled={pagination.currentPage === 1 || loading}
+          >
+            <ChevronLeft className="h-4 w-4" />
+          </Button>
+
+          {pages.map((page) => (
+            <Button
+              key={page}
+              variant={page === pagination.currentPage ? "default" : "outline"}
+              size="icon"
+              onClick={() => handlePageChange(page)}
+              disabled={loading}
+            >
+              {page}
+            </Button>
+          ))}
+
+          <Button
+            variant="outline"
+            size="icon"
+            onClick={() => handlePageChange(pagination.currentPage + 1)}
+            disabled={
+              pagination.currentPage === pagination.totalPages || loading
+            }
+          >
+            <ChevronRight className="h-4 w-4" />
+          </Button>
+          <Button
+            variant="outline"
+            size="icon"
+            onClick={() => handlePageChange(pagination.totalPages)}
+            disabled={
+              pagination.currentPage === pagination.totalPages || loading
+            }
+          >
+            <ChevronsRight className="h-4 w-4" />
+          </Button>
+        </div>
+      </div>
+    );
+  };
 
   return (
     <DashboardLayout>
       <div className="space-y-6 animate-fade-in">
         {/* Header */}
-        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+        <div className="flex items-center justify-between">
           <div>
-            <h1 className="text-2xl font-bold tracking-tight">Unit Registry</h1>
+            <h1 className="text-3xl font-bold tracking-tight">Units</h1>
             <p className="text-muted-foreground">
-              Manage electronic devices with QR code tracking
+              Manage and track all registered units
             </p>
           </div>
-          <div className="flex gap-2">
-            <Button variant="outline" onClick={() => navigate("/units/scan")}>
-              <ScanLine className="mr-2 h-4 w-4" />
-              Scan QR
-            </Button>
-            <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-              <DialogTrigger asChild>
-                <Button>
-                  <Plus className="mr-2 h-4 w-4" />
-                  Register Unit
-                </Button>
-              </DialogTrigger>
-              <DialogContent className="max-w-md">
-                <DialogHeader>
-                  <DialogTitle>Register New Unit</DialogTitle>
-                  <DialogDescription>
-                    Enter the device details. A unique QR code will be generated
-                    automatically.
-                  </DialogDescription>
-                </DialogHeader>
-                <div className="space-y-4 py-4">
-                  <div className="space-y-2">
-                    <Label htmlFor="customer">Customer *</Label>
-                    <Select
-                      value={formData.customer_id}
-                      onValueChange={(value) =>
-                        setFormData({ ...formData, customer_id: value })
-                      }
-                    >
-                      <SelectTrigger>
-                        <SelectValue placeholder="Select customer" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {customers.map((customer) => (
-                          <SelectItem key={customer.id} value={customer.id}>
-                            {customer.name}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="unit_type">Unit Type *</Label>
-                    <Select
-                      value={formData.unit_type}
-                      onValueChange={(value) =>
-                        setFormData({ ...formData, unit_type: value })
-                      }
-                    >
-                      <SelectTrigger>
-                        <SelectValue placeholder="Select type" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {UNIT_TYPES.map((type) => (
-                          <SelectItem key={type} value={type}>
-                            {type}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  <div className="grid grid-cols-2 gap-4">
-                    <div className="space-y-2">
-                      <Label htmlFor="brand">Brand</Label>
-                      <Input
-                        id="brand"
-                        placeholder="e.g., Daikin"
-                        value={formData.brand}
-                        onChange={(e) =>
-                          setFormData({ ...formData, brand: e.target.value })
-                        }
-                      />
-                    </div>
-                    <div className="space-y-2">
-                      <Label htmlFor="model">Model</Label>
-                      <Input
-                        id="model"
-                        placeholder="e.g., FTV35BXV14"
-                        value={formData.model}
-                        onChange={(e) =>
-                          setFormData({ ...formData, model: e.target.value })
-                        }
-                      />
-                    </div>
-                  </div>
-                  <div className="grid grid-cols-2 gap-4">
-                    <div className="space-y-2">
-                      <Label htmlFor="serial">Serial Number</Label>
-                      <Input
-                        id="serial"
-                        placeholder="Serial number"
-                        value={formData.serial_number}
-                        onChange={(e) =>
-                          setFormData({
-                            ...formData,
-                            serial_number: e.target.value,
-                          })
-                        }
-                      />
-                    </div>
-                    <div className="space-y-2">
-                      <Label htmlFor="capacity">Capacity</Label>
-                      <Input
-                        id="capacity"
-                        placeholder="e.g., 1.5 PK"
-                        value={formData.capacity}
-                        onChange={(e) =>
-                          setFormData({ ...formData, capacity: e.target.value })
-                        }
-                      />
-                    </div>
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="warranty">Warranty Expiry</Label>
-                    <Input
-                      id="warranty"
-                      type="date"
-                      value={formData.warranty_expiry_date}
-                      onChange={(e) =>
-                        setFormData({
-                          ...formData,
-                          warranty_expiry_date: e.target.value,
-                        })
-                      }
-                    />
-                  </div>
-                </div>
-                <DialogFooter>
-                  <Button
-                    variant="outline"
-                    onClick={() => setDialogOpen(false)}
-                  >
-                    Cancel
-                  </Button>
-                  <Button onClick={handleCreateUnit} disabled={creating}>
-                    {creating ? "Registering..." : "Register Unit"}
-                  </Button>
-                </DialogFooter>
-              </DialogContent>
-            </Dialog>
-          </div>
+          <Button onClick={() => navigate("/units/register")}>
+            <Plus className="mr-2 h-4 w-4" />
+            Register Unit
+          </Button>
         </div>
 
         {/* Filters */}
         <Card>
-          <CardContent className="pt-6">
-            <div className="flex flex-col sm:flex-row gap-4">
-              <div className="relative flex-1">
-                <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+          <CardHeader>
+            <CardTitle className="text-base">Filters</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="grid gap-4 md:grid-cols-3">
+              {/* Search */}
+              <div className="relative">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                 <Input
-                  placeholder="Search by QR code, type, customer, brand..."
+                  placeholder="Search by QR, type, brand, model, serial..."
                   value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
+                  onChange={(e) => handleSearch(e.target.value)}
                   className="pl-9"
                 />
               </div>
-              <Select value={typeFilter} onValueChange={setTypeFilter}>
-                <SelectTrigger className="w-full sm:w-[180px]">
-                  <SelectValue placeholder="Unit Type" />
+
+              {/* Customer filter */}
+              <Select
+                value={selectedCustomer}
+                onValueChange={handleCustomerFilter}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="All Customers" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Customers</SelectItem>
+                  {customers.map((customer) => (
+                    <SelectItem key={customer.id} value={customer.id}>
+                      {customer.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+
+              {/* Type filter */}
+              <Select value={selectedType} onValueChange={handleTypeFilter}>
+                <SelectTrigger>
+                  <SelectValue placeholder="All Types" />
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">All Types</SelectItem>
-                  {UNIT_TYPES.map((type) => (
+                  {getUnitTypes().map((type) => (
                     <SelectItem key={type} value={type}>
                       {type}
                     </SelectItem>
                   ))}
                 </SelectContent>
               </Select>
-              <Button variant="outline" onClick={fetchUnits}>
-                <RefreshCw className="h-4 w-4" />
-              </Button>
             </div>
           </CardContent>
         </Card>
 
-        {/* Units Table */}
+        {/* Table */}
         <Card>
-          <CardContent className="p-0">
-            {loading ? (
-              <div className="flex items-center justify-center py-12">
-                <div className="h-8 w-8 animate-spin rounded-full border-4 border-primary border-t-transparent" />
-              </div>
-            ) : filteredUnits.length === 0 ? (
-              <div className="text-center py-12">
-                <QrCode className="mx-auto h-12 w-12 text-muted-foreground/50" />
-                <h3 className="mt-4 text-lg font-medium">No units found</h3>
-                <p className="mt-2 text-sm text-muted-foreground">
-                  Register your first unit to start tracking devices.
-                </p>
-              </div>
-            ) : (
-              <div className="overflow-x-auto">
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>QR Code</TableHead>
-                      <TableHead>Unit Details</TableHead>
-                      <TableHead>Customer</TableHead>
-                      <TableHead>Warranty</TableHead>
-                      <TableHead>Services</TableHead>
-                      <TableHead>Last Service</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {filteredUnits.map((unit) => (
-                      <TableRow
-                        key={unit.id}
-                        className="table-row-hover cursor-pointer"
-                        onClick={() => navigate(`/units/${unit.id}`)}
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <SortableTableHead field="qr_code">QR Code</SortableTableHead>
+                <SortableTableHead field="unit_type">Type</SortableTableHead>
+                <SortableTableHead field="brand">Brand/Model</SortableTableHead>
+                <TableHead>Serial Number</TableHead>
+                <TableHead>Customer</TableHead>
+                <SortableTableHead field="warranty_expiry_date">
+                  Warranty
+                </SortableTableHead>
+                <SortableTableHead field="created_at">
+                  Registered
+                </SortableTableHead>
+                <TableHead className="text-right">Actions</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {loading ? (
+                <TableRow>
+                  <TableCell colSpan={8} className="text-center py-12">
+                    <div className="flex items-center justify-center">
+                      <div className="h-8 w-8 animate-spin rounded-full border-4 border-primary border-t-transparent" />
+                    </div>
+                  </TableCell>
+                </TableRow>
+              ) : units.length === 0 ? (
+                <TableRow>
+                  <TableCell colSpan={8} className="text-center py-12">
+                    <p className="text-muted-foreground">
+                      {searchQuery ||
+                      selectedCustomer !== "all" ||
+                      selectedType !== "all"
+                        ? "No units found matching your filters"
+                        : "No units registered yet"}
+                    </p>
+                  </TableCell>
+                </TableRow>
+              ) : (
+                units.map((unit) => (
+                  <TableRow
+                    key={unit.id}
+                    className="cursor-pointer hover:bg-muted/50"
+                    onClick={() => handleViewClick(unit)}
+                  >
+                    <TableCell>
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setShowQRUnit(
+                            showQRUnit?.id === unit.id ? null : unit,
+                          );
+                        }}
+                        className="flex items-center gap-2 hover:text-primary transition-colors"
                       >
-                        <TableCell>
-                          <button
-                            onClick={() => handleShowQR(unit)}
-                            className="flex items-center gap-2 hover:text-primary transition-colors"
+                        <div className="bg-muted p-1.5 rounded">
+                          <QrCode className="h-4 w-4" />
+                        </div>
+                        <span className="font-mono text-sm">
+                          {unit.qr_code}
+                        </span>
+                      </button>
+                      {showQRUnit?.id === unit.id && (
+                        <div className="mt-2 p-4 bg-white rounded-lg border inline-block">
+                          <QRCodeSVG
+                            id={`qr-${unit.id}`}
+                            value={unit.qr_code}
+                            size={120}
+                            level="H"
+                            includeMargin
+                          />
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            className="mt-2 w-full"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleDownloadQR(unit);
+                            }}
                           >
-                            <div className="bg-muted p-1.5 rounded">
-                              <QrCode className="h-5 w-5" />
-                            </div>
-                            <span className="font-mono text-sm">
-                              {unit.qr_code}
-                            </span>
-                          </button>
-                        </TableCell>
-                        <TableCell>
-                          <div>
-                            <p className="font-medium">{unit.unit_type}</p>
-                            <p className="text-sm text-muted-foreground">
-                              {[unit.brand, unit.model]
-                                .filter(Boolean)
-                                .join(" ") || "No brand/model"}
-                              {unit.capacity && ` • ${unit.capacity}`}
-                            </p>
-                            {unit.serial_number && (
-                              <p className="text-xs text-muted-foreground font-mono">
-                                S/N: {unit.serial_number}
-                              </p>
+                            <Download className="h-3 w-3 mr-1" />
+                            Download
+                          </Button>
+                        </div>
+                      )}
+                    </TableCell>
+                    <TableCell>
+                      <span className="font-medium">{unit.unit_type}</span>
+                    </TableCell>
+                    <TableCell>
+                      <div>
+                        <p className="font-medium">{unit.brand || "-"}</p>
+                        <p className="text-sm text-muted-foreground">
+                          {unit.model || "-"}
+                        </p>
+                      </div>
+                    </TableCell>
+                    <TableCell>
+                      <span className="font-mono text-sm">
+                        {unit.serial_number || "-"}
+                      </span>
+                    </TableCell>
+                    <TableCell>{unit.customer.name}</TableCell>
+                    <TableCell>
+                      {unit.warranty_expiry_date ? (
+                        <div>
+                          <Badge
+                            variant={
+                              isWarrantyActive(unit.warranty_expiry_date)
+                                ? "default"
+                                : "secondary"
+                            }
+                          >
+                            {isWarrantyActive(unit.warranty_expiry_date)
+                              ? "Active"
+                              : "Expired"}
+                          </Badge>
+                          <p className="text-xs text-muted-foreground mt-1">
+                            {format(
+                              new Date(unit.warranty_expiry_date),
+                              "MMM d, yyyy",
                             )}
-                          </div>
-                        </TableCell>
-                        <TableCell>{unit.customer_name}</TableCell>
-                        <TableCell>
-                          {unit.warranty_expiry_date ? (
-                            <div className="flex items-center gap-1.5">
-                              <Shield
-                                className={`h-4 w-4 ${
-                                  isWarrantyActive(unit.warranty_expiry_date)
-                                    ? "text-emerald-600"
-                                    : "text-muted-foreground"
-                                }`}
-                              />
-                              <span
-                                className={
-                                  isWarrantyActive(unit.warranty_expiry_date)
-                                    ? "text-emerald-600"
-                                    : "text-muted-foreground"
-                                }
-                              >
-                                {format(
-                                  new Date(unit.warranty_expiry_date),
-                                  "MMM d, yyyy",
-                                )}
-                              </span>
-                            </div>
-                          ) : (
-                            <span className="text-muted-foreground">-</span>
-                          )}
-                        </TableCell>
-                        <TableCell>
-                          <div className="flex items-center gap-1.5">
-                            <Wrench className="h-4 w-4 text-muted-foreground" />
-                            <span>{unit.total_services}</span>
-                          </div>
-                        </TableCell>
-                        <TableCell>
-                          {unit.last_service_date ? (
-                            <div className="flex items-center gap-1.5 text-sm">
-                              <Calendar className="h-4 w-4 text-muted-foreground" />
-                              {format(
-                                new Date(unit.last_service_date),
-                                "MMM d, yyyy",
-                              )}
-                            </div>
-                          ) : (
-                            <span className="text-muted-foreground text-sm">
-                              Never
-                            </span>
-                          )}
-                        </TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-              </div>
-            )}
-          </CardContent>
-        </Card>
+                          </p>
+                        </div>
+                      ) : (
+                        "-"
+                      )}
+                    </TableCell>
+                    <TableCell>
+                      {format(new Date(unit.created_at), "MMM d, yyyy")}
+                    </TableCell>
+                    <TableCell className="text-right">
+                      <div
+                        className="flex justify-end gap-2"
+                        onClick={(e) => e.stopPropagation()}
+                      >
+                        <Button
+                          size="icon"
+                          variant="ghost"
+                          onClick={() => handleViewClick(unit)}
+                        >
+                          <Eye className="h-4 w-4" />
+                        </Button>
+                        <Button
+                          size="icon"
+                          variant="ghost"
+                          onClick={() => handleEditClick(unit)}
+                        >
+                          <Edit className="h-4 w-4" />
+                        </Button>
+                        <Button
+                          size="icon"
+                          variant="ghost"
+                          onClick={() => handleDeleteClick(unit)}
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
+                      </div>
+                    </TableCell>
+                  </TableRow>
+                ))
+              )}
+            </TableBody>
+          </Table>
 
-        {/* QR Code Dialog */}
-        <Dialog open={qrDialogOpen} onOpenChange={setQrDialogOpen}>
-          <DialogContent className="max-w-sm">
-            <DialogHeader>
-              <DialogTitle>Unit QR Code</DialogTitle>
-              <DialogDescription>
-                Scan this code to identify the unit or print for labeling.
-              </DialogDescription>
-            </DialogHeader>
-            {selectedUnit && (
-              <div className="flex flex-col items-center py-6 space-y-4">
-                <div className="bg-white p-4 rounded-lg border shadow-sm">
-                  <QRCodeSVG
-                    id="qr-code-svg"
-                    value={selectedUnit.qr_code}
-                    size={180}
-                    level="H"
-                    includeMargin
-                  />
-                </div>
-                <div className="text-center space-y-1">
-                  <p className="font-mono font-bold text-lg">
-                    {selectedUnit.qr_code}
-                  </p>
-                  <p className="text-sm font-medium">
-                    {selectedUnit.unit_type}
-                  </p>
-                  <p className="text-sm text-muted-foreground">
-                    {[selectedUnit.brand, selectedUnit.model]
-                      .filter(Boolean)
-                      .join(" ")}
-                  </p>
-                  <p className="text-sm text-muted-foreground">
-                    {selectedUnit.customer_name}
-                  </p>
-                </div>
-              </div>
-            )}
-            <DialogFooter>
-              <Button variant="outline" onClick={() => setQrDialogOpen(false)}>
-                Close
-              </Button>
-              <Button onClick={handleDownloadQR}>
-                <Download className="mr-2 h-4 w-4" />
-                Download
-              </Button>
-            </DialogFooter>
-          </DialogContent>
-        </Dialog>
+          {/* Pagination Controls */}
+          {!loading && units.length > 0 && <PaginationControls />}
+        </Card>
       </div>
+
+      {/* Edit Modal */}
+      {selectedUnit && (
+        <EditUnitModal
+          open={editModalOpen}
+          onOpenChange={setEditModalOpen}
+          unit={selectedUnit}
+          customers={customers}
+          onSuccess={handleEditSuccess}
+        />
+      )}
+
+      {/* Delete Dialog */}
+      {selectedUnit && (
+        <DeleteUnitDialog
+          open={deleteDialogOpen}
+          onOpenChange={setDeleteDialogOpen}
+          unit={selectedUnit}
+          onSuccess={handleDeleteSuccess}
+        />
+      )}
     </DashboardLayout>
   );
 }
