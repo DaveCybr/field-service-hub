@@ -103,7 +103,7 @@ interface Product {
   min_stock_threshold: number;
   is_service_item: boolean;
   is_active: boolean;
-  image_url: string | null;
+  image_url?: string | null;
   created_at: string;
 }
 

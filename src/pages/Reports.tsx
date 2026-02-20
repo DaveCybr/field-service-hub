@@ -577,7 +577,7 @@ export default function Reports() {
         .select(
           `
           *,
-          transactions:inventory_transactions(quantity, transaction_date)
+          transactions:inventory_transactions(quantity, created_at)
         `,
         )
         .eq("is_active", true);

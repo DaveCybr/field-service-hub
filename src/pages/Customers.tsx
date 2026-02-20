@@ -159,8 +159,8 @@ export default function Customers() {
     if (!formData.name || !formData.phone) {
       toast({
         variant: "destructive",
-        title: "Validation Error",
-        description: "Name and phone are required.",
+        title: "Validasi Error",
+        description: "Nama dan nomor telepon wajib diisi.",
       });
       return;
     }
@@ -183,8 +183,8 @@ export default function Customers() {
       if (error) throw error;
 
       toast({
-        title: "Customer Added",
-        description: `${formData.name} has been added successfully.`,
+        title: "Pelanggan Ditambahkan",
+        description: `${formData.name} berhasil ditambahkan.`,
       });
 
       setDialogOpen(false);
@@ -196,7 +196,7 @@ export default function Customers() {
       toast({
         variant: "destructive",
         title: "Error",
-        description: error.message || "Failed to add customer.",
+        description: error.message || "Gagal menambahkan pelanggan.",
       });
     } finally {
       setSubmitting(false);
@@ -209,8 +209,8 @@ export default function Customers() {
     if (!formData.name || !formData.phone) {
       toast({
         variant: "destructive",
-        title: "Validation Error",
-        description: "Name and phone are required.",
+        title: "Validasi Error",
+        description: "Nama dan nomor telepon wajib diisi.",
       });
       return;
     }
@@ -233,8 +233,8 @@ export default function Customers() {
       if (error) throw error;
 
       toast({
-        title: "Customer Updated",
-        description: `${formData.name} has been updated successfully.`,
+        title: "Pelanggan Diperbarui",
+        description: `${formData.name} berhasil diperbarui.`,
       });
 
       setDialogOpen(false);
@@ -246,7 +246,7 @@ export default function Customers() {
       toast({
         variant: "destructive",
         title: "Error",
-        description: error.message || "Failed to update customer.",
+        description: error.message || "Gagal memperbarui pelanggan.",
       });
     } finally {
       setSubmitting(false);
@@ -266,8 +266,8 @@ export default function Customers() {
       if (error) throw error;
 
       toast({
-        title: "Customer Deleted",
-        description: `${selectedCustomer.name} has been deleted.`,
+        title: "Pelanggan Dihapus",
+        description: `${selectedCustomer.name} telah dihapus.`,
       });
 
       setDeleteDialogOpen(false);
@@ -279,7 +279,7 @@ export default function Customers() {
       toast({
         variant: "destructive",
         title: "Error",
-        description: error.message || "Failed to delete customer.",
+        description: error.message || "Gagal menghapus pelanggan.",
       });
     } finally {
       setSubmitting(false);
@@ -336,31 +336,31 @@ export default function Customers() {
         {/* Header */}
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
           <div>
-            <h1 className="text-2xl font-bold tracking-tight">Customers</h1>
+            <h1 className="text-2xl font-bold tracking-tight">Pelanggan</h1>
             <p className="text-muted-foreground">
-              Manage customer database and service history
+              Kelola database pelanggan dan riwayat servis
             </p>
           </div>
           <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
             <DialogTrigger asChild>
               <Button onClick={resetForm}>
                 <Plus className="mr-2 h-4 w-4" />
-                Add Customer
+                Tambah Pelanggan
               </Button>
             </DialogTrigger>
             <DialogContent className="max-w-2xl">
               <DialogHeader>
                 <DialogTitle>
-                  {selectedCustomer ? "Edit Customer" : "New Customer"}
+                  {selectedCustomer ? "Edit Pelanggan" : "Pelanggan Baru"}
                 </DialogTitle>
                 <DialogDescription>
-                  Enter the customer details below.
+                  Masukkan detail pelanggan di bawah ini.
                 </DialogDescription>
               </DialogHeader>
               <div className="space-y-4 py-4">
                 <div className="grid grid-cols-2 gap-4">
                   <div className="space-y-2">
-                    <Label htmlFor="name">Full Name *</Label>
+                    <Label htmlFor="name">Nama Lengkap *</Label>
                     <Input
                       id="name"
                       placeholder="John Doe"
@@ -371,7 +371,7 @@ export default function Customers() {
                     />
                   </div>
                   <div className="space-y-2">
-                    <Label htmlFor="category">Category</Label>
+                    <Label htmlFor="category">Kategori</Label>
                     <Select
                       value={formData.category}
                       onValueChange={(value: "retail" | "project") =>
@@ -383,7 +383,7 @@ export default function Customers() {
                       </SelectTrigger>
                       <SelectContent>
                         <SelectItem value="retail">Retail</SelectItem>
-                        <SelectItem value="project">Project</SelectItem>
+                        <SelectItem value="project">Proyek</SelectItem>
                       </SelectContent>
                     </Select>
                   </div>
@@ -403,7 +403,7 @@ export default function Customers() {
                     />
                   </div>
                   <div className="space-y-2">
-                    <Label htmlFor="phone">Phone *</Label>
+                    <Label htmlFor="phone">Telepon *</Label>
                     <Input
                       id="phone"
                       placeholder="+62 812 3456 7890"
@@ -416,10 +416,10 @@ export default function Customers() {
                 </div>
 
                 <div className="space-y-2">
-                  <Label htmlFor="address">Address</Label>
+                  <Label htmlFor="address">Alamat</Label>
                   <Textarea
                     id="address"
-                    placeholder="Street address"
+                    placeholder="Alamat lengkap"
                     value={formData.address}
                     onChange={(e) =>
                       setFormData({ ...formData, address: e.target.value })
@@ -430,7 +430,7 @@ export default function Customers() {
 
                 {formData.category === "project" && (
                   <div className="space-y-2">
-                    <Label htmlFor="payment_terms">Payment Terms (Days)</Label>
+                    <Label htmlFor="payment_terms">Termin Pembayaran (Hari)</Label>
                     <Select
                       value={formData.payment_terms_days.toString()}
                       onValueChange={(value) =>
@@ -444,11 +444,11 @@ export default function Customers() {
                         <SelectValue />
                       </SelectTrigger>
                       <SelectContent>
-                        <SelectItem value="0">Immediate</SelectItem>
-                        <SelectItem value="7">7 Days</SelectItem>
-                        <SelectItem value="14">14 Days</SelectItem>
-                        <SelectItem value="30">30 Days</SelectItem>
-                        <SelectItem value="60">60 Days</SelectItem>
+                        <SelectItem value="0">Langsung</SelectItem>
+                        <SelectItem value="7">7 Hari</SelectItem>
+                        <SelectItem value="14">14 Hari</SelectItem>
+                        <SelectItem value="30">30 Hari</SelectItem>
+                        <SelectItem value="60">60 Hari</SelectItem>
                       </SelectContent>
                     </Select>
                   </div>
@@ -462,7 +462,7 @@ export default function Customers() {
                     resetForm();
                   }}
                 >
-                  Cancel
+                  Batal
                 </Button>
                 <Button
                   onClick={
@@ -473,10 +473,10 @@ export default function Customers() {
                   disabled={submitting}
                 >
                   {submitting
-                    ? "Saving..."
+                    ? "Menyimpan..."
                     : selectedCustomer
-                      ? "Update Customer"
-                      : "Add Customer"}
+                      ? "Perbarui Pelanggan"
+                      : "Tambah Pelanggan"}
                 </Button>
               </DialogFooter>
             </DialogContent>
@@ -489,8 +489,8 @@ export default function Customers() {
             <CardContent className="p-6">
               <div className="flex items-center justify-between">
                 <div>
-                  <p className="text-sm font-medium text-muted-foreground">
-                    Total Customers
+                    <p className="text-sm font-medium text-muted-foreground">
+                    Total Pelanggan
                   </p>
                   <p className="text-3xl font-bold mt-1">{stats.total}</p>
                 </div>
