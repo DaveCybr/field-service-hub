@@ -88,28 +88,52 @@ export function useUnitInsights(unitId: string | undefined) {
     setError(null);
 
     try {
-      // Fetch parts history from invoice_items linked via invoice_services
-      const { data: servicesData, error: servicesError } = await supabase
-        .from("invoice_services")
-        .select(`
-          id,
-          title,
-          created_at,
-          invoice:invoices(invoice_number)
-        `)
+      // Fetch recurring issues
+      const { data: recurringData, error: recurringError } = await supabase
+        .from("unit_recurring_issues")
+        .select("*")
+        .eq("unit_id", unitId)
+        .order("severity", { ascending: false })
+        .order("occurrence_count", { ascending: false });
+
+      if (recurringError) throw recurringError;
+
+      // Fetch parts history with service details
+      const { data: partsData, error: partsError } = await supabase
+        .from("service_parts_usage")
+        .select(
+          `
+          *,
+          service:invoice_services (
+            title,
+            created_at,
+            invoice:invoices (
+              invoice_number
+            )
+          )
+        `,
+        )
         .eq("unit_id", unitId)
         .order("created_at", { ascending: false });
 
-      if (servicesError) throw servicesError;
+      if (partsError) throw partsError;
 
-      // Fetch invoice items for these services' invoices
-      const invoiceIds = [...new Set(servicesData?.map((s: any) => {
-        const inv = Array.isArray(s.invoice) ? s.invoice[0] : s.invoice;
-        return inv?.invoice_number;
-      }).filter(Boolean) || [])];
-
-      // Build parts history from invoice_items
-      const processedParts: PartUsage[] = [];
+      // Process parts data (flatten nested arrays)
+      const processedParts: PartUsage[] =
+        partsData?.map((part) => ({
+          ...part,
+          service: {
+            title: (part.service as any)?.title || "Unknown Service",
+            created_at: (part.service as any)?.created_at || part.created_at,
+            invoice: {
+              invoice_number:
+                (part.service as any)?.invoice?.invoice_number ||
+                (Array.isArray((part.service as any)?.invoice)
+                  ? (part.service as any).invoice[0]?.invoice_number
+                  : "N/A"),
+            },
+          },
+        })) || [];
 
       // Calculate total parts cost
       const totalPartsCost = processedParts.reduce(
@@ -144,13 +168,20 @@ export function useUnitInsights(unitId: string | undefined) {
         }
       });
 
+      // Count critical and active issues
+      const criticalIssuesCount =
+        recurringData?.filter((issue) => issue.severity === "critical")
+          .length || 0;
+      const activeIssuesCount =
+        recurringData?.filter((issue) => issue.status === "active").length || 0;
+
       setInsights({
-        recurringIssues: [],
+        recurringIssues: (recurringData as RecurringIssue[]) || [],
         partsHistory: processedParts,
         totalPartsCost,
         mostReplacedPart,
-        criticalIssuesCount: 0,
-        activeIssuesCount: 0,
+        criticalIssuesCount,
+        activeIssuesCount,
       });
     } catch (err: any) {
       console.error("Error fetching unit insights:", err);
@@ -158,7 +189,7 @@ export function useUnitInsights(unitId: string | undefined) {
       toast({
         variant: "destructive",
         title: "Error",
-        description: "Gagal memuat data insight unit",
+        description: "Failed to load unit insights",
       });
     } finally {
       setLoading(false);
@@ -188,18 +219,31 @@ export function useResolveRecurringIssue() {
   const resolveIssue = useCallback(
     async (issueId: string, notes?: string) => {
       setResolving(true);
+
       try {
+        const { error } = await supabase
+          .from("unit_recurring_issues")
+          .update({
+            status: "resolved",
+            resolved_at: new Date().toISOString(),
+            notes: notes || null,
+          })
+          .eq("id", issueId);
+
+        if (error) throw error;
+
         toast({
-          title: "Masalah Diselesaikan",
-          description: "Masalah berulang telah ditandai sebagai selesai",
+          title: "Issue Resolved",
+          description: "The recurring issue has been marked as resolved",
         });
+
         return { success: true };
       } catch (error: any) {
         console.error("Error resolving issue:", error);
         toast({
           variant: "destructive",
           title: "Error",
-          description: error.message || "Gagal menyelesaikan masalah",
+          description: error.message || "Failed to resolve issue",
         });
         return { success: false, error: error.message };
       } finally {
@@ -238,13 +282,13 @@ export function getSeverityIcon(severity: RecurringIssue["severity"]): string {
 
 export function formatIssueCategoryDisplay(category: string): string {
   const displayNames: Record<string, string> = {
-    freon_leak: "Kebocoran Freon",
-    compressor_failure: "Kerusakan Kompresor",
-    electrical: "Masalah Kelistrikan",
-    filter_dirty: "Masalah Filter",
-    motor_failure: "Kerusakan Motor",
-    pcb_failure: "Kerusakan PCB/Board",
-    other: "Masalah Lainnya",
+    freon_leak: "Freon Leak",
+    compressor_failure: "Compressor Failure",
+    electrical: "Electrical Problem",
+    filter_dirty: "Filter Issues",
+    motor_failure: "Motor Failure",
+    pcb_failure: "PCB/Board Failure",
+    other: "Other Issues",
   };
   return displayNames[category] || category;
 }

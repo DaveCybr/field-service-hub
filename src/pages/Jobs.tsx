@@ -1,4 +1,4 @@
-// Jobs.tsx - Job Management with SERVER-SIDE Pagination
+// Jobs.tsx - Manajemen Pekerjaan dengan Pagination SERVER-SIDE
 import { useState, useEffect, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
@@ -50,7 +50,6 @@ export default function Jobs() {
   const [selectedJobs, setSelectedJobs] = useState<Job[]>([]);
   const [teamCounts, setTeamCounts] = useState<Record<string, number>>({});
 
-  // ✅ Server-side pagination hook
   const {
     data: jobs,
     loading,
@@ -71,27 +70,35 @@ export default function Jobs() {
       unit:units(unit_type, brand)
     `,
     orderBy: { column: "created_at", ascending: false },
-    filters: {
-      status: statusFilter,
-    },
+    filters: { status: statusFilter },
     searchColumn: "title",
     searchValue: searchValue,
     initialPageSize: 10,
   });
 
-  // Fetch team counts for current page
   useEffect(() => {
-    if (jobs.length > 0) {
-      fetchTeamCounts();
-    }
+    if (jobs.length > 0) fetchTeamCounts();
   }, [jobs]);
 
   const fetchTeamCounts = async () => {
-    // service_technician_assignments table not yet created - skip
-    setTeamCounts({});
+    const serviceIds = jobs.map((job) => job.id);
+    // ✅ FIX: Hapus filter status "active" - tidak ada status "active" di tabel
+    // Status yang ada: "assigned", dll
+    const { data } = await supabase
+      .from("service_technician_assignments")
+      .select("service_id")
+      .in("service_id", serviceIds);
+
+    const counts = data?.reduce((acc: Record<string, number>, assignment) => {
+      if (assignment.service_id) {
+        acc[assignment.service_id] = (acc[assignment.service_id] || 0) + 1;
+      }
+      return acc;
+    }, {});
+
+    setTeamCounts(counts || {});
   };
 
-  // Fetch stats (separate query for dashboard cards)
   const [stats, setStats] = useState({
     unassigned: 0,
     assigned: 0,
@@ -104,22 +111,18 @@ export default function Jobs() {
   }, []);
 
   const fetchStats = async () => {
-    // Get counts for each status
     const { count: unassignedCount } = await supabase
       .from("invoice_services")
       .select("*", { count: "exact", head: true })
       .eq("status", "pending");
-
     const { count: assignedCount } = await supabase
       .from("invoice_services")
       .select("*", { count: "exact", head: true })
       .eq("status", "assigned");
-
     const { count: inProgressCount } = await supabase
       .from("invoice_services")
       .select("*", { count: "exact", head: true })
       .eq("status", "in_progress");
-
     const { count: completedCount } = await supabase
       .from("invoice_services")
       .select("*", { count: "exact", head: true })
@@ -133,39 +136,22 @@ export default function Jobs() {
     });
   };
 
-  // Add team_count to jobs data
   const jobsWithTeamCount = useMemo(() => {
-    return jobs.map((job) => ({
-      ...job,
-      team_count: teamCounts[job.id] || 0,
-    }));
+    return jobs.map((job) => ({ ...job, team_count: teamCounts[job.id] || 0 }));
   }, [jobs, teamCounts]);
 
-  const handleRowClick = (job: Job) => {
-    navigate(`/jobs/${job.id}`);
-  };
-
-  const handleSelectionChange = (selectedRows: Job[]) => {
-    setSelectedJobs(selectedRows);
-  };
-
-  // Column action handlers
   const columnActions: JobColumnActions = {
-    onViewDetails: (job) => {
-      navigate(`/jobs/${job.id}`);
-    },
+    onViewDetails: (job) => navigate(`/jobs/${job.id}`),
     onManageTeam: (job) => {
       setSelectedJob(job);
       setTeamDialogOpen(true);
     },
-    onViewInvoice: (job) => {
-      navigate(`/invoices/${job.invoice.invoice_number}`);
-    },
+    onViewInvoice: (job) => navigate(`/invoices/${job.invoice.invoice_number}`),
     onCopyId: (job) => {
       navigator.clipboard.writeText(job.id);
       toast({
-        title: "Copied!",
-        description: "Job ID copied to clipboard",
+        title: "Tersalin!",
+        description: "ID pekerjaan telah disalin ke clipboard",
       });
     },
   };
@@ -177,20 +163,22 @@ export default function Jobs() {
       <div className="space-y-6 animate-fade-in">
         {/* Header */}
         <div>
-          <h1 className="text-2xl font-bold tracking-tight">Job Management</h1>
+          <h1 className="text-2xl font-bold tracking-tight">
+            Manajemen Pekerjaan
+          </h1>
           <p className="text-muted-foreground">
-            Manage and assign service jobs to technician teams
+            Kelola dan tugaskan pekerjaan service ke tim teknisi
           </p>
         </div>
 
-        {/* Stats Cards */}
+        {/* Kartu Statistik */}
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
           <Card>
             <CardContent className="p-6">
               <div className="flex items-center justify-between">
                 <div>
                   <p className="text-sm font-medium text-muted-foreground">
-                    Unassigned
+                    Belum Ditugaskan
                   </p>
                   <p className="text-3xl font-bold mt-1">{stats.unassigned}</p>
                 </div>
@@ -200,13 +188,12 @@ export default function Jobs() {
               </div>
             </CardContent>
           </Card>
-
           <Card>
             <CardContent className="p-6">
               <div className="flex items-center justify-between">
                 <div>
                   <p className="text-sm font-medium text-muted-foreground">
-                    Assigned
+                    Ditugaskan
                   </p>
                   <p className="text-3xl font-bold mt-1">{stats.assigned}</p>
                 </div>
@@ -216,13 +203,12 @@ export default function Jobs() {
               </div>
             </CardContent>
           </Card>
-
           <Card>
             <CardContent className="p-6">
               <div className="flex items-center justify-between">
                 <div>
                   <p className="text-sm font-medium text-muted-foreground">
-                    In Progress
+                    Sedang Dikerjakan
                   </p>
                   <p className="text-3xl font-bold mt-1">{stats.in_progress}</p>
                 </div>
@@ -232,13 +218,12 @@ export default function Jobs() {
               </div>
             </CardContent>
           </Card>
-
           <Card>
             <CardContent className="p-6">
               <div className="flex items-center justify-between">
                 <div>
                   <p className="text-sm font-medium text-muted-foreground">
-                    Completed
+                    Selesai
                   </p>
                   <p className="text-3xl font-bold mt-1">{stats.completed}</p>
                 </div>
@@ -250,7 +235,7 @@ export default function Jobs() {
           </Card>
         </div>
 
-        {/* Filters */}
+        {/* Filter */}
         <Card>
           <CardContent className="pt-6">
             <div className="flex items-center justify-between gap-4">
@@ -260,37 +245,38 @@ export default function Jobs() {
                     <SelectValue placeholder="Status" />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="all">All Status</SelectItem>
-                    <SelectItem value="pending">Unassigned</SelectItem>
-                    <SelectItem value="assigned">Assigned</SelectItem>
-                    <SelectItem value="in_progress">In Progress</SelectItem>
-                    <SelectItem value="completed">Completed</SelectItem>
-                    <SelectItem value="cancelled">Cancelled</SelectItem>
+                    <SelectItem value="all">Semua Status</SelectItem>
+                    <SelectItem value="pending">Belum Ditugaskan</SelectItem>
+                    <SelectItem value="assigned">Ditugaskan</SelectItem>
+                    <SelectItem value="in_progress">
+                      Sedang Dikerjakan
+                    </SelectItem>
+                    <SelectItem value="completed">Selesai</SelectItem>
+                    <SelectItem value="cancelled">Dibatalkan</SelectItem>
                   </SelectContent>
                 </Select>
 
                 {selectedJobs.length > 0 && (
                   <div className="flex items-center gap-2">
                     <Badge variant="secondary">
-                      {selectedJobs.length} selected
+                      {selectedJobs.length} dipilih
                     </Badge>
                     <Button
                       variant="outline"
                       size="sm"
                       onClick={() => {
                         toast({
-                          title: "Bulk Action",
-                          description: `${selectedJobs.length} jobs selected`,
+                          title: "Aksi Massal",
+                          description: `${selectedJobs.length} pekerjaan dipilih`,
                         });
                       }}
                     >
                       <Users className="h-4 w-4 mr-2" />
-                      Bulk Assign
+                      Tugaskan Massal
                     </Button>
                   </div>
                 )}
               </div>
-
               <Button variant="outline" onClick={refetch} disabled={loading}>
                 <RefreshCw
                   className={`h-4 w-4 ${loading ? "animate-spin" : ""}`}
@@ -300,7 +286,7 @@ export default function Jobs() {
           </CardContent>
         </Card>
 
-        {/* Data Table with Server-Side Pagination */}
+        {/* Tabel Data */}
         <Card>
           <CardContent className="p-6">
             <DataTableServer
@@ -312,30 +298,30 @@ export default function Jobs() {
               onPaginationChange={setPagination}
               loading={loading}
               searchKey="title"
-              searchPlaceholder="Search by job title..."
+              searchPlaceholder="Cari berdasarkan judul pekerjaan..."
               searchValue={searchValue}
               onSearchChange={setSearchValue}
-              onRowClick={handleRowClick}
-              onSelectionChange={handleSelectionChange}
+              onRowClick={(job) => navigate(`/jobs/${job.id}`)}
+              onSelectionChange={setSelectedJobs}
               enableMultiSelect={true}
               enableColumnVisibility={true}
-              emptyMessage="No jobs found"
-              emptyDescription="Jobs will appear here when invoices with services are created."
+              emptyMessage="Tidak ada pekerjaan"
+              emptyDescription="Pekerjaan akan muncul di sini ketika faktur dengan service dibuat."
             />
           </CardContent>
         </Card>
 
-        {/* Team Management Dialog */}
+        {/* Dialog Manajemen Tim */}
         <Dialog open={teamDialogOpen} onOpenChange={setTeamDialogOpen}>
           <DialogContent className="max-w-2xl">
             <DialogHeader>
-              <DialogTitle>Manage Service Team</DialogTitle>
+              <DialogTitle>Kelola Tim Service</DialogTitle>
               <DialogDescription>
                 {selectedJob && (
                   <>
-                    Job: <strong>{selectedJob.title}</strong>
+                    Pekerjaan: <strong>{selectedJob.title}</strong>
                     <br />
-                    Invoice: {selectedJob.invoice.invoice_number}
+                    Faktur: {selectedJob.invoice.invoice_number}
                   </>
                 )}
               </DialogDescription>
@@ -346,7 +332,7 @@ export default function Jobs() {
                   <div className="flex items-start gap-2">
                     <MapPin className="h-4 w-4 text-muted-foreground mt-0.5" />
                     <div>
-                      <p className="text-sm font-medium">Service Address</p>
+                      <p className="text-sm font-medium">Alamat Service</p>
                       <p className="text-sm text-muted-foreground">
                         {selectedJob.service_address}
                       </p>
@@ -354,7 +340,6 @@ export default function Jobs() {
                   </div>
                 </div>
               )}
-
               {selectedJob && (
                 <ServiceTeamManager
                   serviceId={selectedJob.id}

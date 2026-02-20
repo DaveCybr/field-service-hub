@@ -1,21 +1,27 @@
-import { useState, useEffect } from 'react';
-import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Badge } from '@/components/ui/badge';
-import { Alert, AlertDescription } from '@/components/ui/alert';
-import { Separator } from '@/components/ui/separator';
-import PhotoUpload from './PhotoUpload';
-import { 
-  Navigation, 
-  MapPin, 
-  CheckCircle, 
-  XCircle, 
-  Loader2, 
+import { useState, useEffect } from "react";
+import { Button } from "@/components/ui/button";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
+import { Alert, AlertDescription } from "@/components/ui/alert";
+import { Separator } from "@/components/ui/separator";
+import PhotoUpload from "./PhotoUpload";
+import {
+  Navigation,
+  MapPin,
+  CheckCircle,
+  XCircle,
+  Loader2,
   AlertTriangle,
   Play,
   Square,
-  Camera
-} from 'lucide-react';
+  Camera,
+} from "lucide-react";
 
 interface GPSCheckInOutProps {
   jobId: string;
@@ -29,22 +35,32 @@ interface GPSCheckInOutProps {
   checkoutGpsValid: boolean | null;
   beforePhotos?: string[];
   afterPhotos?: string[];
-  onCheckIn: (latitude: number, longitude: number, isValid: boolean, photos: string[]) => Promise<void>;
-  onCheckOut: (latitude: number, longitude: number, isValid: boolean, photos: string[]) => Promise<void>;
+  onCheckIn: (
+    latitude: number,
+    longitude: number,
+    isValid: boolean,
+    photos: string[],
+  ) => Promise<void>;
+  onCheckOut: (
+    latitude: number,
+    longitude: number,
+    isValid: boolean,
+    photos: string[],
+  ) => Promise<void>;
   disabled?: boolean;
 }
 
-// Maximum allowed distance in meters for GPS validation
+// Jarak maksimum yang diizinkan dalam meter untuk validasi GPS
 const MAX_DISTANCE_METERS = 100;
 
-// Calculate distance between two GPS coordinates using Haversine formula
+// Hitung jarak antara dua koordinat GPS menggunakan rumus Haversine
 function calculateDistance(
-  lat1: number, 
-  lon1: number, 
-  lat2: number, 
-  lon2: number
+  lat1: number,
+  lon1: number,
+  lat2: number,
+  lon2: number,
 ): number {
-  const R = 6371e3; // Earth's radius in meters
+  const R = 6371e3; // Radius bumi dalam meter
   const φ1 = (lat1 * Math.PI) / 180;
   const φ2 = (lat2 * Math.PI) / 180;
   const Δφ = ((lat2 - lat1) * Math.PI) / 180;
@@ -55,7 +71,7 @@ function calculateDistance(
     Math.cos(φ1) * Math.cos(φ2) * Math.sin(Δλ / 2) * Math.sin(Δλ / 2);
   const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
 
-  return R * c; // Distance in meters
+  return R * c; // Jarak dalam meter
 }
 
 export default function GPSCheckInOut({
@@ -74,25 +90,30 @@ export default function GPSCheckInOut({
   onCheckOut,
   disabled = false,
 }: GPSCheckInOutProps) {
-  const [currentLocation, setCurrentLocation] = useState<{ lat: number; lng: number } | null>(null);
+  const [currentLocation, setCurrentLocation] = useState<{
+    lat: number;
+    lng: number;
+  } | null>(null);
   const [locationError, setLocationError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [gettingLocation, setGettingLocation] = useState(false);
   const [distance, setDistance] = useState<number | null>(null);
-  
-  // Photo state
+
+  // State foto
   const [checkinPhotos, setCheckinPhotos] = useState<string[]>(beforePhotos);
   const [checkoutPhotos, setCheckoutPhotos] = useState<string[]>(afterPhotos);
 
-  const hasServiceLocation = serviceLatitude !== null && serviceLongitude !== null;
-  const canCheckIn = jobStatus === 'approved' && !actualCheckinAt;
-  const canCheckOut = jobStatus === 'in_progress' && actualCheckinAt && !actualCheckoutAt;
+  const hasServiceLocation =
+    serviceLatitude !== null && serviceLongitude !== null;
+  const canCheckIn = jobStatus === "approved" && !actualCheckinAt;
+  const canCheckOut =
+    jobStatus === "in_progress" && actualCheckinAt && !actualCheckoutAt;
 
-  // Get current location
+  // Dapatkan lokasi saat ini
   const getCurrentLocation = (): Promise<GeolocationPosition> => {
     return new Promise((resolve, reject) => {
       if (!navigator.geolocation) {
-        reject(new Error('Geolocation is not supported by your browser'));
+        reject(new Error("Geolocation tidak didukung oleh browser Anda"));
         return;
       }
 
@@ -104,37 +125,42 @@ export default function GPSCheckInOut({
     });
   };
 
-  // Refresh current location
+  // Perbarui lokasi saat ini
   const refreshLocation = async () => {
     setGettingLocation(true);
     setLocationError(null);
-    
+
     try {
       const position = await getCurrentLocation();
       const { latitude, longitude } = position.coords;
       setCurrentLocation({ lat: latitude, lng: longitude });
-      
+
       if (hasServiceLocation) {
-        const dist = calculateDistance(latitude, longitude, serviceLatitude!, serviceLongitude!);
+        const dist = calculateDistance(
+          latitude,
+          longitude,
+          serviceLatitude!,
+          serviceLongitude!,
+        );
         setDistance(dist);
       }
     } catch (error: any) {
-      console.error('Error getting location:', error);
+      console.error("Error mendapatkan lokasi:", error);
       if (error.code === 1) {
-        setLocationError('Location access denied. Please enable GPS permissions.');
+        setLocationError("Akses lokasi ditolak. Harap aktifkan izin GPS.");
       } else if (error.code === 2) {
-        setLocationError('Unable to determine location. Please try again.');
+        setLocationError("Tidak dapat menentukan lokasi. Silakan coba lagi.");
       } else if (error.code === 3) {
-        setLocationError('Location request timed out. Please try again.');
+        setLocationError("Permintaan lokasi habis waktu. Silakan coba lagi.");
       } else {
-        setLocationError('Failed to get your location.');
+        setLocationError("Gagal mendapatkan lokasi Anda.");
       }
     } finally {
       setGettingLocation(false);
     }
   };
 
-  // Auto-refresh location on mount
+  // Perbarui lokasi otomatis saat mount
   useEffect(() => {
     if (canCheckIn || canCheckOut) {
       refreshLocation();
@@ -154,7 +180,12 @@ export default function GPSCheckInOut({
       if (hasServiceLocation && distance !== null) {
         isValid = distance <= MAX_DISTANCE_METERS;
       }
-      await onCheckIn(currentLocation.lat, currentLocation.lng, isValid, checkinPhotos);
+      await onCheckIn(
+        currentLocation.lat,
+        currentLocation.lng,
+        isValid,
+        checkinPhotos,
+      );
     } finally {
       setLoading(false);
     }
@@ -173,13 +204,18 @@ export default function GPSCheckInOut({
       if (hasServiceLocation && distance !== null) {
         isValid = distance <= MAX_DISTANCE_METERS;
       }
-      await onCheckOut(currentLocation.lat, currentLocation.lng, isValid, checkoutPhotos);
+      await onCheckOut(
+        currentLocation.lat,
+        currentLocation.lng,
+        isValid,
+        checkoutPhotos,
+      );
     } finally {
       setLoading(false);
     }
   };
 
-  // Format distance for display
+  // Format jarak untuk ditampilkan
   const formatDistance = (meters: number): string => {
     if (meters < 1000) {
       return `${Math.round(meters)} m`;
@@ -187,7 +223,7 @@ export default function GPSCheckInOut({
     return `${(meters / 1000).toFixed(2)} km`;
   };
 
-  // If not in a state that needs check-in/out, show summary
+  // Jika tidak dalam status yang membutuhkan check-in/out, tampilkan ringkasan
   if (!canCheckIn && !canCheckOut) {
     if (actualCheckinAt || actualCheckoutAt) {
       return (
@@ -195,7 +231,7 @@ export default function GPSCheckInOut({
           <CardHeader className="pb-3">
             <CardTitle className="text-base flex items-center gap-2">
               <Navigation className="h-5 w-5" />
-              GPS Verification
+              Verifikasi GPS
             </CardTitle>
           </CardHeader>
           <CardContent className="space-y-3">
@@ -209,12 +245,12 @@ export default function GPSCheckInOut({
                   {checkinGpsValid ? (
                     <Badge className="bg-emerald-100 text-emerald-800">
                       <CheckCircle className="h-3 w-3 mr-1" />
-                      Verified
+                      Terverifikasi
                     </Badge>
                   ) : (
                     <Badge className="bg-amber-100 text-amber-800">
                       <AlertTriangle className="h-3 w-3 mr-1" />
-                      Not at location
+                      Di luar lokasi
                     </Badge>
                   )}
                 </div>
@@ -230,12 +266,12 @@ export default function GPSCheckInOut({
                   {checkoutGpsValid ? (
                     <Badge className="bg-emerald-100 text-emerald-800">
                       <CheckCircle className="h-3 w-3 mr-1" />
-                      Verified
+                      Terverifikasi
                     </Badge>
                   ) : (
                     <Badge className="bg-amber-100 text-amber-800">
                       <AlertTriangle className="h-3 w-3 mr-1" />
-                      Not at location
+                      Di luar lokasi
                     </Badge>
                   )}
                 </div>
@@ -253,44 +289,46 @@ export default function GPSCheckInOut({
       <CardHeader className="pb-3">
         <CardTitle className="text-base flex items-center gap-2">
           <Navigation className="h-5 w-5 text-primary" />
-          {canCheckIn ? 'Check-in to Start Job' : 'Check-out to Complete Job'}
+          {canCheckIn
+            ? "Check-in untuk Memulai Pekerjaan"
+            : "Check-out untuk Menyelesaikan Pekerjaan"}
         </CardTitle>
         <CardDescription>
-          {canCheckIn 
-            ? 'Verify your location to start working on this job'
-            : 'Verify your location to mark job as completed'}
+          {canCheckIn
+            ? "Verifikasi lokasi Anda untuk mulai mengerjakan pekerjaan ini"
+            : "Verifikasi lokasi Anda untuk menandai pekerjaan sebagai selesai"}
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
-        {/* Service Location */}
+        {/* Lokasi Service */}
         {serviceAddress && (
           <div className="flex items-start gap-2 p-3 rounded-lg bg-muted/50">
             <MapPin className="h-4 w-4 mt-0.5 text-muted-foreground" />
             <div>
-              <p className="text-sm font-medium">Service Location</p>
+              <p className="text-sm font-medium">Lokasi Service</p>
               <p className="text-sm text-muted-foreground">{serviceAddress}</p>
             </div>
           </div>
         )}
 
-        {/* Current Location Status */}
+        {/* Status Lokasi Saat Ini */}
         <div className="space-y-2">
           <div className="flex items-center justify-between">
-            <span className="text-sm font-medium">Your Location</span>
-            <Button 
-              variant="ghost" 
-              size="sm" 
+            <span className="text-sm font-medium">Lokasi Anda</span>
+            <Button
+              variant="ghost"
+              size="sm"
               onClick={refreshLocation}
               disabled={gettingLocation}
             >
               {gettingLocation ? (
                 <Loader2 className="h-4 w-4 animate-spin" />
               ) : (
-                'Refresh'
+                "Perbarui"
               )}
             </Button>
           </div>
-          
+
           {locationError ? (
             <Alert variant="destructive">
               <AlertTriangle className="h-4 w-4" />
@@ -300,53 +338,65 @@ export default function GPSCheckInOut({
             <div className="space-y-2">
               <div className="flex items-center gap-2 text-sm text-muted-foreground">
                 <CheckCircle className="h-4 w-4 text-emerald-600" />
-                <span>Location acquired</span>
+                <span>Lokasi berhasil didapatkan</span>
               </div>
               {hasServiceLocation && distance !== null && (
-                <div className={`flex items-center justify-between p-3 rounded-lg ${
-                  distance <= MAX_DISTANCE_METERS 
-                    ? 'bg-emerald-50 border border-emerald-200' 
-                    : 'bg-amber-50 border border-amber-200'
-                }`}>
-                  <span className="text-sm font-medium">Distance from service location</span>
-                  <span className={`text-sm font-bold ${
-                    distance <= MAX_DISTANCE_METERS ? 'text-emerald-700' : 'text-amber-700'
-                  }`}>
+                <div
+                  className={`flex items-center justify-between p-3 rounded-lg ${
+                    distance <= MAX_DISTANCE_METERS
+                      ? "bg-emerald-50 border border-emerald-200"
+                      : "bg-amber-50 border border-amber-200"
+                  }`}
+                >
+                  <span className="text-sm font-medium">
+                    Jarak dari lokasi service
+                  </span>
+                  <span
+                    className={`text-sm font-bold ${
+                      distance <= MAX_DISTANCE_METERS
+                        ? "text-emerald-700"
+                        : "text-amber-700"
+                    }`}
+                  >
                     {formatDistance(distance)}
                   </span>
                 </div>
               )}
-              {hasServiceLocation && distance !== null && distance > MAX_DISTANCE_METERS && (
-                <Alert>
-                  <AlertTriangle className="h-4 w-4" />
-                  <AlertDescription>
-                    You are more than {MAX_DISTANCE_METERS}m from the service location. 
-                    Check-in/out will be recorded with GPS violation.
-                  </AlertDescription>
-                </Alert>
-              )}
+              {hasServiceLocation &&
+                distance !== null &&
+                distance > MAX_DISTANCE_METERS && (
+                  <Alert>
+                    <AlertTriangle className="h-4 w-4" />
+                    <AlertDescription>
+                      Anda berada lebih dari {MAX_DISTANCE_METERS}m dari lokasi
+                      service. Check-in/out akan dicatat dengan pelanggaran GPS.
+                    </AlertDescription>
+                  </Alert>
+                )}
             </div>
           ) : gettingLocation ? (
             <div className="flex items-center gap-2 text-sm text-muted-foreground">
               <Loader2 className="h-4 w-4 animate-spin" />
-              <span>Getting your location...</span>
+              <span>Mendapatkan lokasi Anda...</span>
             </div>
           ) : (
             <div className="flex items-center gap-2 text-sm text-muted-foreground">
               <XCircle className="h-4 w-4" />
-              <span>Location not available</span>
+              <span>Lokasi tidak tersedia</span>
             </div>
           )}
         </div>
 
-        {/* Photo Upload Section */}
+        {/* Bagian Upload Foto */}
         {canCheckIn && (
           <>
             <Separator />
             <div className="space-y-2">
               <div className="flex items-center gap-2">
                 <Camera className="h-4 w-4 text-muted-foreground" />
-                <span className="text-sm font-medium">Before Photos (Optional)</span>
+                <span className="text-sm font-medium">
+                  Foto Sebelum (Opsional)
+                </span>
               </div>
               <PhotoUpload
                 jobId={jobId}
@@ -366,7 +416,9 @@ export default function GPSCheckInOut({
             <div className="space-y-2">
               <div className="flex items-center gap-2">
                 <Camera className="h-4 w-4 text-muted-foreground" />
-                <span className="text-sm font-medium">After Photos (Recommended)</span>
+                <span className="text-sm font-medium">
+                  Foto Sesudah (Disarankan)
+                </span>
               </div>
               <PhotoUpload
                 jobId={jobId}
@@ -380,10 +432,10 @@ export default function GPSCheckInOut({
           </>
         )}
 
-        {/* Action Button */}
+        {/* Tombol Aksi */}
         {canCheckIn && (
-          <Button 
-            className="w-full" 
+          <Button
+            className="w-full"
             size="lg"
             onClick={handleCheckIn}
             disabled={loading || disabled || !currentLocation}
@@ -391,20 +443,20 @@ export default function GPSCheckInOut({
             {loading ? (
               <>
                 <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                Checking in...
+                Sedang check-in...
               </>
             ) : (
               <>
                 <Play className="mr-2 h-4 w-4" />
-                Check-in & Start Job
+                Check-in & Mulai Pekerjaan
               </>
             )}
           </Button>
         )}
 
         {canCheckOut && (
-          <Button 
-            className="w-full bg-emerald-600 hover:bg-emerald-700" 
+          <Button
+            className="w-full bg-emerald-600 hover:bg-emerald-700"
             size="lg"
             onClick={handleCheckOut}
             disabled={loading || disabled || !currentLocation}
@@ -412,12 +464,12 @@ export default function GPSCheckInOut({
             {loading ? (
               <>
                 <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                Checking out...
+                Sedang check-out...
               </>
             ) : (
               <>
                 <Square className="mr-2 h-4 w-4" />
-                Check-out & Complete Job
+                Check-out & Selesaikan Pekerjaan
               </>
             )}
           </Button>
