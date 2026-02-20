@@ -1,3 +1,4 @@
+// InvoiceList.tsx - Daftar Faktur dengan Pagination SERVER-SIDE
 import { useState, useEffect } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
@@ -7,8 +8,6 @@ import { InvoiceFiltersBar } from "@/components/invoices/InvoiceFiltersBar";
 import { InvoiceTable, Invoice } from "@/components/invoices/InvoiceTable";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { isWithinInterval } from "date-fns";
-import { BulkExport } from "./BulkExport";
 import {
   ChevronLeft,
   ChevronRight,
@@ -44,7 +43,8 @@ export function InvoiceList() {
   const fetchInvoices = async () => {
     setLoading(true);
     try {
-      // Build filter query
+      // ✅ FIX: Gabungkan count services & items dalam satu query menggunakan aggregation
+      // Hindari N+1 query — sebelumnya setiap faktur buat 2 query terpisah
       let query = supabase.from("invoices").select(
         `
           id,
@@ -55,18 +55,15 @@ export function InvoiceList() {
           status,
           payment_status,
           updated_at,
-          customer:customers (
-            name
-          )
+          customer:customers (name),
+          invoice_services(id),
+          invoice_items(id)
         `,
         { count: "exact" },
       );
 
-      // Apply filters
       if (filters.search) {
-        query = query.or(
-          `invoice_number.ilike.%${filters.search}%,customer.name.ilike.%${filters.search}%`,
-        );
+        query = query.or(`invoice_number.ilike.%${filters.search}%`);
       }
 
       if (filters.status !== "all") {
@@ -92,58 +89,42 @@ export function InvoiceList() {
       if (filters.dateRange?.from) {
         const fromDate = filters.dateRange.from.toISOString();
         if (filters.dateRange.to) {
-          const toDate = filters.dateRange.to.toISOString();
           query = query
             .gte("invoice_date", fromDate)
-            .lte("invoice_date", toDate);
+            .lte("invoice_date", filters.dateRange.to.toISOString());
         } else {
           query = query.eq("invoice_date", fromDate);
         }
       }
 
-      // Apply pagination
       const offset = (currentPage - 1) * ITEMS_PER_PAGE;
       query = query
-        .order("updated_at", { ascending: false }) // ✅ FIXED: Changed from created_at to updated_at descending
+        .order("updated_at", { ascending: false })
         .range(offset, offset + ITEMS_PER_PAGE - 1);
 
       const { data, error, count } = await query;
 
       if (error) throw error;
 
-      // Get counts for services and items
-      const invoicesWithCounts = await Promise.all(
-        (data || []).map(async (invoice) => {
-          const [servicesResult, itemsResult] = await Promise.all([
-            supabase
-              .from("invoice_services")
-              .select("id", { count: "exact", head: true })
-              .eq("invoice_id", invoice.id),
-            supabase
-              .from("invoice_items")
-              .select("id", { count: "exact", head: true })
-              .eq("invoice_id", invoice.id),
-          ]);
+      // ✅ FIX: Hitung dari relasi yang sudah di-join, tidak perlu query tambahan
+      const invoicesFormatted = (data || []).map((invoice: any) => ({
+        ...invoice,
+        customer: Array.isArray(invoice.customer)
+          ? invoice.customer[0]
+          : invoice.customer,
+        services_count: invoice.invoice_services?.length || 0,
+        items_count: invoice.invoice_items?.length || 0,
+      }));
 
-          return {
-            ...invoice,
-            customer: Array.isArray(invoice.customer)
-              ? invoice.customer[0]
-              : invoice.customer,
-            services_count: servicesResult.count || 0,
-            items_count: itemsResult.count || 0,
-          };
-        }),
-      );
-
-      setInvoices(invoicesWithCounts);
+      setInvoices(invoicesFormatted);
       setTotalCount(count || 0);
     } catch (error: any) {
       console.error("Error fetching invoices:", error);
       toast({
         variant: "destructive",
-        title: "Error",
-        description: error.message || "Failed to load invoices",
+        title: "Gagal Memuat",
+        description:
+          error.message || "Terjadi kesalahan saat memuat daftar faktur",
       });
     } finally {
       setLoading(false);
@@ -155,11 +136,9 @@ export function InvoiceList() {
       .from("customers")
       .select("id, name")
       .order("name");
-
     if (data) setCustomers(data);
   };
 
-  // Pagination calculations
   const totalPages = Math.ceil(totalCount / ITEMS_PER_PAGE);
 
   const goToPage = (page: number) => {
@@ -172,10 +151,10 @@ export function InvoiceList() {
 
   return (
     <div className="space-y-6">
-      {/* Stats Cards */}
+      {/* Kartu Statistik */}
       <InvoiceStatsCards />
 
-      {/* Filters */}
+      {/* Filter */}
       <Card className="p-6">
         <InvoiceFiltersBar
           customers={customers}
@@ -185,23 +164,14 @@ export function InvoiceList() {
         />
       </Card>
 
-      {/* Results Summary */}
-      {!loading && (
-        <div className="flex items-center justify-between text-sm text-muted-foreground">
-          <span>
-            Showing {startIndex} to {endIndex} of {totalCount} invoice
-            {totalCount !== 1 ? "s" : ""}
-          </span>
-          {totalCount > 0 && (
-            <span className="text-primary font-medium">
-              {totalCount} results
-            </span>
-          )}
-        </div>
-      )}
-
-      {/* Table */}
+      {/* Tabel */}
       <Card className="p-6">
+        {/* ✅ FIX: Ringkasan hasil hanya di satu tempat, tidak duplikat */}
+        {!loading && totalCount > 0 && (
+          <p className="text-sm text-muted-foreground mb-4">
+            Menampilkan {startIndex}–{endIndex} dari {totalCount} faktur
+          </p>
+        )}
         <InvoiceTable
           invoices={invoices}
           loading={loading}
@@ -210,11 +180,11 @@ export function InvoiceList() {
       </Card>
 
       {/* Pagination */}
-      {!loading && totalCount > 0 && (
+      {!loading && totalCount > ITEMS_PER_PAGE && (
         <Card className="p-4">
           <div className="flex items-center justify-between">
             <div className="text-sm text-muted-foreground">
-              Page {currentPage} of {totalPages}
+              Halaman {currentPage} dari {totalPages}
             </div>
 
             <div className="flex items-center gap-2">
@@ -223,7 +193,7 @@ export function InvoiceList() {
                 size="icon"
                 onClick={() => goToPage(1)}
                 disabled={currentPage === 1}
-                title="First page"
+                title="Halaman pertama"
               >
                 <ChevronsLeft className="h-4 w-4" />
               </Button>
@@ -233,12 +203,11 @@ export function InvoiceList() {
                 size="icon"
                 onClick={() => goToPage(currentPage - 1)}
                 disabled={currentPage === 1}
-                title="Previous page"
+                title="Halaman sebelumnya"
               >
                 <ChevronLeft className="h-4 w-4" />
               </Button>
 
-              {/* Page numbers */}
               <div className="flex items-center gap-1">
                 {Array.from({ length: totalPages }, (_, i) => i + 1).map(
                   (page) => {
@@ -248,7 +217,11 @@ export function InvoiceList() {
                       Math.abs(page - currentPage) <= 1;
 
                     if (!showPage && Math.abs(page - currentPage) === 2) {
-                      return <span key={page}>...</span>;
+                      return (
+                        <span key={page} className="px-1">
+                          ...
+                        </span>
+                      );
                     }
 
                     if (showPage) {
@@ -275,7 +248,7 @@ export function InvoiceList() {
                 size="icon"
                 onClick={() => goToPage(currentPage + 1)}
                 disabled={currentPage === totalPages}
-                title="Next page"
+                title="Halaman berikutnya"
               >
                 <ChevronRight className="h-4 w-4" />
               </Button>
@@ -285,14 +258,14 @@ export function InvoiceList() {
                 size="icon"
                 onClick={() => goToPage(totalPages)}
                 disabled={currentPage === totalPages}
-                title="Last page"
+                title="Halaman terakhir"
               >
                 <ChevronsRight className="h-4 w-4" />
               </Button>
             </div>
 
             <div className="text-sm text-muted-foreground">
-              {ITEMS_PER_PAGE} items per page
+              {ITEMS_PER_PAGE} per halaman
             </div>
           </div>
         </Card>

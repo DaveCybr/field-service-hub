@@ -1,3 +1,4 @@
+// ServicesTab.tsx - Tab Layanan dengan status badge yang diperbaiki
 import { useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -9,15 +10,9 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Separator } from "@/components/ui/separator";
-import {
-  MapPin,
-  Clock,
-  User,
-  Wrench,
-  Image as ImageIcon,
-  Calendar,
-} from "lucide-react";
+import { MapPin, Wrench, Image as ImageIcon, Calendar } from "lucide-react";
 import { format } from "date-fns";
+import { id as localeId } from "date-fns/locale";
 import { formatCurrency } from "@/lib/utils/currency";
 import { ServiceTeamManager } from "@/components/technician/ServiceTeamManager";
 import { useAuth } from "@/hooks/useAuth";
@@ -33,11 +28,7 @@ interface Service {
   total_cost: number;
   scheduled_date?: string;
   service_address?: string;
-  gps_location?: string;
   status?: string;
-  assigned_technician?: string | { id: string; name: string };
-  check_in_time?: string;
-  check_out_time?: string;
   before_photos?: string[];
   after_photos?: string[];
   notes?: string;
@@ -49,37 +40,42 @@ interface ServicesTabProps {
 }
 
 export function ServicesTab({ services, invoiceId }: ServicesTabProps) {
-  // ✅ Get user role from auth hook
   const { employee } = useAuth();
-
-  // ✅ Check if user can manage team (superadmin, admin, manager)
   const canManage = employee?.role
     ? ["superadmin", "admin", "manager"].includes(employee.role)
     : false;
 
-  const [selectedService, setSelectedService] = useState<Service | null>(null);
   const [photoDialogOpen, setPhotoDialogOpen] = useState(false);
   const [selectedPhotos, setSelectedPhotos] = useState<string[]>([]);
   const [photoType, setPhotoType] = useState<"before" | "after">("before");
 
   const openPhotos = (service: Service, type: "before" | "after") => {
-    const photos =
-      type === "before" ? service.before_photos : service.after_photos;
-    setSelectedPhotos(photos || []);
+    setSelectedPhotos(
+      type === "before"
+        ? service.before_photos || []
+        : service.after_photos || [],
+    );
     setPhotoType(type);
     setPhotoDialogOpen(true);
   };
 
+  // ✅ FIX: Status badge yang dibedakan warnanya
   const getStatusBadge = (status?: string) => {
-    const statusMap = {
-      pending: { label: "Pending", variant: "secondary" as const },
-      assigned: { label: "Assigned", variant: "default" as const },
-      in_progress: { label: "In Progress", variant: "default" as const },
-      completed: { label: "Completed", variant: "default" as const },
+    const statusMap: Record<string, { label: string; className: string }> = {
+      pending: {
+        label: "Menunggu",
+        className: "bg-yellow-100 text-yellow-800",
+      },
+      assigned: { label: "Ditugaskan", className: "bg-blue-100 text-blue-800" },
+      in_progress: {
+        label: "Sedang Dikerjakan",
+        className: "bg-purple-100 text-purple-800",
+      },
+      completed: { label: "Selesai", className: "bg-green-100 text-green-800" },
+      cancelled: { label: "Dibatalkan", className: "bg-red-100 text-red-800" },
     };
-    const config =
-      statusMap[status as keyof typeof statusMap] || statusMap.pending;
-    return <Badge variant={config.variant}>{config.label}</Badge>;
+    const config = statusMap[status || "pending"] || statusMap.pending;
+    return <Badge className={config.className}>{config.label}</Badge>;
   };
 
   if (services.length === 0) {
@@ -88,7 +84,7 @@ export function ServicesTab({ services, invoiceId }: ServicesTabProps) {
         <CardContent className="flex items-center justify-center py-12 text-muted-foreground">
           <div className="text-center">
             <Wrench className="h-12 w-12 mx-auto mb-4 opacity-20" />
-            <p>No services in this invoice</p>
+            <p>Belum ada layanan dalam faktur ini</p>
           </div>
         </CardContent>
       </Card>
@@ -98,9 +94,8 @@ export function ServicesTab({ services, invoiceId }: ServicesTabProps) {
   return (
     <>
       <div className="space-y-6">
-        {services.map((service) => (
+        {services.map((service, index) => (
           <div key={service.id} className="space-y-4">
-            {/* Service Card */}
             <Card>
               <CardHeader>
                 <div className="flex items-start justify-between">
@@ -108,7 +103,7 @@ export function ServicesTab({ services, invoiceId }: ServicesTabProps) {
                     <CardTitle className="text-lg">
                       {service.service_title ||
                         service.title ||
-                        "Untitled Service"}
+                        "Layanan Tanpa Judul"}
                     </CardTitle>
                     {(service.service_description || service.description) && (
                       <p className="text-sm text-muted-foreground mt-1">
@@ -120,18 +115,20 @@ export function ServicesTab({ services, invoiceId }: ServicesTabProps) {
                 </div>
               </CardHeader>
               <CardContent className="space-y-4">
-                {/* Costs */}
+                {/* Biaya */}
                 <div className="grid grid-cols-3 gap-4 p-4 bg-muted rounded-lg">
                   <div>
                     <p className="text-sm text-muted-foreground">
-                      Service Cost
+                      Biaya Layanan
                     </p>
                     <p className="font-semibold">
                       {formatCurrency(service.service_cost)}
                     </p>
                   </div>
                   <div>
-                    <p className="text-sm text-muted-foreground">Parts Cost</p>
+                    <p className="text-sm text-muted-foreground">
+                      Biaya Suku Cadang
+                    </p>
                     <p className="font-semibold">
                       {formatCurrency(service.parts_cost)}
                     </p>
@@ -144,7 +141,7 @@ export function ServicesTab({ services, invoiceId }: ServicesTabProps) {
                   </div>
                 </div>
 
-                {/* Schedule & Location */}
+                {/* Jadwal & Lokasi */}
                 {(service.scheduled_date || service.service_address) && (
                   <div className="space-y-2">
                     {service.scheduled_date && (
@@ -153,7 +150,8 @@ export function ServicesTab({ services, invoiceId }: ServicesTabProps) {
                         <span>
                           {format(
                             new Date(service.scheduled_date),
-                            "PPP 'at' p",
+                            "EEEE, dd MMMM yyyy 'pukul' HH:mm",
+                            { locale: localeId },
                           )}
                         </span>
                       </div>
@@ -169,43 +167,40 @@ export function ServicesTab({ services, invoiceId }: ServicesTabProps) {
                   </div>
                 )}
 
-                {/* Photos */}
-                {((service.before_photos && service.before_photos.length > 0) ||
-                  (service.after_photos &&
-                    service.after_photos.length > 0)) && (
+                {/* Foto */}
+                {((service.before_photos?.length || 0) > 0 ||
+                  (service.after_photos?.length || 0) > 0) && (
                   <div className="space-y-2">
-                    <p className="text-sm font-medium">Service Photos</p>
+                    <p className="text-sm font-medium">Foto Layanan</p>
                     <div className="flex gap-2">
-                      {service.before_photos &&
-                        service.before_photos.length > 0 && (
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={() => openPhotos(service, "before")}
-                          >
-                            <ImageIcon className="h-4 w-4 mr-2" />
-                            Before ({service.before_photos.length})
-                          </Button>
-                        )}
-                      {service.after_photos &&
-                        service.after_photos.length > 0 && (
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={() => openPhotos(service, "after")}
-                          >
-                            <ImageIcon className="h-4 w-4 mr-2" />
-                            After ({service.after_photos.length})
-                          </Button>
-                        )}
+                      {(service.before_photos?.length || 0) > 0 && (
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => openPhotos(service, "before")}
+                        >
+                          <ImageIcon className="h-4 w-4 mr-2" />
+                          Sebelum ({service.before_photos!.length})
+                        </Button>
+                      )}
+                      {(service.after_photos?.length || 0) > 0 && (
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => openPhotos(service, "after")}
+                        >
+                          <ImageIcon className="h-4 w-4 mr-2" />
+                          Sesudah ({service.after_photos!.length})
+                        </Button>
+                      )}
                     </div>
                   </div>
                 )}
 
-                {/* Notes */}
+                {/* Catatan */}
                 {service.notes && (
                   <div className="p-4 bg-muted rounded-lg">
-                    <p className="text-sm font-medium mb-2">Notes</p>
+                    <p className="text-sm font-medium mb-2">Catatan</p>
                     <p className="text-sm text-muted-foreground">
                       {service.notes}
                     </p>
@@ -214,31 +209,28 @@ export function ServicesTab({ services, invoiceId }: ServicesTabProps) {
               </CardContent>
             </Card>
 
-            {/* ⭐ Multi-Technician Team Manager */}
+            {/* Manajemen Tim Teknisi */}
             <ServiceTeamManager
               invoiceId={invoiceId}
               serviceId={service.id}
               serviceName={
-                service.service_title || service.title || "Untitled Service"
+                service.service_title || service.title || "Layanan Tanpa Judul"
               }
               canManage={canManage}
               compact={false}
             />
 
-            {/* Separator between services */}
-            {services.indexOf(service) < services.length - 1 && (
-              <Separator className="my-6" />
-            )}
+            {index < services.length - 1 && <Separator className="my-6" />}
           </div>
         ))}
       </div>
 
-      {/* Photo Gallery Dialog */}
+      {/* Dialog Galeri Foto */}
       <Dialog open={photoDialogOpen} onOpenChange={setPhotoDialogOpen}>
         <DialogContent className="max-w-4xl">
           <DialogHeader>
             <DialogTitle>
-              {photoType === "before" ? "Before" : "After"} Photos
+              Foto {photoType === "before" ? "Sebelum" : "Sesudah"}
             </DialogTitle>
           </DialogHeader>
           <div className="grid grid-cols-2 gap-4 mt-4">
@@ -249,7 +241,7 @@ export function ServicesTab({ services, invoiceId }: ServicesTabProps) {
               >
                 <img
                   src={photo}
-                  alt={`${photoType} ${index + 1}`}
+                  alt={`${photoType === "before" ? "Sebelum" : "Sesudah"} ${index + 1}`}
                   className="w-full h-full object-cover cursor-pointer hover:scale-105 transition-transform"
                   onClick={() => window.open(photo, "_blank")}
                 />

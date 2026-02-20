@@ -6,7 +6,6 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { Download, FileText, Table, Loader2 } from "lucide-react";
 import { format } from "date-fns";
@@ -29,12 +28,28 @@ interface BulkExportProps {
   allInvoices: Invoice[];
 }
 
+const STATUS_LABELS: Record<string, string> = {
+  draft: "Draft",
+  pending: "Menunggu",
+  assigned: "Ditugaskan",
+  in_progress: "Sedang Dikerjakan",
+  completed: "Selesai",
+  paid: "Lunas",
+  cancelled: "Dibatalkan",
+};
+
+const PAYMENT_LABELS: Record<string, string> = {
+  unpaid: "Belum Bayar",
+  partial: "Bayar Sebagian",
+  paid: "Lunas",
+};
+
 export function BulkExport({ selectedIds, allInvoices }: BulkExportProps) {
   const { toast } = useToast();
   const [exporting, setExporting] = useState(false);
 
   const selectedInvoices = allInvoices.filter((inv) =>
-    selectedIds.includes(inv.id)
+    selectedIds.includes(inv.id),
   );
 
   const exportToPDF = async () => {
@@ -42,28 +57,32 @@ export function BulkExport({ selectedIds, allInvoices }: BulkExportProps) {
     try {
       const doc = new jsPDF();
 
-      // Title
       doc.setFontSize(18);
-      doc.text("Data Invoice", 14, 20);
+      doc.text("Data Faktur", 14, 20);
 
-      // Metadata
       doc.setFontSize(10);
-      doc.text(`Exported: ${format(new Date(), "PPP 'at' p")}`, 14, 28);
-      doc.text(`Total Invoices: ${selectedInvoices.length}`, 14, 34);
+      doc.text(`Diekspor: ${format(new Date(), "dd/MM/yyyy HH:mm")}`, 14, 28);
+      doc.text(`Total Faktur: ${selectedInvoices.length}`, 14, 34);
 
-      // Table
       const tableData = selectedInvoices.map((inv) => [
         inv.invoice_number,
-        inv.customer?.name || "N/A",
+        inv.customer?.name || "-",
         format(new Date(inv.invoice_date), "dd/MM/yyyy"),
-        `Rp ${inv.grand_total.toLocaleString()}`,
-        inv.status,
-        inv.payment_status,
+        `Rp ${inv.grand_total.toLocaleString("id-ID")}`,
+        STATUS_LABELS[inv.status] || inv.status,
+        PAYMENT_LABELS[inv.payment_status] || inv.payment_status,
       ]);
 
       autoTable(doc, {
         head: [
-          ["Invoice #", "Customer", "Date", "Amount", "Status", "Payment"],
+          [
+            "No. Faktur",
+            "Pelanggan",
+            "Tanggal",
+            "Total",
+            "Status",
+            "Pembayaran",
+          ],
         ],
         body: tableData,
         startY: 40,
@@ -71,19 +90,17 @@ export function BulkExport({ selectedIds, allInvoices }: BulkExportProps) {
         headStyles: { fillColor: [59, 130, 246] },
       });
 
-      // Save
-      doc.save(`invoices-export-${format(new Date(), "yyyy-MM-dd")}.pdf`);
+      doc.save(`faktur-ekspor-${format(new Date(), "yyyy-MM-dd")}.pdf`);
 
       toast({
-        title: "PDF Exported",
-        description: `${selectedInvoices.length} invoices exported successfully`,
+        title: "PDF Berhasil Diekspor",
+        description: `${selectedInvoices.length} faktur telah diekspor`,
       });
     } catch (error: any) {
-      console.error("Export error:", error);
       toast({
         variant: "destructive",
-        title: "Export Failed",
-        description: error.message || "Failed to export PDF",
+        title: "Ekspor Gagal",
+        description: error.message || "Gagal mengekspor PDF",
       });
     } finally {
       setExporting(false);
@@ -94,47 +111,45 @@ export function BulkExport({ selectedIds, allInvoices }: BulkExportProps) {
     setExporting(true);
     try {
       const data = selectedInvoices.map((inv) => ({
-        "Invoice Number": inv.invoice_number,
-        Customer: inv.customer?.name || "N/A",
-        Date: format(new Date(inv.invoice_date), "dd/MM/yyyy"),
-        Amount: inv.grand_total,
-        Status: inv.status,
-        "Payment Status": inv.payment_status,
+        "No. Faktur": inv.invoice_number,
+        Pelanggan: inv.customer?.name || "-",
+        Tanggal: format(new Date(inv.invoice_date), "dd/MM/yyyy"),
+        Total: inv.grand_total,
+        Status: STATUS_LABELS[inv.status] || inv.status,
+        Pembayaran: PAYMENT_LABELS[inv.payment_status] || inv.payment_status,
       }));
 
       const ws = XLSX.utils.json_to_sheet(data);
       const wb = XLSX.utils.book_new();
-      XLSX.utils.book_append_sheet(wb, ws, "Invoices");
+      XLSX.utils.book_append_sheet(wb, ws, "Faktur");
 
-      // Auto-size columns
       const maxWidth = data.reduce(
-        (w, r) => Math.max(w, r["Customer"].length),
-        10
+        (w, r) => Math.max(w, r["Pelanggan"].length),
+        10,
       );
       ws["!cols"] = [
-        { wch: 20 }, // Invoice Number
-        { wch: maxWidth }, // Customer
-        { wch: 12 }, // Date
-        { wch: 15 }, // Amount
-        { wch: 15 }, // Status
-        { wch: 15 }, // Payment Status
+        { wch: 22 },
+        { wch: maxWidth },
+        { wch: 14 },
+        { wch: 18 },
+        { wch: 20 },
+        { wch: 18 },
       ];
 
       XLSX.writeFile(
         wb,
-        `invoices-export-${format(new Date(), "yyyy-MM-dd")}.xlsx`
+        `faktur-ekspor-${format(new Date(), "yyyy-MM-dd")}.xlsx`,
       );
 
       toast({
-        title: "Excel Exported",
-        description: `${selectedInvoices.length} invoices exported successfully`,
+        title: "Excel Berhasil Diekspor",
+        description: `${selectedInvoices.length} faktur telah diekspor`,
       });
     } catch (error: any) {
-      console.error("Export error:", error);
       toast({
         variant: "destructive",
-        title: "Export Failed",
-        description: error.message || "Failed to export Excel",
+        title: "Ekspor Gagal",
+        description: error.message || "Gagal mengekspor Excel",
       });
     } finally {
       setExporting(false);
@@ -145,21 +160,21 @@ export function BulkExport({ selectedIds, allInvoices }: BulkExportProps) {
     setExporting(true);
     try {
       const headers = [
-        "Invoice Number",
-        "Customer",
-        "Date",
-        "Amount",
+        "No. Faktur",
+        "Pelanggan",
+        "Tanggal",
+        "Total",
         "Status",
-        "Payment Status",
+        "Pembayaran",
       ];
 
       const rows = selectedInvoices.map((inv) => [
         inv.invoice_number,
-        inv.customer?.name || "N/A",
+        inv.customer?.name || "-",
         format(new Date(inv.invoice_date), "dd/MM/yyyy"),
         inv.grand_total,
-        inv.status,
-        inv.payment_status,
+        STATUS_LABELS[inv.status] || inv.status,
+        PAYMENT_LABELS[inv.payment_status] || inv.payment_status,
       ]);
 
       const csvContent = [
@@ -167,31 +182,30 @@ export function BulkExport({ selectedIds, allInvoices }: BulkExportProps) {
         ...rows.map((row) => row.map((cell) => `"${cell}"`).join(",")),
       ].join("\n");
 
-      const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
+      const blob = new Blob(["\uFEFF" + csvContent], {
+        type: "text/csv;charset=utf-8;",
+      });
       const link = document.createElement("a");
       link.href = URL.createObjectURL(blob);
-      link.download = `invoices-export-${format(new Date(), "yyyy-MM-dd")}.csv`;
+      link.download = `faktur-ekspor-${format(new Date(), "yyyy-MM-dd")}.csv`;
       link.click();
 
       toast({
-        title: "CSV Exported",
-        description: `${selectedInvoices.length} invoices exported successfully`,
+        title: "CSV Berhasil Diekspor",
+        description: `${selectedInvoices.length} faktur telah diekspor`,
       });
     } catch (error: any) {
-      console.error("Export error:", error);
       toast({
         variant: "destructive",
-        title: "Export Failed",
-        description: error.message || "Failed to export CSV",
+        title: "Ekspor Gagal",
+        description: error.message || "Gagal mengekspor CSV",
       });
     } finally {
       setExporting(false);
     }
   };
 
-  if (selectedIds.length === 0) {
-    return null;
-  }
+  if (selectedIds.length === 0) return null;
 
   return (
     <DropdownMenu>
@@ -200,12 +214,12 @@ export function BulkExport({ selectedIds, allInvoices }: BulkExportProps) {
           {exporting ? (
             <>
               <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-              Exporting...
+              Mengekspor...
             </>
           ) : (
             <>
               <Download className="mr-2 h-4 w-4" />
-              Export ({selectedIds.length})
+              Ekspor ({selectedIds.length})
             </>
           )}
         </Button>
@@ -213,15 +227,15 @@ export function BulkExport({ selectedIds, allInvoices }: BulkExportProps) {
       <DropdownMenuContent align="end">
         <DropdownMenuItem onClick={exportToPDF}>
           <FileText className="mr-2 h-4 w-4" />
-          Export as PDF
+          Ekspor sebagai PDF
         </DropdownMenuItem>
         <DropdownMenuItem onClick={exportToExcel}>
           <Table className="mr-2 h-4 w-4" />
-          Export as Excel
+          Ekspor sebagai Excel
         </DropdownMenuItem>
         <DropdownMenuItem onClick={exportToCSV}>
           <FileText className="mr-2 h-4 w-4" />
-          Export as CSV
+          Ekspor sebagai CSV
         </DropdownMenuItem>
       </DropdownMenuContent>
     </DropdownMenu>

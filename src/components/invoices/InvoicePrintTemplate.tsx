@@ -1,4 +1,5 @@
 import { format } from "date-fns";
+import { id as localeId } from "date-fns/locale";
 import { formatCurrency } from "@/lib/utils/currency";
 
 interface Invoice {
@@ -51,6 +52,16 @@ interface InvoicePrintTemplateProps {
   };
 }
 
+const STATUS_LABELS: Record<string, string> = {
+  draft: "DRAFT",
+  pending: "MENUNGGU",
+  assigned: "DITUGASKAN",
+  in_progress: "SEDANG DIKERJAKAN",
+  completed: "SELESAI",
+  paid: "LUNAS",
+  cancelled: "DIBATALKAN",
+};
+
 export function InvoicePrintTemplate({
   invoice,
   services,
@@ -60,21 +71,15 @@ export function InvoicePrintTemplate({
   return (
     <>
       <style>{`
-        /* Hide print template on screen */
         .invoice-print-template {
           display: none;
         }
         
         @media print {
-          /* Show only print template */
-          body * {
-            visibility: hidden;
-          }
+          body * { visibility: hidden; }
           
           .invoice-print-template,
-          .invoice-print-template * {
-            visibility: visible;
-          }
+          .invoice-print-template * { visibility: visible; }
           
           .invoice-print-template {
             display: block !important;
@@ -83,10 +88,8 @@ export function InvoicePrintTemplate({
             top: 0;
             width: 100%;
           }
-          @page {
-            size: A4;
-            margin: 1cm;
-          }
+
+          @page { size: A4; margin: 1cm; }
           
           body {
             print-color-adjust: exact;
@@ -111,20 +114,9 @@ export function InvoicePrintTemplate({
             border-bottom: 2px solid #000;
           }
           
-          .print-logo {
-            max-width: 200px;
-            max-height: 80px;
-          }
-          
-          .print-title {
-            font-size: 32pt;
-            font-weight: bold;
-            text-align: right;
-          }
-          
-          .print-section {
-            margin-bottom: 20px;
-          }
+          .print-logo { max-width: 200px; max-height: 80px; }
+          .print-title { font-size: 32pt; font-weight: bold; text-align: right; }
+          .print-section { margin-bottom: 20px; }
           
           .print-section-title {
             font-size: 14pt;
@@ -152,14 +144,9 @@ export function InvoicePrintTemplate({
             border: 1px solid #ddd;
           }
           
-          .print-table tr:nth-child(even) {
-            background-color: #f9f9f9;
-          }
+          .print-table tr:nth-child(even) { background-color: #f9f9f9; }
           
-          .print-totals {
-            margin-left: auto;
-            width: 300px;
-          }
+          .print-totals { margin-left: auto; width: 300px; }
           
           .print-totals-row {
             display: flex;
@@ -195,7 +182,7 @@ export function InvoicePrintTemplate({
               {companyInfo?.logo && (
                 <img
                   src={companyInfo.logo}
-                  alt="Company Logo"
+                  alt="Logo Perusahaan"
                   className="print-logo"
                 />
               )}
@@ -206,16 +193,16 @@ export function InvoicePrintTemplate({
                   marginTop: "10px",
                 }}
               >
-                {companyInfo?.name || "Your Company Name"}
+                {companyInfo?.name || "Nama Perusahaan"}
               </h3>
               {companyInfo?.address && <p>{companyInfo.address}</p>}
-              {companyInfo?.phone && <p>Tel: {companyInfo.phone}</p>}
+              {companyInfo?.phone && <p>Telp: {companyInfo.phone}</p>}
               {companyInfo?.email && <p>Email: {companyInfo.email}</p>}
             </div>
-            <div className="print-title">INVOICE</div>
+            <div className="print-title">FAKTUR</div>
           </div>
 
-          {/* Invoice Info */}
+          {/* Info Faktur */}
           <div
             style={{
               display: "flex",
@@ -224,14 +211,12 @@ export function InvoicePrintTemplate({
             }}
           >
             <div className="print-section">
-              <div className="print-section-title">Bill To:</div>
+              <div className="print-section-title">Tagihan Kepada:</div>
               <p style={{ fontWeight: "bold", fontSize: "14pt" }}>
                 {invoice.customer?.name}
               </p>
               {invoice.customer?.address && <p>{invoice.customer.address}</p>}
-              {invoice.customer?.phone && (
-                <p>Phone: {invoice.customer.phone}</p>
-              )}
+              {invoice.customer?.phone && <p>Telp: {invoice.customer.phone}</p>}
               {invoice.customer?.email && (
                 <p>Email: {invoice.customer.email}</p>
               )}
@@ -239,34 +224,39 @@ export function InvoicePrintTemplate({
 
             <div className="print-section" style={{ textAlign: "right" }}>
               <p>
-                <strong>Invoice #:</strong> {invoice.invoice_number}
+                <strong>No. Faktur:</strong> {invoice.invoice_number}
               </p>
               <p>
-                <strong>Date:</strong>{" "}
-                {format(new Date(invoice.invoice_date), "dd MMM yyyy")}
+                <strong>Tanggal:</strong>{" "}
+                {format(new Date(invoice.invoice_date), "dd MMMM yyyy", {
+                  locale: localeId,
+                })}
               </p>
               {invoice.due_date && (
                 <p>
-                  <strong>Due Date:</strong>{" "}
-                  {format(new Date(invoice.due_date), "dd MMM yyyy")}
+                  <strong>Jatuh Tempo:</strong>{" "}
+                  {format(new Date(invoice.due_date), "dd MMMM yyyy", {
+                    locale: localeId,
+                  })}
                 </p>
               )}
               <p>
-                <strong>Status:</strong> {invoice.status.toUpperCase()}
+                <strong>Status:</strong>{" "}
+                {STATUS_LABELS[invoice.status] || invoice.status.toUpperCase()}
               </p>
             </div>
           </div>
 
-          {/* Services Table */}
+          {/* Tabel Layanan */}
           {services.length > 0 && (
             <div className="print-section">
-              <div className="print-section-title">Services</div>
+              <div className="print-section-title">Layanan</div>
               <table className="print-table">
                 <thead>
                   <tr>
-                    <th>Description</th>
-                    <th style={{ textAlign: "right" }}>Service Cost</th>
-                    <th style={{ textAlign: "right" }}>Parts Cost</th>
+                    <th>Deskripsi</th>
+                    <th style={{ textAlign: "right" }}>Biaya Layanan</th>
+                    <th style={{ textAlign: "right" }}>Biaya Suku Cadang</th>
                     <th style={{ textAlign: "right" }}>Total</th>
                   </tr>
                 </thead>
@@ -306,23 +296,23 @@ export function InvoicePrintTemplate({
             </div>
           )}
 
-          {/* Products Table */}
+          {/* Tabel Produk */}
           {items.length > 0 && (
             <div className="print-section">
-              <div className="print-section-title">Products</div>
+              <div className="print-section-title">Produk</div>
               <table className="print-table">
                 <thead>
                   <tr>
-                    <th>Product</th>
-                    <th style={{ textAlign: "center" }}>Quantity</th>
-                    <th style={{ textAlign: "right" }}>Unit Price</th>
+                    <th>Produk</th>
+                    <th style={{ textAlign: "center" }}>Jumlah</th>
+                    <th style={{ textAlign: "right" }}>Harga Satuan</th>
                     <th style={{ textAlign: "right" }}>Total</th>
                   </tr>
                 </thead>
                 <tbody>
                   {items.map((item, index) => (
                     <tr key={index}>
-                      <td>{item.product?.name || "Product"}</td>
+                      <td>{item.product?.name || "Produk"}</td>
                       <td style={{ textAlign: "center" }}>{item.quantity}</td>
                       <td style={{ textAlign: "right" }}>
                         {formatCurrency(item.unit_price)}
@@ -337,7 +327,7 @@ export function InvoicePrintTemplate({
             </div>
           )}
 
-          {/* Totals */}
+          {/* Ringkasan Total */}
           <div className="print-totals">
             <div className="print-totals-row">
               <span>Subtotal:</span>
@@ -348,14 +338,14 @@ export function InvoicePrintTemplate({
 
             {(invoice.discount_amount || 0) > 0 && (
               <div className="print-totals-row">
-                <span>Discount:</span>
+                <span>Diskon:</span>
                 <span>-{formatCurrency(invoice.discount_amount || 0)}</span>
               </div>
             )}
 
             {(invoice.tax_amount || 0) > 0 && (
               <div className="print-totals-row">
-                <span>Tax:</span>
+                <span>Pajak (PPN):</span>
                 <span>{formatCurrency(invoice.tax_amount || 0)}</span>
               </div>
             )}
@@ -364,24 +354,24 @@ export function InvoicePrintTemplate({
               className="print-grand-total"
               style={{ display: "flex", justifyContent: "space-between" }}
             >
-              <span>GRAND TOTAL:</span>
+              <span>TOTAL:</span>
               <span>{formatCurrency(invoice.grand_total)}</span>
             </div>
 
             {(invoice.amount_paid || 0) > 0 && (
               <>
                 <div className="print-totals-row">
-                  <span>Amount Paid:</span>
+                  <span>Sudah Dibayar:</span>
                   <span>{formatCurrency(invoice.amount_paid || 0)}</span>
                 </div>
                 <div
                   className="print-totals-row"
                   style={{ fontWeight: "bold" }}
                 >
-                  <span>Balance Due:</span>
+                  <span>Sisa Tagihan:</span>
                   <span>
                     {formatCurrency(
-                      invoice.grand_total - (invoice.amount_paid || 0)
+                      invoice.grand_total - (invoice.amount_paid || 0),
                     )}
                   </span>
                 </div>
@@ -389,20 +379,20 @@ export function InvoicePrintTemplate({
             )}
           </div>
 
-          {/* Notes */}
+          {/* Catatan */}
           {invoice.notes && (
             <div className="print-section" style={{ marginTop: "30px" }}>
-              <div className="print-section-title">Notes:</div>
+              <div className="print-section-title">Catatan:</div>
               <p style={{ whiteSpace: "pre-wrap" }}>{invoice.notes}</p>
             </div>
           )}
 
           {/* Footer */}
           <div className="print-footer">
-            <p>Thank you for your business!</p>
+            <p>Terima kasih atas kepercayaan Anda!</p>
             <p>
-              This is a computer-generated invoice and does not require a
-              signature.
+              Dokumen ini dicetak secara otomatis oleh sistem dan tidak
+              memerlukan tanda tangan.
             </p>
           </div>
         </div>

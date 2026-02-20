@@ -9,24 +9,11 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Button } from "@/components/ui/button";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
 import { Badge } from "@/components/ui/badge";
 import { Checkbox } from "@/components/ui/checkbox";
-import {
-  MoreHorizontal,
-  Eye,
-  Printer,
-  Mail,
-  ArrowUpDown,
-  Wrench,
-  Package,
-} from "lucide-react";
+import { ArrowUpDown, Wrench, Package, Loader2 } from "lucide-react";
 import { format } from "date-fns";
+import { id as localeId } from "date-fns/locale";
 import { formatCurrency } from "@/lib/utils/currency";
 import { getStatusBadge, getPaymentBadge } from "@/lib/utils/badges";
 import { BulkExport } from "./BulkExport";
@@ -35,9 +22,7 @@ export interface Invoice {
   id: string;
   invoice_number: string;
   customer_id: string;
-  customer?: {
-    name: string;
-  };
+  customer?: { name: string };
   invoice_date: string;
   grand_total: number;
   status: string;
@@ -83,19 +68,21 @@ export function InvoiceTable({
       bValue = new Date(bValue).getTime();
     }
 
-    if (sortOrder === "asc") {
-      return aValue > bValue ? 1 : -1;
-    } else {
-      return aValue < bValue ? 1 : -1;
-    }
+    return sortOrder === "asc"
+      ? aValue > bValue
+        ? 1
+        : -1
+      : aValue < bValue
+        ? 1
+        : -1;
   });
 
   const toggleSelectAll = () => {
-    if (selectedIds.length === invoices.length) {
-      setSelectedIds([]);
-    } else {
-      setSelectedIds(invoices.map((inv) => inv.id));
-    }
+    setSelectedIds(
+      selectedIds.length === invoices.length
+        ? []
+        : invoices.map((inv) => inv.id),
+    );
   };
 
   const toggleSelect = (id: string) => {
@@ -104,28 +91,17 @@ export function InvoiceTable({
     );
   };
 
-  const handleView = (id: string) => {
-    navigate(`/invoices/${id}`);
-  };
-
-  const handlePrint = (id: string) => {
-    // TODO: Implement print
-    console.log("Print invoice:", id);
-  };
-
-  const handleEmail = (id: string) => {
-    // TODO: Implement email
-    console.log("Email invoice:", id);
+  // ✅ FIX: Selalu navigasi pakai invoice_number (bukan id UUID)
+  const handleView = (invoiceNumber: string) => {
+    navigate(`/invoices/${invoiceNumber}`);
   };
 
   if (loading) {
     return (
       <div className="flex items-center justify-center py-12">
         <div className="text-center">
-          <div className="inline-block h-8 w-8 animate-spin rounded-full border-4 border-solid border-current border-r-transparent"></div>
-          <p className="mt-4 text-sm text-muted-foreground">
-            Loading invoices...
-          </p>
+          <Loader2 className="h-8 w-8 animate-spin mx-auto text-primary" />
+          <p className="mt-4 text-sm text-muted-foreground">Memuat faktur...</p>
         </div>
       </div>
     );
@@ -135,11 +111,11 @@ export function InvoiceTable({
     return (
       <div className="flex flex-col items-center justify-center py-12 text-center">
         <div className="rounded-full bg-muted p-4 mb-4">
-          <MoreHorizontal className="h-8 w-8 text-muted-foreground" />
+          <Package className="h-8 w-8 text-muted-foreground" />
         </div>
-        <h3 className="text-lg font-semibold">No invoices found</h3>
+        <h3 className="text-lg font-semibold">Belum ada faktur</h3>
         <p className="text-sm text-muted-foreground mt-2">
-          Try adjusting your filters or create a new invoice
+          Coba ubah filter pencarian atau buat faktur baru
         </p>
       </div>
     );
@@ -147,28 +123,27 @@ export function InvoiceTable({
 
   return (
     <div className="space-y-4">
-      {/* Bulk Actions (if selected) */}
+      {/* Aksi Massal */}
       {selectedIds.length > 0 && (
         <div className="flex items-center gap-2 p-2 bg-muted rounded-lg">
           <span className="text-sm font-medium">
-            {selectedIds.length} selected
+            {selectedIds.length} dipilih
           </span>
-          <Button size="sm" variant="outline">
-            <Mail className="h-4 w-4 mr-2" />
-            Email Selected
-          </Button>
           <BulkExport selectedIds={selectedIds} allInvoices={sortedInvoices} />
         </div>
       )}
 
-      {/* Table */}
+      {/* Tabel */}
       <div className="rounded-md border">
         <Table>
           <TableHeader>
             <TableRow>
               <TableHead className="w-12">
                 <Checkbox
-                  checked={selectedIds.length === invoices.length}
+                  checked={
+                    selectedIds.length === invoices.length &&
+                    invoices.length > 0
+                  }
                   onCheckedChange={toggleSelectAll}
                 />
               </TableHead>
@@ -179,11 +154,11 @@ export function InvoiceTable({
                   className="-ml-3 h-8"
                   onClick={() => handleSort("invoice_number")}
                 >
-                  Invoice #
+                  No. Faktur
                   <ArrowUpDown className="ml-2 h-4 w-4" />
                 </Button>
               </TableHead>
-              <TableHead>Customer</TableHead>
+              <TableHead>Pelanggan</TableHead>
               <TableHead>
                 <Button
                   variant="ghost"
@@ -191,11 +166,11 @@ export function InvoiceTable({
                   className="-ml-3 h-8"
                   onClick={() => handleSort("invoice_date")}
                 >
-                  Date
+                  Tanggal
                   <ArrowUpDown className="ml-2 h-4 w-4" />
                 </Button>
               </TableHead>
-              <TableHead className="text-center">Items</TableHead>
+              <TableHead className="text-center">Item</TableHead>
               <TableHead className="text-right">
                 <Button
                   variant="ghost"
@@ -203,13 +178,12 @@ export function InvoiceTable({
                   className="-mr-3 h-8"
                   onClick={() => handleSort("grand_total")}
                 >
-                  Amount
+                  Total
                   <ArrowUpDown className="ml-2 h-4 w-4" />
                 </Button>
               </TableHead>
               <TableHead>Status</TableHead>
-              <TableHead>Payment</TableHead>
-              {/* <TableHead className="w-12"></TableHead> */}
+              <TableHead>Pembayaran</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -232,21 +206,26 @@ export function InvoiceTable({
                   <div className="font-medium">{invoice.customer?.name}</div>
                 </TableCell>
                 <TableCell>
-                  {format(new Date(invoice.invoice_date), "MMM dd, yyyy")}
+                  {format(new Date(invoice.invoice_date), "dd MMM yyyy", {
+                    locale: localeId,
+                  })}
                 </TableCell>
                 <TableCell>
                   <div className="flex items-center justify-center gap-2">
-                    {invoice.services_count! > 0 && (
+                    {(invoice.services_count ?? 0) > 0 && (
                       <Badge variant="secondary" className="gap-1">
                         <Wrench className="h-3 w-3" />
                         {invoice.services_count}
                       </Badge>
                     )}
-                    {invoice.items_count! > 0 && (
+                    {(invoice.items_count ?? 0) > 0 && (
                       <Badge variant="secondary" className="gap-1">
                         <Package className="h-3 w-3" />
                         {invoice.items_count}
                       </Badge>
+                    )}
+                    {!invoice.services_count && !invoice.items_count && (
+                      <span className="text-xs text-muted-foreground">-</span>
                     )}
                   </div>
                 </TableCell>
@@ -255,31 +234,6 @@ export function InvoiceTable({
                 </TableCell>
                 <TableCell>{getStatusBadge(invoice.status)}</TableCell>
                 <TableCell>{getPaymentBadge(invoice.payment_status)}</TableCell>
-                {/* <TableCell onClick={(e) => e.stopPropagation()}>
-                  <DropdownMenu>
-                    <DropdownMenuTrigger asChild>
-                      <Button variant="ghost" size="icon" className="h-8 w-8">
-                        <MoreHorizontal className="h-4 w-4" />
-                      </Button>
-                    </DropdownMenuTrigger>
-                    <DropdownMenuContent align="end">
-                      <DropdownMenuItem
-                        onClick={() => handleView(invoice.invoice_number)}
-                      >
-                        <Eye className="mr-2 h-4 w-4" />
-                        View Details
-                      </DropdownMenuItem>
-                      <DropdownMenuItem onClick={() => handlePrint(invoice.id)}>
-                        <Printer className="mr-2 h-4 w-4" />
-                        Print
-                      </DropdownMenuItem>
-                      <DropdownMenuItem onClick={() => handleEmail(invoice.id)}>
-                        <Mail className="mr-2 h-4 w-4" />
-                        Send Email
-                      </DropdownMenuItem>
-                    </DropdownMenuContent>
-                  </DropdownMenu>
-                </TableCell> */}
               </TableRow>
             ))}
           </TableBody>

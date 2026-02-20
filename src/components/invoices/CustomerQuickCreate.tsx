@@ -50,8 +50,8 @@ export function CustomerQuickCreate({
     if (!formData.name.trim()) {
       toast({
         variant: "destructive",
-        title: "Missing Name",
-        description: "Customer name is required",
+        title: "Nama Wajib Diisi",
+        description: "Nama pelanggan tidak boleh kosong",
       });
       return;
     }
@@ -59,8 +59,8 @@ export function CustomerQuickCreate({
     if (!formData.phone.trim()) {
       toast({
         variant: "destructive",
-        title: "Missing Phone",
-        description: "Phone number is required",
+        title: "Nomor Telepon Wajib Diisi",
+        description: "Nomor telepon tidak boleh kosong",
       });
       return;
     }
@@ -83,13 +83,12 @@ export function CustomerQuickCreate({
       if (error) throw error;
 
       toast({
-        title: "Customer Created",
-        description: `${data.name} has been added successfully`,
+        title: "Pelanggan Berhasil Ditambahkan",
+        description: `${data.name} telah berhasil disimpan`,
       });
 
       onCustomerCreated(data.id, data.name);
 
-      // Reset form
       setFormData({
         name: "",
         phone: "",
@@ -104,8 +103,9 @@ export function CustomerQuickCreate({
       console.error("Error creating customer:", error);
       toast({
         variant: "destructive",
-        title: "Error",
-        description: error.message || "Failed to create customer",
+        title: "Gagal Menyimpan",
+        description:
+          error.message || "Terjadi kesalahan saat menyimpan pelanggan",
       });
     } finally {
       setSubmitting(false);
@@ -116,17 +116,17 @@ export function CustomerQuickCreate({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-[500px]">
         <DialogHeader>
-          <DialogTitle>Quick Create Customer</DialogTitle>
+          <DialogTitle>Tambah Pelanggan Baru</DialogTitle>
           <DialogDescription>
-            Add a new customer quickly. You can edit more details later.
+            Tambahkan pelanggan baru dengan cepat. Detail lengkap dapat diubah
+            nanti.
           </DialogDescription>
         </DialogHeader>
 
         <form onSubmit={handleSubmit} className="space-y-4">
-          {/* Name */}
           <div className="space-y-2">
             <Label htmlFor="name">
-              Customer Name <span className="text-destructive">*</span>
+              Nama Pelanggan <span className="text-destructive">*</span>
             </Label>
             <Input
               id="name"
@@ -134,16 +134,15 @@ export function CustomerQuickCreate({
               onChange={(e) =>
                 setFormData({ ...formData, name: e.target.value })
               }
-              placeholder="Enter customer name"
+              placeholder="Masukkan nama pelanggan"
               autoFocus
               required
             />
           </div>
 
-          {/* Phone */}
           <div className="space-y-2">
             <Label htmlFor="phone">
-              Phone Number <span className="text-destructive">*</span>
+              Nomor Telepon <span className="text-destructive">*</span>
             </Label>
             <Input
               id="phone"
@@ -152,14 +151,13 @@ export function CustomerQuickCreate({
               onChange={(e) =>
                 setFormData({ ...formData, phone: e.target.value })
               }
-              placeholder="e.g., 0812-3456-7890"
+              placeholder="Contoh: 0812-3456-7890"
               required
             />
           </div>
 
-          {/* Category */}
           <div className="space-y-2">
-            <Label htmlFor="category">Category</Label>
+            <Label htmlFor="category">Kategori</Label>
             <Select
               value={formData.category}
               onValueChange={(value: any) =>
@@ -171,14 +169,13 @@ export function CustomerQuickCreate({
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="retail">Retail</SelectItem>
-                <SelectItem value="project">Project</SelectItem>
+                <SelectItem value="project">Proyek</SelectItem>
               </SelectContent>
             </Select>
           </div>
 
-          {/* Email */}
           <div className="space-y-2">
-            <Label htmlFor="email">Email</Label>
+            <Label htmlFor="email">Email (Opsional)</Label>
             <Input
               id="email"
               type="email"
@@ -186,20 +183,19 @@ export function CustomerQuickCreate({
               onChange={(e) =>
                 setFormData({ ...formData, email: e.target.value })
               }
-              placeholder="customer@example.com"
+              placeholder="pelanggan@contoh.com"
             />
           </div>
 
-          {/* Address */}
           <div className="space-y-2">
-            <Label htmlFor="address">Address</Label>
+            <Label htmlFor="address">Alamat (Opsional)</Label>
             <Textarea
               id="address"
               value={formData.address}
               onChange={(e) =>
                 setFormData({ ...formData, address: e.target.value })
               }
-              placeholder="Customer address..."
+              placeholder="Alamat pelanggan..."
               rows={3}
             />
           </div>
@@ -211,18 +207,18 @@ export function CustomerQuickCreate({
               onClick={() => onOpenChange(false)}
               disabled={submitting}
             >
-              Cancel
+              Batal
             </Button>
             <Button type="submit" disabled={submitting}>
               {submitting ? (
                 <>
                   <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  Creating...
+                  Menyimpan...
                 </>
               ) : (
                 <>
                   <Plus className="mr-2 h-4 w-4" />
-                  Create Customer
+                  Tambah Pelanggan
                 </>
               )}
             </Button>

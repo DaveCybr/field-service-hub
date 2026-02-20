@@ -34,14 +34,12 @@ export function DeleteInvoiceDialog({
   const handleDelete = async () => {
     setDeleting(true);
     try {
-      // Delete related records first (services and items - cascade should handle)
       await supabase
         .from("invoice_services")
         .delete()
         .eq("invoice_id", invoiceId);
       await supabase.from("invoice_items").delete().eq("invoice_id", invoiceId);
 
-      // Delete invoice
       const { error } = await supabase
         .from("invoices")
         .delete()
@@ -50,18 +48,17 @@ export function DeleteInvoiceDialog({
       if (error) throw error;
 
       toast({
-        title: "Invoice Deleted",
-        description: `${invoiceNumber} has been deleted successfully`,
+        title: "Faktur Dihapus",
+        description: `${invoiceNumber} berhasil dihapus`,
       });
 
-      // Navigate back to invoice list
       navigate("/invoices");
     } catch (error: any) {
       console.error("Delete error:", error);
       toast({
         variant: "destructive",
-        title: "Delete Failed",
-        description: error.message || "Failed to delete invoice",
+        title: "Gagal Menghapus",
+        description: error.message || "Terjadi kesalahan saat menghapus faktur",
       });
     } finally {
       setDeleting(false);
@@ -73,25 +70,25 @@ export function DeleteInvoiceDialog({
     <AlertDialog open={open} onOpenChange={onOpenChange}>
       <AlertDialogContent>
         <AlertDialogHeader>
-          <AlertDialogTitle>Delete Invoice?</AlertDialogTitle>
+          <AlertDialogTitle>Hapus Faktur?</AlertDialogTitle>
           <AlertDialogDescription>
-            Are you sure you want to delete invoice{" "}
+            Apakah Anda yakin ingin menghapus faktur{" "}
             <strong>{invoiceNumber}</strong>?
             <br />
             <br />
-            This will also delete:
+            Data berikut juga akan ikut terhapus:
             <ul className="list-disc list-inside mt-2 space-y-1">
-              <li>All services and products</li>
-              <li>Related documents</li>
+              <li>Semua layanan dan produk</li>
+              <li>Dokumen terkait</li>
             </ul>
             <br />
             <span className="text-destructive font-medium">
-              This action cannot be undone.
+              Tindakan ini tidak dapat dibatalkan.
             </span>
           </AlertDialogDescription>
         </AlertDialogHeader>
         <AlertDialogFooter>
-          <AlertDialogCancel disabled={deleting}>Cancel</AlertDialogCancel>
+          <AlertDialogCancel disabled={deleting}>Batal</AlertDialogCancel>
           <AlertDialogAction
             onClick={handleDelete}
             disabled={deleting}
@@ -100,12 +97,12 @@ export function DeleteInvoiceDialog({
             {deleting ? (
               <>
                 <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                Deleting...
+                Menghapus...
               </>
             ) : (
               <>
                 <Trash2 className="mr-2 h-4 w-4" />
-                Delete Invoice
+                Hapus Faktur
               </>
             )}
           </AlertDialogAction>
