@@ -140,40 +140,10 @@ export default function JobDetail() {
 
   const fetchTeamMembers = async () => {
     if (!id) return;
-
-    try {
-      // ✅ Use direct SQL-like query to bypass TypeScript issues
-      const {
-        data,
-        error,
-      }: {
-        data: any[] | null;
-        error: any;
-      } = await supabase
-        .from("service_technician_assignments")
-        .select(
-          `
-          id,
-          role,
-          status,
-          technician:employees!service_technician_assignments_technician_id_fkey(
-            id,
-            name,
-            email,
-            phone
-          )
-        `,
-        )
-        .eq("service_id", id)
-        .eq("status", "active")
-        .order("created_at", { ascending: true });
-
-      if (error) throw error;
-      setTeamMembers(data || []);
-    } catch (error) {
-      console.error("Error fetching team members:", error);
-    }
+    // service_technician_assignments table not yet created - skip
+    setTeamMembers([]);
   };
+
 
   const getStatusBadge = (status: string) => {
     const config: Record<string, { label: string; className: string }> = {

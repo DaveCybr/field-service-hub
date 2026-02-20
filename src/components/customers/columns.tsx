@@ -1,9 +1,3 @@
-// ============================================
-// CUSTOMERS TABLE COLUMNS
-// src/components/customers/columns.tsx
-// Column definitions for Customers DataTable
-// ============================================
-
 import { ColumnDef } from "@tanstack/react-table";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -33,13 +27,13 @@ export interface Customer {
   email: string | null;
   phone: string | null;
   address: string | null;
-  city: string | null;
-  company: string | null;
-  customer_type: "individual" | "company" | null;
+  category: "retail" | "project";
+  payment_terms_days: number | null;
+  current_outstanding: number | null;
+  blacklisted: boolean | null;
+  notes: string | null;
   created_at: string;
-  total_services?: number;
-  total_spent?: number;
-  last_service_date?: string | null;
+  updated_at: string;
 }
 
 export interface CustomerColumnActions {
@@ -49,24 +43,18 @@ export interface CustomerColumnActions {
   onDelete?: (customer: Customer) => void;
 }
 
-const getCustomerTypeBadge = (type: string | null) => {
-  if (!type) return <Badge variant="secondary">-</Badge>;
-
-  const config: Record<
-    string,
-    { label: string; className: string; icon?: any }
-  > = {
-    individual: {
-      label: "Individual",
+const getCategoryBadge = (category: string) => {
+  const config: Record<string, { label: string; className: string }> = {
+    retail: {
+      label: "Retail",
       className: "bg-blue-100 text-blue-800 hover:bg-blue-100",
     },
-    company: {
-      label: "Company",
+    project: {
+      label: "Proyek",
       className: "bg-purple-100 text-purple-800 hover:bg-purple-100",
     },
   };
-
-  const { label, className } = config[type] || config.individual;
+  const { label, className } = config[category] || config.retail;
   return <Badge className={className}>{label}</Badge>;
 };
 
@@ -93,18 +81,16 @@ export const createCustomerColumns = (
   return [
     {
       accessorKey: "name",
-      header: ({ column }) => {
-        return (
-          <Button
-            variant="ghost"
-            onClick={() => column.toggleSorting(column.getIsSorted() === "asc")}
-            className="-ml-4"
-          >
-            Customer
-            <ArrowUpDown className="ml-2 h-4 w-4" />
-          </Button>
-        );
-      },
+      header: ({ column }) => (
+        <Button
+          variant="ghost"
+          onClick={() => column.toggleSorting(column.getIsSorted() === "asc")}
+          className="-ml-4"
+        >
+          Pelanggan
+          <ArrowUpDown className="ml-2 h-4 w-4" />
+        </Button>
+      ),
       cell: ({ row }) => {
         const customer = row.original;
         return (
@@ -116,11 +102,8 @@ export const createCustomerColumns = (
             </Avatar>
             <div>
               <p className="font-medium">{customer.name}</p>
-              {customer.company && (
-                <p className="text-sm text-muted-foreground flex items-center gap-1">
-                  <Building2 className="h-3 w-3" />
-                  {customer.company}
-                </p>
+              {customer.blacklisted && (
+                <Badge variant="destructive" className="text-xs">Blacklist</Badge>
               )}
             </div>
           </div>
@@ -128,26 +111,22 @@ export const createCustomerColumns = (
       },
     },
     {
-      accessorKey: "customer_type",
-      header: ({ column }) => {
-        return (
-          <Button
-            variant="ghost"
-            onClick={() => column.toggleSorting(column.getIsSorted() === "asc")}
-            className="-ml-4"
-          >
-            Type
-            <ArrowUpDown className="ml-2 h-4 w-4" />
-          </Button>
-        );
-      },
-      cell: ({ row }) => {
-        return getCustomerTypeBadge(row.original.customer_type);
-      },
+      accessorKey: "category",
+      header: ({ column }) => (
+        <Button
+          variant="ghost"
+          onClick={() => column.toggleSorting(column.getIsSorted() === "asc")}
+          className="-ml-4"
+        >
+          Kategori
+          <ArrowUpDown className="ml-2 h-4 w-4" />
+        </Button>
+      ),
+      cell: ({ row }) => getCategoryBadge(row.original.category),
     },
     {
       accessorKey: "email",
-      header: "Contact",
+      header: "Kontak",
       cell: ({ row }) => {
         const customer = row.original;
         return (
@@ -173,22 +152,15 @@ export const createCustomerColumns = (
     },
     {
       accessorKey: "address",
-      header: "Location",
+      header: "Alamat",
       cell: ({ row }) => {
         const customer = row.original;
         return (
           <div className="max-w-[200px]">
-            {customer.address || customer.city ? (
+            {customer.address ? (
               <div className="flex items-start gap-2">
                 <MapPin className="h-3 w-3 text-muted-foreground mt-0.5 flex-shrink-0" />
-                <div className="text-sm">
-                  {customer.address && (
-                    <p className="truncate">{customer.address}</p>
-                  )}
-                  {customer.city && (
-                    <p className="text-muted-foreground">{customer.city}</p>
-                  )}
-                </div>
+                <p className="text-sm truncate">{customer.address}</p>
               </div>
             ) : (
               <span className="text-sm text-muted-foreground">-</span>
@@ -198,167 +170,88 @@ export const createCustomerColumns = (
       },
     },
     {
-      accessorKey: "total_services",
-      header: ({ column }) => {
-        return (
-          <Button
-            variant="ghost"
-            onClick={() => column.toggleSorting(column.getIsSorted() === "asc")}
-            className="-ml-4"
-          >
-            Services
-            <ArrowUpDown className="ml-2 h-4 w-4" />
-          </Button>
-        );
-      },
+      accessorKey: "current_outstanding",
+      header: ({ column }) => (
+        <Button
+          variant="ghost"
+          onClick={() => column.toggleSorting(column.getIsSorted() === "asc")}
+          className="-ml-4"
+        >
+          Outstanding
+          <ArrowUpDown className="ml-2 h-4 w-4" />
+        </Button>
+      ),
       cell: ({ row }) => {
-        const total = row.original.total_services || 0;
-        return (
-          <div className="flex items-center gap-2">
-            <span className="text-lg font-bold">{total}</span>
-            {total > 0 && actions?.onViewServices && (
-              <Button
-                variant="ghost"
-                size="sm"
-                className="h-6 text-xs"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  actions.onViewServices(row.original);
-                }}
-              >
-                View
-              </Button>
-            )}
-          </div>
-        );
-      },
-    },
-    {
-      accessorKey: "total_spent",
-      header: ({ column }) => {
-        return (
-          <Button
-            variant="ghost"
-            onClick={() => column.toggleSorting(column.getIsSorted() === "asc")}
-            className="-ml-4"
-          >
-            Total Spent
-            <ArrowUpDown className="ml-2 h-4 w-4" />
-          </Button>
-        );
-      },
-      cell: ({ row }) => {
-        const amount = row.original.total_spent || 0;
+        const amount = row.original.current_outstanding || 0;
         return <span className="font-medium">{formatCurrency(amount)}</span>;
       },
     },
     {
-      accessorKey: "last_service_date",
-      header: ({ column }) => {
-        return (
-          <Button
-            variant="ghost"
-            onClick={() => column.toggleSorting(column.getIsSorted() === "asc")}
-            className="-ml-4"
-          >
-            Last Service
-            <ArrowUpDown className="ml-2 h-4 w-4" />
-          </Button>
-        );
-      },
-      cell: ({ row }) => {
-        const date = row.original.last_service_date;
-        return date ? (
-          <div className="flex items-center gap-2 text-sm">
-            <Calendar className="h-3 w-3 text-muted-foreground" />
-            <span>{format(new Date(date), "MMM dd, yyyy")}</span>
-          </div>
-        ) : (
-          <span className="text-sm text-muted-foreground">Never</span>
-        );
-      },
-    },
-    {
       accessorKey: "created_at",
-      header: ({ column }) => {
-        return (
-          <Button
-            variant="ghost"
-            onClick={() => column.toggleSorting(column.getIsSorted() === "asc")}
-            className="-ml-4"
-          >
-            Registered
-            <ArrowUpDown className="ml-2 h-4 w-4" />
-          </Button>
-        );
-      },
-      cell: ({ row }) => {
-        return (
-          <span className="text-sm text-muted-foreground">
-            {format(new Date(row.original.created_at), "MMM dd, yyyy")}
-          </span>
-        );
-      },
+      header: ({ column }) => (
+        <Button
+          variant="ghost"
+          onClick={() => column.toggleSorting(column.getIsSorted() === "asc")}
+          className="-ml-4"
+        >
+          Terdaftar
+          <ArrowUpDown className="ml-2 h-4 w-4" />
+        </Button>
+      ),
+      cell: ({ row }) => (
+        <span className="text-sm text-muted-foreground">
+          {format(new Date(row.original.created_at), "dd MMM yyyy")}
+        </span>
+      ),
     },
     {
       id: "actions",
       cell: ({ row }) => {
         const customer = row.original;
-
         return (
           <DropdownMenu>
             <DropdownMenuTrigger asChild onClick={(e) => e.stopPropagation()}>
               <Button variant="ghost" className="h-8 w-8 p-0">
-                <span className="sr-only">Open menu</span>
+                <span className="sr-only">Buka menu</span>
                 <MoreHorizontal className="h-4 w-4" />
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end">
-              <DropdownMenuLabel>Actions</DropdownMenuLabel>
+              <DropdownMenuLabel>Aksi</DropdownMenuLabel>
               <DropdownMenuItem
                 onClick={(e) => {
                   e.stopPropagation();
-                  if (actions?.onViewDetails) {
-                    actions.onViewDetails(customer);
-                  }
+                  actions?.onViewDetails?.(customer);
                 }}
               >
-                View details
+                Lihat detail
               </DropdownMenuItem>
               <DropdownMenuItem
                 onClick={(e) => {
                   e.stopPropagation();
-                  if (actions?.onEdit) {
-                    actions.onEdit(customer);
-                  }
+                  actions?.onEdit?.(customer);
                 }}
               >
-                Edit customer
+                Edit pelanggan
               </DropdownMenuItem>
-              <DropdownMenuSeparator />
-              {customer.total_services && customer.total_services > 0 && (
-                <DropdownMenuItem
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    if (actions?.onViewServices) {
-                      actions.onViewServices(customer);
-                    }
-                  }}
-                >
-                  View service history
-                </DropdownMenuItem>
-              )}
               <DropdownMenuSeparator />
               <DropdownMenuItem
                 onClick={(e) => {
                   e.stopPropagation();
-                  if (actions?.onDelete) {
-                    actions.onDelete(customer);
-                  }
+                  actions?.onViewServices?.(customer);
+                }}
+              >
+                Lihat riwayat servis
+              </DropdownMenuItem>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem
+                onClick={(e) => {
+                  e.stopPropagation();
+                  actions?.onDelete?.(customer);
                 }}
                 className="text-red-600"
               >
-                Delete customer
+                Hapus pelanggan
               </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>

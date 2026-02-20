@@ -539,6 +539,7 @@ export default function TechnicianJobDetail() {
                   <CardContent>
                     <PartsUsed
                       serviceId={service.id}
+                      invoiceId={service.invoice?.invoice_number ? "" : ""}
                       disabled={isCompleted}
                       onPartsChange={loadServiceDetail}
                     />

@@ -87,19 +87,8 @@ export default function Jobs() {
   }, [jobs]);
 
   const fetchTeamCounts = async () => {
-    const serviceIds = jobs.map((job) => job.id);
-    const { data } = await supabase
-      .from("service_technician_assignments")
-      .select("service_id")
-      .in("service_id", serviceIds)
-      .eq("status", "active");
-
-    const counts = data?.reduce((acc: Record<string, number>, assignment) => {
-      acc[assignment.service_id] = (acc[assignment.service_id] || 0) + 1;
-      return acc;
-    }, {});
-
-    setTeamCounts(counts || {});
+    // service_technician_assignments table not yet created - skip
+    setTeamCounts({});
   };
 
   // Fetch stats (separate query for dashboard cards)

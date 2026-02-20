@@ -3,24 +3,16 @@ import { Link } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
 import { useCustomerAuth } from '@/hooks/useCustomerAuth';
 import CustomerLayout from '@/components/layout/CustomerLayout';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { Button } from '@/components/ui/button';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { 
-  Briefcase, 
-  Clock, 
-  CheckCircle2, 
-  Wrench, 
-  Calendar,
-  ChevronRight,
-  MapPin,
+  Briefcase, Clock, CheckCircle2, Wrench, Calendar, ChevronRight, MapPin,
 } from 'lucide-react';
 import { format } from 'date-fns';
 
-interface Job {
+interface ServiceJob {
   id: string;
-  job_number: string;
   title: string;
   description: string | null;
   status: string;
@@ -29,36 +21,36 @@ interface Job {
   created_at: string;
   service_address: string | null;
   total_cost: number;
-  units: { unit_type: string; brand: string | null; model: string | null } | null;
+  unit: { unit_type: string; brand: string | null; model: string | null } | null;
+  invoice: { invoice_number: string };
 }
 
 export default function CustomerJobs() {
   const { customerName, customerId } = useCustomerAuth();
   const [loading, setLoading] = useState(true);
-  const [jobs, setJobs] = useState<Job[]>([]);
+  const [jobs, setJobs] = useState<ServiceJob[]>([]);
   const [activeTab, setActiveTab] = useState('active');
 
   useEffect(() => {
-    if (customerId) {
-      fetchJobs();
-    }
+    if (customerId) fetchJobs();
   }, [customerId]);
 
   const fetchJobs = async () => {
     setLoading(true);
     try {
       const { data, error } = await supabase
-        .from('service_jobs')
+        .from('invoice_services')
         .select(`
-          id, job_number, title, description, status, priority,
+          id, title, description, status, priority,
           scheduled_date, created_at, service_address, total_cost,
-          units (unit_type, brand, model)
+          unit:units(unit_type, brand, model),
+          invoice:invoices!inner(invoice_number, customer_id)
         `)
-        .eq('customer_id', customerId)
+        .eq('invoice.customer_id', customerId)
         .order('created_at', { ascending: false });
 
       if (error) throw error;
-      setJobs(data || []);
+      setJobs((data as any) || []);
     } catch (error) {
       console.error('Error fetching jobs:', error);
     } finally {
@@ -68,31 +60,25 @@ export default function CustomerJobs() {
 
   const getStatusConfig = (status: string) => {
     const config: Record<string, { label: string; className: string; icon: any }> = {
-      pending_assignment: { label: 'Pending', className: 'bg-amber-100 text-amber-800', icon: Clock },
-      pending_approval: { label: 'Awaiting Approval', className: 'bg-orange-100 text-orange-800', icon: Clock },
-      approved: { label: 'Scheduled', className: 'bg-sky-100 text-sky-800', icon: Calendar },
-      in_progress: { label: 'In Progress', className: 'bg-blue-100 text-blue-800', icon: Wrench },
-      completed: { label: 'Completed', className: 'bg-emerald-100 text-emerald-800', icon: CheckCircle2 },
-      completed_paid: { label: 'Completed', className: 'bg-emerald-100 text-emerald-800', icon: CheckCircle2 },
-      cancelled: { label: 'Cancelled', className: 'bg-gray-100 text-gray-800', icon: Clock },
+      pending: { label: 'Menunggu', className: 'bg-amber-100 text-amber-800', icon: Clock },
+      assigned: { label: 'Dijadwalkan', className: 'bg-sky-100 text-sky-800', icon: Calendar },
+      in_progress: { label: 'Sedang Dikerjakan', className: 'bg-blue-100 text-blue-800', icon: Wrench },
+      completed: { label: 'Selesai', className: 'bg-emerald-100 text-emerald-800', icon: CheckCircle2 },
+      cancelled: { label: 'Dibatalkan', className: 'bg-gray-100 text-gray-800', icon: Clock },
     };
     return config[status] || { label: status, className: '', icon: Clock };
   };
 
-  const activeStatuses = ['pending_assignment', 'pending_approval', 'approved', 'in_progress'];
+  const activeStatuses = ['pending', 'assigned', 'in_progress'];
   const activeJobs = jobs.filter(j => activeStatuses.includes(j.status));
-  const completedJobs = jobs.filter(j => j.status === 'completed' || j.status === 'completed_paid' || j.status === 'cancelled');
+  const completedJobs = jobs.filter(j => j.status === 'completed' || j.status === 'cancelled');
 
-  const renderJobCard = (job: Job) => {
+  const renderJobCard = (job: ServiceJob) => {
     const statusConfig = getStatusConfig(job.status);
     const StatusIcon = statusConfig.icon;
 
     return (
-      <Link
-        key={job.id}
-        to={`/portal/jobs/${job.id}`}
-        className="block"
-      >
+      <Link key={job.id} to={`/portal/jobs/${job.id}`} className="block">
         <Card className="hover:shadow-md transition-shadow">
           <CardContent className="p-4">
             <div className="flex items-start justify-between gap-4">
@@ -105,12 +91,10 @@ export default function CustomerJobs() {
                     <h3 className="font-semibold">{job.title}</h3>
                     <Badge className={statusConfig.className}>{statusConfig.label}</Badge>
                   </div>
-                  <p className="text-sm text-muted-foreground mt-1">
-                    {job.job_number}
-                  </p>
-                  {job.units && (
+                  <p className="text-sm text-muted-foreground mt-1">{job.invoice.invoice_number}</p>
+                  {job.unit && (
                     <p className="text-sm text-muted-foreground">
-                      {job.units.unit_type} {job.units.brand && `- ${job.units.brand}`} {job.units.model}
+                      {job.unit.unit_type} {job.unit.brand && `- ${job.unit.brand}`} {job.unit.model}
                     </p>
                   )}
                   {job.service_address && (
@@ -122,9 +106,7 @@ export default function CustomerJobs() {
                   <div className="flex items-center gap-4 mt-2 text-sm text-muted-foreground">
                     <span className="flex items-center gap-1">
                       <Calendar className="h-3 w-3" />
-                      {job.scheduled_date 
-                        ? format(new Date(job.scheduled_date), 'MMM d, yyyy')
-                        : 'Not scheduled'}
+                      {job.scheduled_date ? format(new Date(job.scheduled_date), 'dd MMM yyyy') : 'Belum dijadwalkan'}
                     </span>
                   </div>
                 </div>
@@ -138,24 +120,22 @@ export default function CustomerJobs() {
   };
 
   return (
-    <CustomerLayout customerName={customerName || 'Customer'}>
+    <CustomerLayout customerName={customerName || 'Pelanggan'}>
       <div className="space-y-6 animate-fade-in">
         <div>
-          <h1 className="text-2xl font-bold tracking-tight">Service Jobs</h1>
-          <p className="text-muted-foreground">
-            Track and manage your service requests
-          </p>
+          <h1 className="text-2xl font-bold tracking-tight">Pekerjaan Servis</h1>
+          <p className="text-muted-foreground">Pantau dan kelola permintaan servis Anda</p>
         </div>
 
         <Tabs value={activeTab} onValueChange={setActiveTab}>
           <TabsList>
             <TabsTrigger value="active" className="gap-2">
               <Briefcase className="h-4 w-4" />
-              Active ({activeJobs.length})
+              Aktif ({activeJobs.length})
             </TabsTrigger>
             <TabsTrigger value="history" className="gap-2">
               <CheckCircle2 className="h-4 w-4" />
-              History ({completedJobs.length})
+              Riwayat ({completedJobs.length})
             </TabsTrigger>
           </TabsList>
 
@@ -168,16 +148,12 @@ export default function CustomerJobs() {
               <Card>
                 <CardContent className="py-12 text-center">
                   <Briefcase className="h-12 w-12 mx-auto text-muted-foreground mb-3" />
-                  <h3 className="font-medium">No active jobs</h3>
-                  <p className="text-sm text-muted-foreground mt-1">
-                    You don't have any active service requests
-                  </p>
+                  <h3 className="font-medium">Tidak ada pekerjaan aktif</h3>
+                  <p className="text-sm text-muted-foreground mt-1">Anda belum memiliki permintaan servis yang aktif</p>
                 </CardContent>
               </Card>
             ) : (
-              <div className="space-y-4">
-                {activeJobs.map(renderJobCard)}
-              </div>
+              <div className="space-y-4">{activeJobs.map(renderJobCard)}</div>
             )}
           </TabsContent>
 
@@ -190,16 +166,12 @@ export default function CustomerJobs() {
               <Card>
                 <CardContent className="py-12 text-center">
                   <CheckCircle2 className="h-12 w-12 mx-auto text-muted-foreground mb-3" />
-                  <h3 className="font-medium">No service history</h3>
-                  <p className="text-sm text-muted-foreground mt-1">
-                    Completed jobs will appear here
-                  </p>
+                  <h3 className="font-medium">Belum ada riwayat servis</h3>
+                  <p className="text-sm text-muted-foreground mt-1">Pekerjaan yang selesai akan muncul di sini</p>
                 </CardContent>
               </Card>
             ) : (
-              <div className="space-y-4">
-                {completedJobs.map(renderJobCard)}
-              </div>
+              <div className="space-y-4">{completedJobs.map(renderJobCard)}</div>
             )}
           </TabsContent>
         </Tabs>
