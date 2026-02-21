@@ -37,6 +37,7 @@ import {
 import { formatCurrency } from "@/lib/utils/currency";
 import { LocationPicker } from "@/components/jobs/LocationPicker";
 import type { ServiceItem, Unit } from "@/types/invoice";
+import { cn } from "@/lib/utils";
 
 interface BulkAddServiceModalProps {
   open: boolean;
@@ -464,29 +465,53 @@ export function BulkAddServiceModal({
                       key={unitType}
                       className="border rounded-lg overflow-hidden"
                     >
-                      {/* Group header — klik untuk select/deselect semua di group */}
-                      <button
-                        type="button"
+                      {/* Group header — div bukan button agar tidak nested button */}
+                      <div
+                        role="button"
+                        tabIndex={0}
                         onClick={() => toggleGroup(groupUnits)}
-                        className="w-full flex items-center gap-3 px-3 py-2 bg-muted/60 hover:bg-muted text-left transition-colors"
+                        onKeyDown={(e) =>
+                          e.key === "Enter" && toggleGroup(groupUnits)
+                        }
+                        className="w-full flex items-center gap-3 px-3 py-2 bg-muted/60 hover:bg-muted text-left transition-colors cursor-pointer select-none"
                       >
-                        <Checkbox
-                          checked={allGroupSelected}
-                          ref={(el) => {
-                            if (el) {
-                              (el as any).indeterminate =
-                                someGroupSelected && !allGroupSelected;
-                            }
-                          }}
-                          className="pointer-events-none"
-                        />
+                        {/* Visual checkbox — bukan komponen Checkbox agar tidak ada button nested */}
+                        <div
+                          className={cn(
+                            "h-4 w-4 shrink-0 rounded border-2 flex items-center justify-center transition-colors",
+                            allGroupSelected
+                              ? "bg-primary border-primary"
+                              : someGroupSelected
+                                ? "bg-primary/30 border-primary"
+                                : "border-input bg-background",
+                          )}
+                        >
+                          {allGroupSelected && (
+                            <svg
+                              className="h-2.5 w-2.5 text-primary-foreground"
+                              fill="none"
+                              viewBox="0 0 12 12"
+                            >
+                              <path
+                                d="M2 6l3 3 5-5"
+                                stroke="currentColor"
+                                strokeWidth="2"
+                                strokeLinecap="round"
+                                strokeLinejoin="round"
+                              />
+                            </svg>
+                          )}
+                          {someGroupSelected && !allGroupSelected && (
+                            <div className="h-1.5 w-1.5 rounded-sm bg-primary" />
+                          )}
+                        </div>
                         <span className="text-sm font-medium flex-1">
                           {unitType}
                         </span>
                         <Badge variant="outline" className="text-xs">
                           {groupUnits.length} unit
                         </Badge>
-                      </button>
+                      </div>
 
                       {/* Units dalam group */}
                       <div className="divide-y">
