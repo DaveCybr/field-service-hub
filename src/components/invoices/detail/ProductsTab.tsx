@@ -14,7 +14,7 @@ export function ProductsTab({ items }: ProductsTabProps) {
         <CardContent className="py-12">
           <div className="text-center text-muted-foreground">
             <Package className="h-12 w-12 mx-auto mb-4 opacity-20" />
-            <p>No products in this invoice</p>
+            <p>Belum ada produk dalam faktur ini</p>
           </div>
         </CardContent>
       </Card>
@@ -26,7 +26,7 @@ export function ProductsTab({ items }: ProductsTabProps) {
       <CardHeader>
         <CardTitle className="flex items-center gap-2">
           <Package className="h-5 w-5" />
-          Products ({items.length})
+          Produk ({items.length})
         </CardTitle>
       </CardHeader>
       <CardContent>
@@ -35,16 +35,16 @@ export function ProductsTab({ items }: ProductsTabProps) {
             <thead>
               <tr className="border-b text-left">
                 <th className="py-3 px-2 text-sm font-medium text-muted-foreground">
-                  Product
+                  Produk
                 </th>
                 <th className="py-3 px-2 text-sm font-medium text-muted-foreground text-right">
-                  Unit Price
+                  Harga Satuan
                 </th>
                 <th className="py-3 px-2 text-sm font-medium text-muted-foreground text-center">
                   Qty
                 </th>
                 <th className="py-3 px-2 text-sm font-medium text-muted-foreground text-right">
-                  Discount
+                  Diskon
                 </th>
                 <th className="py-3 px-2 text-sm font-medium text-muted-foreground text-right">
                   Total
@@ -94,7 +94,7 @@ export function ProductsTab({ items }: ProductsTabProps) {
                 </td>
                 <td className="py-3 px-2 text-right text-lg font-bold text-primary">
                   {formatCurrency(
-                    items.reduce((sum, item) => sum + item.total_price, 0)
+                    items.reduce((sum, item) => sum + item.total_price, 0),
                   )}
                 </td>
               </tr>

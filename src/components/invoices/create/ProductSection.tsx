@@ -1,3 +1,4 @@
+// ProductSection.tsx (create)
 import { useState } from "react";
 import {
   Card,
@@ -36,8 +37,10 @@ export function ProductsSection({
     <Card>
       <CardHeader className="flex flex-row items-center justify-between">
         <div>
-          <CardTitle className="text-base">Products</CardTitle>
-          <CardDescription>Add products to this invoice</CardDescription>
+          <CardTitle className="text-base">Produk</CardTitle>
+          <CardDescription>
+            Tambahkan produk atau suku cadang ke faktur ini
+          </CardDescription>
         </div>
         <Button
           type="button"
@@ -46,7 +49,7 @@ export function ProductsSection({
           onClick={() => setShowForm(!showForm)}
         >
           <Plus className="h-4 w-4 mr-1" />
-          Add Product
+          Tambah Produk
         </Button>
       </CardHeader>
       <CardContent className="space-y-4">
@@ -57,7 +60,6 @@ export function ProductsSection({
             onCancel={() => setShowForm(false)}
           />
         )}
-
         <ProductList
           items={items}
           products={products}

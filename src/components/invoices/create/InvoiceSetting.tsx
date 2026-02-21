@@ -1,6 +1,8 @@
+// InvoiceSetting.tsx (create)
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import { Settings } from "lucide-react";
 import { CurrencyInput } from "@/components/ui/currency-input";
 
 interface InvoiceSettingsProps {
@@ -21,35 +23,33 @@ export function InvoiceSettings({
   onNotesChange,
 }: InvoiceSettingsProps) {
   return (
-    <Card className="lg:col-span-2">
+    <Card>
       <CardHeader>
-        <CardTitle className="text-base">Invoice Settings</CardTitle>
+        <CardTitle className="flex items-center gap-2">
+          <Settings className="h-5 w-5" />
+          Pengaturan Faktur
+        </CardTitle>
       </CardHeader>
       <CardContent className="space-y-4">
-        <div className="grid grid-cols-2 gap-4">
-          <CurrencyInput
-            label="Discount"
-            value={parseFloat(discount) || 0}
-            onValueChange={(value) => onDiscountChange(value.toString())}
-            min={0}
-            helperText="Diskon dalam rupiah"
-          />
-          <CurrencyInput
-            label="Tax (PPN)"
-            value={parseFloat(tax) || 0}
-            onValueChange={(value) => onTaxChange(value.toString())}
-            min={0}
-            helperText="Pajak dalam rupiah"
-          />
-        </div>
+        <CurrencyInput
+          label="Diskon"
+          value={parseFloat(discount) || 0}
+          onValueChange={(value) => onDiscountChange(String(value || 0))}
+          min={0}
+        />
+        <CurrencyInput
+          label="Pajak (PPN)"
+          value={parseFloat(tax) || 0}
+          onValueChange={(value) => onTaxChange(String(value || 0))}
+          min={0}
+        />
         <div className="space-y-2">
-          <Label htmlFor="notes">Notes</Label>
+          <Label>Catatan (Opsional)</Label>
           <Textarea
-            id="notes"
-            placeholder="Additional invoice notes..."
+            placeholder="Catatan untuk pelanggan..."
             value={notes}
             onChange={(e) => onNotesChange(e.target.value)}
-            rows={3}
+            rows={4}
           />
         </div>
       </CardContent>

@@ -5,6 +5,9 @@ export interface Customer {
   phone: string;
   email?: string;
   address: string | null;
+  latitude?: number | null; // GPS customer — auto-fill ke service saat buat invoice
+  longitude?: number | null;
+  maps_url?: string | null; // Link Google Maps (opsional, untuk referensi)
 }
 
 // Unit types
@@ -50,7 +53,9 @@ export interface ServiceItem {
   service_longitude?: number;
   estimated_duration?: number;
   service_cost: number;
-  priority: "low" | "normal" | "high" | "urgent";
+  parts_cost: number;
+  total_cost: number;
+  priority: string;
   status?: "pending" | "in_progress" | "completed" | "cancelled";
 }
 

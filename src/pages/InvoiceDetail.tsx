@@ -1,48 +1,32 @@
-import { useEffect, useState } from "react";
-import { useParams, Link, useNavigate } from "react-router-dom";
-import { supabase } from "@/integrations/supabase/client";
+// InvoiceDetail.tsx - Halaman Detail Faktur
+import { useParams, Link } from "react-router-dom";
 import { useAuditLog } from "@/hooks/useAuditLog";
 import { useAuth } from "@/hooks/useAuth";
 import DashboardLayout from "@/components/layout/DashboardLayout";
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Separator } from "@/components/ui/separator";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { useToast } from "@/hooks/use-toast";
-import { format } from "date-fns";
-import { ArrowLeft, Loader2, Printer } from "lucide-react";
+import { Loader2 } from "lucide-react";
 
-// Components
 import { InvoiceHeader } from "@/components/invoices/detail/InvoiceHeader";
 import { InvoiceSummaryTab } from "@/components/invoices/detail/InvoiceSummaryTab";
 import { ServicesTab } from "@/components/invoices/detail/ServicesTab";
 import { ProductsTab } from "@/components/invoices/detail/ProductsTab";
 import { PaymentTab } from "@/components/invoices/detail/PaymentTab";
-
-// Hooks
-import { useInvoiceDetail } from "@/hooks/invoices/useInvoiceDetail";
 import { TimelineTab } from "@/components/invoices/detail/TimelineTab";
 import { DocumentsTab } from "@/components/invoices/detail/DocumentsTab";
 import { InvoicePrintTemplate } from "@/components/invoices/InvoicePrintTemplate";
+import { useInvoiceDetail } from "@/hooks/invoices/useInvoiceDetail";
 
 export default function InvoiceDetail() {
   const { id } = useParams<{ id: string }>();
-  const navigate = useNavigate();
-  const { toast } = useToast();
-  const { log: auditLog } = useAuditLog();
-  const { userRole, isSuperadmin, isAdmin, employee } = useAuth();
-
-  const { invoice, services, items, loading, updating, refetch } =
-    useInvoiceDetail(id || "");
+  const { isSuperadmin, isAdmin } = useAuth();
+  const { invoice, services, items, loading, refetch } = useInvoiceDetail(
+    id || "",
+  );
 
   const canEdit = isSuperadmin || isAdmin;
-  const isCashier = userRole === "cashier";
-  const canRecordPayment = isCashier || canEdit;
 
-  const handlePrint = () => {
-    window.print();
-  };
+  const handlePrint = () => window.print();
 
   if (loading) {
     return (
@@ -58,119 +42,74 @@ export default function InvoiceDetail() {
     return (
       <DashboardLayout>
         <div className="text-center py-24">
-          <h2 className="text-lg font-medium">Invoice not found</h2>
+          <h2 className="text-lg font-medium">Faktur tidak ditemukan</h2>
           <Button asChild className="mt-4">
-            <Link to="/invoices">Back to Invoices</Link>
+            <Link to="/invoices">Kembali ke Daftar Faktur</Link>
           </Button>
         </div>
       </DashboardLayout>
     );
   }
 
-  const remainingAmount = Math.max(
-    0,
-    invoice.grand_total - (invoice.amount_paid || 0),
-  );
-
   return (
     <>
-      {/* Print Template - only visible when printing */}
+      {/* Template Cetak — hanya tampil saat print */}
       <InvoicePrintTemplate
         invoice={invoice}
         services={services}
         items={items}
         companyInfo={{
-          name: "Your Company Name",
-          address: "123 Business St, City, Country",
-          phone: "+62 123-4567-890",
-          email: "info@yourcompany.com",
-          logo: "/logo.png", // Optional
+          name: "REKAMTEKNIK",
+          address: "Jember, Jawa Timur",
+          phone: "+62 xxx-xxxx-xxxx",
+          email: "info@rekamteknik.com",
+          logo: "/logo.png",
         }}
       />
 
-      {/* Main Content */}
       <DashboardLayout>
         <div className="space-y-6 animate-fade-in">
-          {/* Header */}
           <InvoiceHeader
             invoice={invoice}
             canEdit={canEdit}
             onRefresh={refetch}
-            // onStatusChange={async (newStatus) => {
-            //   try {
-            //     const { error } = await supabase
-            //       .from("invoices")
-            //       .update({ status: newStatus })
-            //       .eq("id", invoice.id);
-
-            //     if (error) throw error;
-
-            //     await auditLog({
-            //       action: "status_change",
-            //       entityType: "invoice",
-            //       entityId: invoice.id,
-            //       oldData: { status: invoice.status },
-            //       newData: { status: newStatus },
-            //     });
-
-            //     toast({
-            //       title: "Status Updated",
-            //       description: `Invoice status changed to ${newStatus}`,
-            //     });
-
-            //     refetch();
-            //   } catch (error: any) {
-            //     toast({
-            //       variant: "destructive",
-            //       title: "Error",
-            //       description: error.message || "Failed to update status",
-            //     });
-            //   }
-            // }}
             onPrint={handlePrint}
           />
 
-          {/* Tabs */}
           <Tabs defaultValue="summary" className="w-full">
             <TabsList className="grid w-full grid-cols-6">
-              <TabsTrigger value="summary">Summary</TabsTrigger>
+              <TabsTrigger value="summary">Ringkasan</TabsTrigger>
               <TabsTrigger value="services">
-                Services ({services.length})
+                Layanan ({services.length})
               </TabsTrigger>
               <TabsTrigger value="products">
-                Products ({items.length})
+                Produk ({items.length})
               </TabsTrigger>
-              <TabsTrigger value="payment">Payment</TabsTrigger>
-              <TabsTrigger value="timeline">Timeline</TabsTrigger>
-              <TabsTrigger value="documents">Documents</TabsTrigger>
+              <TabsTrigger value="payment">Pembayaran</TabsTrigger>
+              <TabsTrigger value="timeline">Riwayat</TabsTrigger>
+              <TabsTrigger value="documents">Dokumen</TabsTrigger>
             </TabsList>
 
-            {/* Summary Tab */}
             <TabsContent value="summary">
               <InvoiceSummaryTab invoice={invoice} />
             </TabsContent>
 
-            {/* Services Tab */}
             <TabsContent value="services">
               <ServicesTab services={services} invoiceId={invoice.id} />
             </TabsContent>
 
-            {/* Products Tab */}
             <TabsContent value="products">
               <ProductsTab items={items} />
             </TabsContent>
 
-            {/* Payment Tab */}
             <TabsContent value="payment">
               <PaymentTab invoice={invoice} onPaymentRecorded={refetch} />
             </TabsContent>
 
-            {/* Timeline Tab */}
             <TabsContent value="timeline">
               <TimelineTab invoice={invoice} />
             </TabsContent>
 
-            {/* Documents Tab */}
             <TabsContent value="documents">
               <DocumentsTab invoice={invoice} />
             </TabsContent>

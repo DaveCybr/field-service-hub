@@ -21,6 +21,7 @@ import {
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { Loader2, Plus } from "lucide-react";
+import { CustomerLocationPicker } from "@/components/customers/CustomerLocationPicker";
 
 interface CustomerQuickCreateProps {
   open: boolean;
@@ -44,8 +45,26 @@ export function CustomerQuickCreate({
     payment_terms_days: 0,
   });
 
+  // GPS state terpisah — opsional, bisa diisi nanti di halaman Customer
+  const [latitude, setLatitude] = useState<number | null>(null);
+  const [longitude, setLongitude] = useState<number | null>(null);
+
+  const resetForm = () => {
+    setFormData({
+      name: "",
+      phone: "",
+      email: "",
+      address: "",
+      payment_terms_days: 0,
+      category: "retail",
+    });
+    setLatitude(null);
+    setLongitude(null);
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    e.stopPropagation(); // ✅ Cegah bubble ke form parent NewInvoice
 
     if (!formData.name.trim()) {
       toast({
@@ -55,7 +74,6 @@ export function CustomerQuickCreate({
       });
       return;
     }
-
     if (!formData.phone.trim()) {
       toast({
         variant: "destructive",
@@ -67,45 +85,46 @@ export function CustomerQuickCreate({
 
     setSubmitting(true);
     try {
-      const { data, error } = await supabase
+      // ✅ Pisah insert dan select agar RLS error tidak muncul palsu
+      const { error: insertError } = await supabase.from("customers").insert({
+        name: formData.name.trim(),
+        phone: formData.phone.trim(),
+        email: formData.email.trim() || null,
+        address: formData.address.trim() || null,
+        category: formData.category,
+        payment_terms_days: 0,
+        latitude: latitude ?? null,
+        longitude: longitude ?? null,
+      });
+
+      if (insertError) throw insertError;
+
+      const { data, error: selectError } = await supabase
         .from("customers")
-        .insert({
-          name: formData.name.trim(),
-          phone: formData.phone.trim(),
-          email: formData.email.trim() || null,
-          address: formData.address.trim() || null,
-          category: formData.category,
-          payment_terms_days: 0,
-        })
-        .select()
+        .select("id, name")
+        .eq("name", formData.name.trim())
+        .eq("phone", formData.phone.trim())
+        .order("created_at", { ascending: false })
+        .limit(1)
         .single();
 
-      if (error) throw error;
+      if (selectError) throw selectError;
+
+      onOpenChange(false);
+      resetForm();
+      onCustomerCreated(data.id, data.name);
 
       toast({
         title: "Pelanggan Berhasil Ditambahkan",
-        description: `${data.name} telah berhasil disimpan`,
+        description: latitude
+          ? `${data.name} ditambahkan dengan lokasi GPS`
+          : `${data.name} ditambahkan. Lokasi GPS bisa diatur nanti di halaman Pelanggan.`,
       });
-
-      onCustomerCreated(data.id, data.name);
-
-      setFormData({
-        name: "",
-        phone: "",
-        email: "",
-        address: "",
-        payment_terms_days: 0,
-        category: "retail",
-      });
-
-      onOpenChange(false);
     } catch (error: any) {
-      console.error("Error creating customer:", error);
       toast({
         variant: "destructive",
         title: "Gagal Menyimpan",
-        description:
-          error.message || "Terjadi kesalahan saat menyimpan pelanggan",
+        description: error.message || "Terjadi kesalahan",
       });
     } finally {
       setSubmitting(false);
@@ -114,7 +133,7 @@ export function CustomerQuickCreate({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-[500px]">
+      <DialogContent className="sm:max-w-[540px] max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>Tambah Pelanggan Baru</DialogTitle>
           <DialogDescription>
@@ -157,11 +176,11 @@ export function CustomerQuickCreate({
           </div>
 
           <div className="space-y-2">
-            <Label htmlFor="category">Kategori</Label>
+            <Label>Kategori</Label>
             <Select
               value={formData.category}
-              onValueChange={(value: any) =>
-                setFormData({ ...formData, category: value })
+              onValueChange={(v: any) =>
+                setFormData({ ...formData, category: v })
               }
             >
               <SelectTrigger>
@@ -196,7 +215,29 @@ export function CustomerQuickCreate({
                 setFormData({ ...formData, address: e.target.value })
               }
               placeholder="Alamat pelanggan..."
-              rows={3}
+              rows={2}
+            />
+          </div>
+
+          {/* Lokasi GPS — opsional, auto-fill ke semua service saat buat invoice */}
+          <div className="space-y-2">
+            <Label>
+              Lokasi GPS{" "}
+              <span className="text-muted-foreground font-normal text-xs">
+                (Opsional — untuk validasi check-in teknisi)
+              </span>
+            </Label>
+            <CustomerLocationPicker
+              latitude={latitude}
+              longitude={longitude}
+              address={formData.address}
+              onLocationChange={(lat, lng) => {
+                setLatitude(lat);
+                setLongitude(lng);
+              }}
+              onAddressChange={(addr) =>
+                setFormData({ ...formData, address: addr })
+              }
             />
           </div>
 

@@ -43,10 +43,48 @@ export function InvoiceList() {
   const fetchInvoices = async () => {
     setLoading(true);
     try {
-      // ✅ FIX: Gabungkan count services & items dalam satu query menggunakan aggregation
-      // Hindari N+1 query — sebelumnya setiap faktur buat 2 query terpisah
-      let query = supabase.from("invoices").select(
-        `
+      // ✅ FIX PAGINATION: Pisahkan count query dari data query.
+      // Query dengan relasi one-to-many (invoice_services, invoice_items) membuat
+      // count: "exact" menghitung rows join, bukan rows invoice — pagination jadi salah.
+      // Solusi: count query terpisah hanya dari tabel invoices, tanpa join.
+
+      // 1. Bangun base filter (dipakai di kedua query)
+      const buildFilters = (q: any) => {
+        if (filters.search) {
+          q = q.or(`invoice_number.ilike.%${filters.search}%`);
+        }
+        if (filters.status !== "all") q = q.eq("status", filters.status);
+        if (filters.paymentStatus !== "all")
+          q = q.eq("payment_status", filters.paymentStatus);
+        if (filters.customerId) q = q.eq("customer_id", filters.customerId);
+        if (filters.minAmount !== undefined)
+          q = q.gte("grand_total", filters.minAmount);
+        if (filters.maxAmount !== undefined)
+          q = q.lte("grand_total", filters.maxAmount);
+        if (filters.dateRange?.from) {
+          const fromDate = filters.dateRange.from.toISOString();
+          if (filters.dateRange.to) {
+            q = q
+              .gte("invoice_date", fromDate)
+              .lte("invoice_date", filters.dateRange.to.toISOString());
+          } else {
+            q = q.eq("invoice_date", fromDate);
+          }
+        }
+        return q;
+      };
+
+      // 2. Count query — tanpa join relasi agar hasilnya akurat
+      const countQuery = buildFilters(
+        supabase.from("invoices").select("id", { count: "exact", head: true }),
+      );
+      const { count, error: countError } = await countQuery;
+      if (countError) throw countError;
+
+      // 3. Data query — dengan join relasi untuk services_count & items_count
+      const offset = (currentPage - 1) * ITEMS_PER_PAGE;
+      const dataQuery = buildFilters(
+        supabase.from("invoices").select(`
           id,
           invoice_number,
           customer_id,
@@ -58,51 +96,12 @@ export function InvoiceList() {
           customer:customers (name),
           invoice_services(id),
           invoice_items(id)
-        `,
-        { count: "exact" },
-      );
-
-      if (filters.search) {
-        query = query.or(`invoice_number.ilike.%${filters.search}%`);
-      }
-
-      if (filters.status !== "all") {
-        query = query.eq("status", filters.status);
-      }
-
-      if (filters.paymentStatus !== "all") {
-        query = query.eq("payment_status", filters.paymentStatus);
-      }
-
-      if (filters.customerId) {
-        query = query.eq("customer_id", filters.customerId);
-      }
-
-      if (filters.minAmount !== undefined) {
-        query = query.gte("grand_total", filters.minAmount);
-      }
-
-      if (filters.maxAmount !== undefined) {
-        query = query.lte("grand_total", filters.maxAmount);
-      }
-
-      if (filters.dateRange?.from) {
-        const fromDate = filters.dateRange.from.toISOString();
-        if (filters.dateRange.to) {
-          query = query
-            .gte("invoice_date", fromDate)
-            .lte("invoice_date", filters.dateRange.to.toISOString());
-        } else {
-          query = query.eq("invoice_date", fromDate);
-        }
-      }
-
-      const offset = (currentPage - 1) * ITEMS_PER_PAGE;
-      query = query
+        `),
+      )
         .order("updated_at", { ascending: false })
         .range(offset, offset + ITEMS_PER_PAGE - 1);
 
-      const { data, error, count } = await query;
+      const { data, error } = await dataQuery;
 
       if (error) throw error;
 
@@ -177,12 +176,8 @@ export function InvoiceList() {
           loading={loading}
           onRefresh={fetchInvoices}
         />
-      </Card>
-
-      {/* Pagination */}
-      {!loading && totalCount > ITEMS_PER_PAGE && (
-        <Card className="p-4">
-          <div className="flex items-center justify-between">
+        {!loading && totalCount > 0 && (
+          <div className="flex items-center justify-between pt-2">
             <div className="text-sm text-muted-foreground">
               Halaman {currentPage} dari {totalPages}
             </div>
@@ -209,38 +204,41 @@ export function InvoiceList() {
               </Button>
 
               <div className="flex items-center gap-1">
-                {Array.from({ length: totalPages }, (_, i) => i + 1).map(
-                  (page) => {
-                    const showPage =
-                      page === 1 ||
-                      page === totalPages ||
-                      Math.abs(page - currentPage) <= 1;
+                {totalPages > 1 &&
+                  Array.from({ length: totalPages }, (_, i) => i + 1).map(
+                    (page) => {
+                      const showPage =
+                        page === 1 ||
+                        page === totalPages ||
+                        Math.abs(page - currentPage) <= 1;
 
-                    if (!showPage && Math.abs(page - currentPage) === 2) {
-                      return (
-                        <span key={page} className="px-1">
-                          ...
-                        </span>
-                      );
-                    }
+                      if (!showPage && Math.abs(page - currentPage) === 2) {
+                        return (
+                          <span key={page} className="px-1">
+                            ...
+                          </span>
+                        );
+                      }
 
-                    if (showPage) {
-                      return (
-                        <Button
-                          key={page}
-                          variant={currentPage === page ? "default" : "outline"}
-                          size="sm"
-                          onClick={() => goToPage(page)}
-                          className="h-8 w-8 p-0"
-                        >
-                          {page}
-                        </Button>
-                      );
-                    }
+                      if (showPage) {
+                        return (
+                          <Button
+                            key={page}
+                            variant={
+                              currentPage === page ? "default" : "outline"
+                            }
+                            size="sm"
+                            onClick={() => goToPage(page)}
+                            className="h-8 w-8 p-0"
+                          >
+                            {page}
+                          </Button>
+                        );
+                      }
 
-                    return null;
-                  },
-                )}
+                      return null;
+                    },
+                  )}
               </div>
 
               <Button
@@ -268,8 +266,10 @@ export function InvoiceList() {
               {ITEMS_PER_PAGE} per halaman
             </div>
           </div>
-        </Card>
-      )}
+        )}
+      </Card>
+
+      {/* Pagination — tampil selalu jika ada data, bukan hanya jika > ITEMS_PER_PAGE */}
     </div>
   );
 }

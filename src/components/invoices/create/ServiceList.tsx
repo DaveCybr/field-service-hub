@@ -1,8 +1,16 @@
+// ServiceList.tsx (create)
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { X } from "lucide-react";
 import { formatCurrency } from "@/lib/utils/currency";
 import type { ServiceItem } from "@/types/invoice";
+
+const PRIORITY_LABELS: Record<string, string> = {
+  low: "Rendah",
+  normal: "Normal",
+  high: "Tinggi",
+  urgent: "Mendesak",
+};
 
 interface ServiceListProps {
   services: ServiceItem[];
@@ -13,7 +21,7 @@ export function ServiceList({ services, onRemove }: ServiceListProps) {
   if (services.length === 0) {
     return (
       <p className="text-sm text-muted-foreground text-center py-4">
-        No services added yet
+        Belum ada layanan yang ditambahkan
       </p>
     );
   }
@@ -29,7 +37,8 @@ export function ServiceList({ services, onRemove }: ServiceListProps) {
             <div className="flex items-center gap-2">
               <p className="font-medium">{service.title}</p>
               <Badge variant="outline" className="text-xs">
-                {service.priority}
+                {PRIORITY_LABELS[service.priority || "normal"] ||
+                  service.priority}
               </Badge>
             </div>
             {service.description && (
@@ -38,8 +47,6 @@ export function ServiceList({ services, onRemove }: ServiceListProps) {
               </p>
             )}
             <div className="flex items-center gap-3 text-xs text-muted-foreground">
-              <span>{service.technician_id ? "Assigned" : "Unassigned"}</span>
-              <span>•</span>
               <span>{formatCurrency(service.service_cost || 0)}</span>
               {service.scheduled_date && (
                 <>
