@@ -8,9 +8,7 @@ import {
   DialogFooter,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/hooks/use-toast";
 import { Mail, Copy, Check } from "lucide-react";
 
@@ -32,42 +30,39 @@ export function SendInvoiceEmail({
   const { toast } = useToast();
   const [copied, setCopied] = useState(false);
 
-  const subject = `Invoice ${invoiceNumber}`;
-  const body = `Dear Customer,
+  const subject = `Faktur ${invoiceNumber}`;
+  const body = `Yth. Pelanggan,
 
-Please find your invoice ${invoiceNumber} at the link below:
+Berikut kami lampirkan faktur ${invoiceNumber} yang dapat diakses melalui tautan berikut:
 
 ${invoiceUrl || window.location.href}
 
-If you have any questions, please contact us.
+Jika ada pertanyaan, jangan ragu untuk menghubungi kami.
 
-Best regards,
-Your Company Name`;
+Terima kasih atas kepercayaan Anda.
 
-  const mailtoLink = `mailto:${
-    customerEmail || ""
-  }?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
+Hormat kami,
+Tim REKAMTEKNIK`;
+
+  const mailtoLink = `mailto:${customerEmail || ""}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
 
   const handleCopyToClipboard = () => {
     navigator.clipboard.writeText(
-      `To: ${
-        customerEmail || "[Customer Email]"
-      }\nSubject: ${subject}\n\n${body}`
+      `Kepada: ${customerEmail || "[Email Pelanggan]"}\nSubjek: ${subject}\n\n${body}`,
     );
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
-
     toast({
-      title: "Copied",
-      description: "Email content copied to clipboard",
+      title: "Tersalin",
+      description: "Isi email telah disalin ke clipboard",
     });
   };
 
   const handleOpenEmail = () => {
     window.location.href = mailtoLink;
     toast({
-      title: "Opening Email Client",
-      description: "Your default email app will open",
+      title: "Membuka Aplikasi Email",
+      description: "Aplikasi email default Anda akan terbuka",
     });
   };
 
@@ -77,34 +72,36 @@ Your Company Name`;
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <Mail className="h-5 w-5" />
-            Send Invoice via Email
+            Kirim Faktur via Email
           </DialogTitle>
           <DialogDescription>
-            Choose how to send {invoiceNumber}
+            Pilih cara pengiriman untuk {invoiceNumber}
           </DialogDescription>
         </DialogHeader>
 
         <div className="space-y-4">
-          {/* Email Preview */}
+          {/* Pratinjau Email */}
           <div className="space-y-2">
-            <Label>Email Preview</Label>
+            <Label>Pratinjau Email</Label>
             <div className="p-4 bg-muted rounded-lg space-y-2 text-sm">
               <p>
-                <strong>To:</strong> {customerEmail || "[Customer Email]"}
+                <strong>Kepada:</strong> {customerEmail || "[Email Pelanggan]"}
               </p>
               <p>
-                <strong>Subject:</strong> {subject}
+                <strong>Subjek:</strong> {subject}
               </p>
               <div className="border-t pt-2 mt-2">
-                <pre className="whitespace-pre-wrap font-sans">{body}</pre>
+                <pre className="whitespace-pre-wrap font-sans text-xs">
+                  {body}
+                </pre>
               </div>
             </div>
           </div>
 
-          {/* Actions */}
+          {/* Aksi */}
           <div className="space-y-2">
             <p className="text-sm text-muted-foreground">
-              Choose an option to send:
+              Pilih cara pengiriman:
             </p>
 
             <Button
@@ -113,7 +110,7 @@ Your Company Name`;
               disabled={!customerEmail}
             >
               <Mail className="mr-2 h-4 w-4" />
-              Open in Email Client
+              Buka di Aplikasi Email
             </Button>
 
             <Button
@@ -124,12 +121,12 @@ Your Company Name`;
               {copied ? (
                 <>
                   <Check className="mr-2 h-4 w-4" />
-                  Copied!
+                  Tersalin!
                 </>
               ) : (
                 <>
                   <Copy className="mr-2 h-4 w-4" />
-                  Copy to Clipboard
+                  Salin ke Clipboard
                 </>
               )}
             </Button>
@@ -137,9 +134,10 @@ Your Company Name`;
 
           {!customerEmail && (
             <div className="p-3 bg-amber-50 border border-amber-200 rounded-lg text-sm text-amber-800">
-              <p className="font-medium">⚠️ No customer email</p>
+              <p className="font-medium">⚠️ Email pelanggan tidak tersedia</p>
               <p className="text-xs mt-1">
-                Add customer email to enable direct send
+                Tambahkan email pelanggan di halaman data pelanggan terlebih
+                dahulu
               </p>
             </div>
           )}
@@ -147,7 +145,7 @@ Your Company Name`;
 
         <DialogFooter>
           <Button variant="outline" onClick={() => onOpenChange(false)}>
-            Close
+            Tutup
           </Button>
         </DialogFooter>
       </DialogContent>

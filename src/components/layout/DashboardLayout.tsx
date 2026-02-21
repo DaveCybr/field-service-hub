@@ -28,20 +28,19 @@ import {
   ChevronRight,
   Shield,
   ScrollText,
+  CreditCard,
+  BarChart2,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import NotificationsDropdown from "./NotificationsDropdown";
 import { LanguageSwitcher } from "@/components/LanguageSwitcher";
+import { supabase } from "@/integrations/supabase/client";
 
 interface DashboardLayoutProps {
   children: ReactNode;
   className?: string;
 }
 
-import { CreditCard } from "lucide-react";
-import { supabase } from "@/integrations/supabase/client";
-
-// Navigation items for different roles
 const adminNavigation = [
   { name: "Dashboard", href: "/dashboard", icon: LayoutDashboard },
   { name: "Jobs Management", href: "/jobs", icon: Wrench },
@@ -50,26 +49,41 @@ const adminNavigation = [
   { name: "Customers", href: "/customers", icon: UserCircle },
   { name: "Units", href: "/units", icon: QrCode },
   { name: "Inventory", href: "/inventory", icon: Package },
-  { name: "Reports", href: "/reports", icon: FileText },
+  { name: "Reports", href: "/reports", icon: BarChart2 },
   { name: "Settings", href: "/settings", icon: Settings },
 ];
 
 const technicianNavigation = [
   { name: "Dashboard", href: "/dashboard", icon: LayoutDashboard },
-  { name: "My Jobs", href: "/technician/jobs", icon: Wrench },
-  { name: "Settings", href: "/settings", icon: Settings },
+  { name: "Pekerjaan", href: "/technician/jobs", icon: Wrench },
+  { name: "Pengaturan", href: "/settings", icon: Settings },
 ];
 
 const cashierNavigation = [
   { name: "Dashboard", href: "/dashboard", icon: LayoutDashboard },
-  { name: "Payments", href: "/jobs", icon: CreditCard },
-  { name: "Settings", href: "/settings", icon: Settings },
+  { name: "Pembayaran", href: "/jobs", icon: CreditCard },
+  { name: "Pengaturan", href: "/settings", icon: Settings },
 ];
 
 const superadminExtras = [
   { name: "User Management", href: "/users", icon: Shield },
   { name: "Audit Logs", href: "/audit-logs", icon: ScrollText },
 ];
+
+// Label Indonesia untuk nama navigasi admin
+const navLabelID: Record<string, string> = {
+  Dashboard: "Dashboard",
+  "Jobs Management": "Manajemen Pekerjaan",
+  Invoices: "Faktur",
+  Technicians: "Teknisi",
+  Customers: "Pelanggan",
+  Units: "Unit",
+  Inventory: "Inventaris",
+  Reports: "Laporan",
+  Settings: "Pengaturan",
+  "User Management": "Manajemen User",
+  "Audit Logs": "Audit Log",
+};
 
 export default function DashboardLayout({
   children,
@@ -89,63 +103,43 @@ export default function DashboardLayout({
   const location = useLocation();
   const navigate = useNavigate();
 
-  // Build navigation based on role
   const getNavigationByRole = () => {
-    if (isSuperadmin) {
-      return [...adminNavigation, ...superadminExtras];
-    }
-    if (isAdmin || userRole === "manager") {
-      return adminNavigation;
-    }
-    if (userRole === "cashier") {
-      return cashierNavigation;
-    }
-    if (userRole === "technician") {
-      return technicianNavigation;
-    }
-    return technicianNavigation; // Default fallback
+    if (isSuperadmin) return [...adminNavigation, ...superadminExtras];
+    if (isAdmin || userRole === "manager") return adminNavigation;
+    if (userRole === "cashier") return cashierNavigation;
+    if (userRole === "technician") return technicianNavigation;
+    return technicianNavigation;
   };
 
   const navigation = getNavigationByRole();
 
   const handleSignOut = () => {
-    console.log("1. Logout button clicked - FORCE VERSION");
-
-    // Clear storage FIRST
-    console.log("2. Clearing all storage...");
     try {
       localStorage.clear();
       sessionStorage.clear();
-    } catch (e) {
-      console.error("Storage clear error:", e);
-    }
+    } catch (e) {}
 
-    // Fire and forget supabase signout - don't wait
-    console.log("3. Signout from Supabase (fire and forget)...");
-    supabase.auth.signOut().catch((err) => {
-      console.error("Supabase error (ignored):", err);
-    });
+    supabase.auth.signOut().catch(() => {});
 
-    // Redirect immediately - don't wait for supabase
-    console.log("4. Redirecting NOW...");
     setTimeout(() => {
-      console.log("5. Executing redirect");
       window.location.href = "/auth";
-    }, 100); // Minimal delay untuk memastikan log terlihat
+    }, 100);
   };
 
-  const getInitials = (name: string) => {
-    return name
+  const getInitials = (name: string) =>
+    name
       .split(" ")
       .map((n) => n[0])
       .join("")
       .toUpperCase()
       .slice(0, 2);
-  };
+
+  // Label yang ditampilkan — pakai terjemahan Indonesia jika ada
+  const getLabel = (name: string) => navLabelID[name] || name;
 
   return (
     <div className={cn("min-h-screen bg-background", className)}>
-      {/* Mobile sidebar overlay */}
+      {/* Mobile overlay */}
       {sidebarOpen && (
         <div
           className="fixed inset-0 z-40 bg-black/50 lg:hidden"
@@ -179,7 +173,7 @@ export default function DashboardLayout({
         </div>
 
         {/* Navigation */}
-        <nav className="flex-1 space-y-1 px-3 py-4">
+        <nav className="flex-1 space-y-0.5 px-3 py-4 overflow-y-auto">
           {navigation.map((item) => {
             const isActive =
               location.pathname === item.href ||
@@ -188,6 +182,7 @@ export default function DashboardLayout({
               <Link
                 key={item.name}
                 to={item.href}
+                onClick={() => setSidebarOpen(false)}
                 className={cn(
                   "flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors",
                   isActive
@@ -195,18 +190,20 @@ export default function DashboardLayout({
                     : "text-sidebar-foreground/70 hover:bg-sidebar-accent/50 hover:text-sidebar-foreground",
                 )}
               >
-                <item.icon className="h-5 w-5" />
-                {item.name}
-                {isActive && <ChevronRight className="ml-auto h-4 w-4" />}
+                <item.icon className="h-4 w-4 shrink-0" />
+                <span className="truncate">{getLabel(item.name)}</span>
+                {isActive && (
+                  <ChevronRight className="ml-auto h-4 w-4 shrink-0" />
+                )}
               </Link>
             );
           })}
         </nav>
 
-        {/* User info at bottom */}
+        {/* User info */}
         <div className="border-t border-sidebar-border p-4">
           <div className="flex items-center gap-3">
-            <Avatar className="h-9 w-9">
+            <Avatar className="h-9 w-9 shrink-0">
               <AvatarImage src={employee?.avatar_url || undefined} />
               <AvatarFallback className="bg-primary text-primary-foreground text-sm">
                 {employee?.name ? getInitials(employee.name) : "U"}
@@ -217,7 +214,17 @@ export default function DashboardLayout({
                 {employee?.name || "User"}
               </p>
               <p className="text-xs text-sidebar-foreground/60 capitalize">
-                {employee?.role || "Member"}
+                {employee?.role === "superadmin"
+                  ? "Superadmin"
+                  : employee?.role === "admin"
+                    ? "Admin"
+                    : employee?.role === "manager"
+                      ? "Manajer"
+                      : employee?.role === "technician"
+                        ? "Teknisi"
+                        : employee?.role === "cashier"
+                          ? "Kasir"
+                          : employee?.role || "Anggota"}
               </p>
             </div>
           </div>
@@ -227,17 +234,18 @@ export default function DashboardLayout({
       {/* Main content */}
       <div className="lg:pl-64">
         {/* Top header */}
-        <header className="sticky top-0 z-30 flex h-16 items-center gap-4 border-b bg-card px-4 lg:px-6">
-          <button onClick={() => setSidebarOpen(true)} className="lg:hidden">
+        <header className="sticky top-0 z-30 flex h-16 items-center gap-3 border-b bg-card px-4 lg:px-6">
+          <button
+            onClick={() => setSidebarOpen(true)}
+            className="lg:hidden text-muted-foreground hover:text-foreground"
+          >
             <Menu className="h-6 w-6" />
           </button>
 
           <div className="flex-1" />
 
-          {/* Language Switcher */}
           <LanguageSwitcher />
 
-          {/* Notifications */}
           <NotificationsDropdown
             notifications={notifications}
             unreadCount={unreadCount}
@@ -246,7 +254,6 @@ export default function DashboardLayout({
             onClear={clearNotifications}
           />
 
-          {/* User menu */}
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <Button variant="ghost" className="relative h-8 w-8 rounded-full">
@@ -270,9 +277,12 @@ export default function DashboardLayout({
                 </div>
               </DropdownMenuLabel>
               <DropdownMenuSeparator />
-              <DropdownMenuItem onClick={handleSignOut}>
+              <DropdownMenuItem
+                onClick={handleSignOut}
+                className="text-destructive focus:text-destructive"
+              >
                 <LogOut className="mr-2 h-4 w-4" />
-                <span>Log out</span>
+                <span>Keluar</span>
               </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>

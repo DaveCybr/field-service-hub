@@ -7,7 +7,6 @@ import { MapPin, Loader2, X, Search } from "lucide-react";
 import "leaflet/dist/leaflet.css";
 import L from "leaflet";
 
-// Fix Leaflet default marker icon issue
 import icon from "leaflet/dist/images/marker-icon.png";
 import iconShadow from "leaflet/dist/images/marker-shadow.png";
 import iconRetina from "leaflet/dist/images/marker-icon-2x.png";
@@ -48,16 +47,15 @@ export function LocationPicker({
   const markerRef = useRef<L.Marker | null>(null);
   const mapContainerRef = useRef<HTMLDivElement>(null);
 
-  // Default to Indonesia (center of Java)
+  // Default ke Indonesia (tengah Jawa)
   const defaultLat = -7.250445;
   const defaultLng = 112.768845;
 
-  // Initialize map
   useEffect(() => {
     if (showMap && mapContainerRef.current && !mapRef.current) {
       const map = L.map(mapContainerRef.current).setView(
         [latitude || defaultLat, longitude || defaultLng],
-        latitude ? 15 : 10
+        latitude ? 15 : 10,
       );
 
       L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
@@ -66,7 +64,6 @@ export function LocationPicker({
         maxZoom: 19,
       }).addTo(map);
 
-      // Add marker if coordinates exist
       if (latitude && longitude) {
         const marker = L.marker([latitude, longitude], {
           draggable: true,
@@ -81,7 +78,6 @@ export function LocationPicker({
         markerRef.current = marker;
       }
 
-      // Add click handler to add/move marker
       map.on("click", async (e) => {
         const { lat, lng } = e.latlng;
 
@@ -117,7 +113,6 @@ export function LocationPicker({
     };
   }, [showMap]);
 
-  // Update marker position when coordinates change externally
   useEffect(() => {
     if (mapRef.current && markerRef.current && latitude && longitude) {
       markerRef.current.setLatLng([latitude, longitude]);
@@ -128,7 +123,7 @@ export function LocationPicker({
   const reverseGeocode = async (lat: number, lng: number) => {
     try {
       const response = await fetch(
-        `https://nominatim.openstreetmap.org/reverse?lat=${lat}&lon=${lng}&format=json`
+        `https://nominatim.openstreetmap.org/reverse?lat=${lat}&lon=${lng}&format=json`,
       );
       const data = await response.json();
 
@@ -136,7 +131,7 @@ export function LocationPicker({
         onAddressChange(data.display_name);
       }
     } catch (error) {
-      console.error("Reverse geocoding error:", error);
+      console.error("Error reverse geocoding:", error);
     }
   };
 
@@ -145,7 +140,7 @@ export function LocationPicker({
       toast({
         variant: "destructive",
         title: "Error",
-        description: "Geolocation is not supported by your browser",
+        description: "Geolocation tidak didukung oleh browser Anda",
       });
       return;
     }
@@ -159,7 +154,6 @@ export function LocationPicker({
         onLocationChange(lat, lng);
         await reverseGeocode(lat, lng);
 
-        // Update map if shown
         if (mapRef.current) {
           mapRef.current.setView([lat, lng], 15);
 
@@ -182,8 +176,8 @@ export function LocationPicker({
 
         setLoading(false);
         toast({
-          title: "Location captured",
-          description: "GPS coordinates saved successfully",
+          title: "Lokasi berhasil didapatkan",
+          description: "Koordinat GPS berhasil disimpan",
         });
       },
       (error) => {
@@ -191,14 +185,14 @@ export function LocationPicker({
         toast({
           variant: "destructive",
           title: "Error",
-          description: "Failed to get your location: " + error.message,
+          description: "Gagal mendapatkan lokasi Anda: " + error.message,
         });
       },
       {
         enableHighAccuracy: true,
         timeout: 10000,
         maximumAge: 0,
-      }
+      },
     );
   };
 
@@ -207,7 +201,7 @@ export function LocationPicker({
       toast({
         variant: "destructive",
         title: "Error",
-        description: "Please enter a search query",
+        description: "Harap masukkan kata kunci pencarian",
       });
       return;
     }
@@ -216,8 +210,8 @@ export function LocationPicker({
     try {
       const response = await fetch(
         `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(
-          searchQuery
-        )}&format=json&limit=1`
+          searchQuery,
+        )}&format=json&limit=1`,
       );
       const data = await response.json();
 
@@ -250,22 +244,22 @@ export function LocationPicker({
         }
 
         toast({
-          title: "Location found",
-          description: "Address has been set",
+          title: "Lokasi ditemukan",
+          description: "Alamat telah diatur",
         });
       } else {
         toast({
           variant: "destructive",
-          title: "Not found",
-          description: "Location not found. Try a different search query.",
+          title: "Tidak ditemukan",
+          description: "Lokasi tidak ditemukan. Coba kata kunci yang berbeda.",
         });
       }
     } catch (error) {
-      console.error("Search error:", error);
+      console.error("Error pencarian:", error);
       toast({
         variant: "destructive",
         title: "Error",
-        description: "Failed to search location",
+        description: "Gagal mencari lokasi",
       });
     } finally {
       setSearching(false);
@@ -283,8 +277,8 @@ export function LocationPicker({
     }
 
     toast({
-      title: "Location cleared",
-      description: "GPS coordinates removed",
+      title: "Lokasi dihapus",
+      description: "Koordinat GPS telah dihapus",
     });
   };
 
@@ -294,7 +288,7 @@ export function LocationPicker({
 
   return (
     <div className="space-y-3">
-      {/* Action Buttons */}
+      {/* Tombol Aksi */}
       <div className="flex gap-2">
         <Button
           type="button"
@@ -306,12 +300,12 @@ export function LocationPicker({
           {loading ? (
             <>
               <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-              Getting location...
+              Mendapatkan lokasi...
             </>
           ) : (
             <>
               <MapPin className="mr-2 h-4 w-4" />
-              Use Current Location
+              Gunakan Lokasi Saat Ini
             </>
           )}
         </Button>
@@ -323,7 +317,7 @@ export function LocationPicker({
           className="flex-1"
         >
           <MapPin className="mr-2 h-4 w-4" />
-          {showMap ? "Hide Map" : "Show Map"}
+          {showMap ? "Sembunyikan Peta" : "Tampilkan Peta"}
         </Button>
 
         {latitude && longitude && (
@@ -339,10 +333,10 @@ export function LocationPicker({
         )}
       </div>
 
-      {/* Search Location */}
+      {/* Cari Lokasi */}
       <div className="flex gap-2">
         <Input
-          placeholder="Search location (e.g., Jember, Jawa Timur)"
+          placeholder="Cari lokasi (contoh: Jember, Jawa Timur)"
           value={searchQuery}
           onChange={(e) => setSearchQuery(e.target.value)}
           onKeyDown={(e) => {
@@ -366,7 +360,7 @@ export function LocationPicker({
         </Button>
       </div>
 
-      {/* Map Container */}
+      {/* Kontainer Peta */}
       {showMap && (
         <div className="border rounded-lg overflow-hidden">
           <div
@@ -375,23 +369,24 @@ export function LocationPicker({
             style={{ zIndex: 0 }}
           />
           <div className="p-3 bg-muted text-xs text-muted-foreground">
-            💡 Click on map to set location, or drag the marker to adjust
+            💡 Klik pada peta untuk menentukan lokasi, atau seret penanda untuk
+            menyesuaikan
           </div>
         </div>
       )}
 
-      {/* Coordinates Display */}
+      {/* Tampilan Koordinat */}
       {latitude && longitude && (
         <div className="p-3 rounded-lg bg-muted space-y-2">
           <div>
-            <p className="font-medium text-sm">GPS Coordinates:</p>
+            <p className="font-medium text-sm">Koordinat GPS:</p>
             <p className="text-xs text-muted-foreground font-mono">
               Lat: {latitude.toFixed(6)}, Lng: {longitude.toFixed(6)}
             </p>
           </div>
           {address && (
             <div>
-              <p className="font-medium text-sm">Address:</p>
+              <p className="font-medium text-sm">Alamat:</p>
               <p className="text-xs text-muted-foreground">{address}</p>
             </div>
           )}
@@ -401,7 +396,7 @@ export function LocationPicker({
             rel="noopener noreferrer"
             className="text-primary hover:underline text-xs inline-flex items-center gap-1"
           >
-            View on Google Maps →
+            Lihat di Google Maps →
           </a>
         </div>
       )}

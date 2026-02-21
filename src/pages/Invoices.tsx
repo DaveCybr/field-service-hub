@@ -1,3 +1,4 @@
+// Invoices.tsx - Halaman Daftar Faktur
 import { useState } from "react";
 import { Link } from "react-router-dom";
 import DashboardLayout from "@/components/layout/DashboardLayout";
@@ -16,20 +17,20 @@ export default function Invoices() {
         {/* Header */}
         <div className="flex items-center justify-between">
           <div>
-            <h1 className="text-3xl font-bold tracking-tight">Invoices</h1>
+            <h1 className="text-3xl font-bold tracking-tight">Faktur</h1>
             <p className="text-muted-foreground">
-              Manage invoices, services, and payments
+              Kelola faktur, layanan, dan pembayaran
             </p>
           </div>
           <Button asChild>
             <Link to="/invoices/new">
               <Plus className="mr-2 h-4 w-4" />
-              New Invoice
+              Buat Faktur
             </Link>
           </Button>
         </div>
 
-        {/* Tabs */}
+        {/* Tab Tampilan */}
         <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
           <TabsList className="grid w-full max-w-md grid-cols-2">
             <TabsTrigger value="list" className="flex items-center gap-2">
@@ -42,12 +43,10 @@ export default function Invoices() {
             </TabsTrigger>
           </TabsList>
 
-          {/* List Tab */}
           <TabsContent value="list" className="mt-6">
             <InvoiceList />
           </TabsContent>
 
-          {/* Map Tab */}
           <TabsContent value="map" className="mt-6">
             <InvoiceMapView />
           </TabsContent>

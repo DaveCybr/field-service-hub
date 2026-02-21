@@ -2,7 +2,6 @@ import { useState, useEffect } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { supabase } from "@/integrations/supabase/client";
-import { useToast } from "@/hooks/use-toast";
 import {
   Clock,
   User,
@@ -14,6 +13,7 @@ import {
   Loader2,
 } from "lucide-react";
 import { format } from "date-fns";
+import { id as localeId } from "date-fns/locale";
 import type { Invoice } from "@/hooks/invoices/useInvoiceDetail";
 
 interface TimelineEvent {
@@ -23,61 +23,47 @@ interface TimelineEvent {
   old_data?: any;
   new_data?: any;
   created_at: string;
-  employee?: {
-    name: string;
-  };
+  description?: string;
+  employee?: { name: string };
 }
 
-interface TimelineTabProps {
-  invoice: Invoice;
-}
-
-// ============================================
-// HELPER FUNCTIONS - Handle null/undefined
-// ============================================
-
-const formatStatusLabel = (status: string | null | undefined): string => {
-  if (!status) return "Not Set";
-
-  const statusMap: Record<string, string> = {
-    draft: "Draft",
-    pending: "Pending",
-    in_progress: "In Progress",
-    completed: "Completed",
-    cancelled: "Cancelled",
-  };
-
-  return statusMap[status] || status;
+const ACTION_LABELS: Record<string, string> = {
+  INSERT: "DIBUAT",
+  CREATE: "DIBUAT",
+  UPDATE: "DIPERBARUI",
+  EDIT: "DIEDIT",
+  PAYMENT: "PEMBAYARAN",
+  STATUS_CHANGE: "PERUBAHAN STATUS",
 };
 
-const formatPaymentLabel = (status: string | null | undefined): string => {
-  if (!status) return "Not Set";
-
-  const paymentMap: Record<string, string> = {
-    unpaid: "Unpaid",
-    partial: "Partially Paid",
-    paid: "Paid",
-    overdue: "Overdue",
-  };
-
-  return paymentMap[status] || status;
+const STATUS_LABELS: Record<string, string> = {
+  draft: "Draft",
+  pending: "Menunggu",
+  assigned: "Ditugaskan",
+  in_progress: "Sedang Dikerjakan",
+  completed: "Selesai",
+  paid: "Lunas",
+  cancelled: "Dibatalkan",
+  closed: "Ditutup",
 };
 
-const formatCurrency = (amount: number | null | undefined): string => {
+const PAYMENT_LABELS: Record<string, string> = {
+  unpaid: "Belum Bayar",
+  partial: "Bayar Sebagian",
+  paid: "Lunas",
+  overdue: "Jatuh Tempo",
+};
+
+function fmtCurrency(amount: number | null | undefined): string {
   if (!amount) return "Rp 0";
   return new Intl.NumberFormat("id-ID", {
     style: "currency",
     currency: "IDR",
     minimumFractionDigits: 0,
   }).format(amount);
-};
+}
 
-// ============================================
-// MAIN COMPONENT
-// ============================================
-
-export function TimelineTab({ invoice }: TimelineTabProps) {
-  const { toast } = useToast();
+export function TimelineTab({ invoice }: { invoice: Invoice }) {
   const [events, setEvents] = useState<TimelineEvent[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -90,21 +76,14 @@ export function TimelineTab({ invoice }: TimelineTabProps) {
     try {
       const { data, error } = await supabase
         .from("audit_logs")
-        .select(
-          `
-          *,
-          employee:employees!audit_logs_employee_id_fkey(name)
-        `,
-        )
+        .select(`*, employee:employees!audit_logs_employee_id_fkey(name)`)
         .eq("entity_type", "invoices")
         .eq("entity_id", invoice.id)
         .order("created_at", { ascending: false });
 
       if (error) throw error;
       setEvents(data || []);
-    } catch (error: any) {
-      console.error("Error fetching timeline:", error);
-      // Don't show error toast, just use basic timeline
+    } catch {
       setEvents([]);
     } finally {
       setLoading(false);
@@ -145,132 +124,91 @@ export function TimelineTab({ invoice }: TimelineTabProps) {
     }
   };
 
-  const formatEventDescription = (event: TimelineEvent) => {
+  const formatEventDescription = (event: TimelineEvent): string => {
     try {
-      // Invoice created
-      if (event.action === "INSERT") {
-        return "Invoice created";
+      if (event.action === "INSERT") return "Faktur dibuat";
+
+      if (event.action === "STATUS_CHANGE") {
+        const from =
+          STATUS_LABELS[event.old_data?.status] ||
+          event.old_data?.status ||
+          "-";
+        const to =
+          STATUS_LABELS[event.new_data?.status] ||
+          event.new_data?.status ||
+          "-";
+        return `Status berubah: ${from} → ${to}`;
       }
 
-      // Invoice updated
+      if (event.action === "PAYMENT") {
+        const oldPaid = event.old_data?.amount_paid || 0;
+        const newPaid = event.new_data?.amount_paid || 0;
+        const paid = newPaid - oldPaid;
+        const method = event.new_data?.payment_method || "tunai";
+        return `Pembayaran diterima: ${fmtCurrency(paid)} (${method})`;
+      }
+
       if (event.action === "UPDATE") {
-        const oldData = event.old_data || {};
-        const newData = event.new_data || {};
+        const old = event.old_data || {};
+        const neu = event.new_data || {};
         const changes: string[] = [];
 
-        // Status change
-        if (oldData.status !== newData.status) {
-          const oldStatus = formatStatusLabel(oldData.status);
-          const newStatus = formatStatusLabel(newData.status);
-
-          // If old status was "Not Set", it's being set for first time
-          if (oldStatus === "Not Set") {
-            changes.push(`Status set to ${newStatus}`);
-          } else {
-            changes.push(`Status: ${oldStatus} → ${newStatus}`);
-          }
+        if (old.status !== neu.status) {
+          changes.push(
+            `Status: ${STATUS_LABELS[old.status] || old.status} → ${STATUS_LABELS[neu.status] || neu.status}`,
+          );
         }
-
-        // Payment status change
-        if (oldData.payment_status !== newData.payment_status) {
-          const oldPayment = formatPaymentLabel(oldData.payment_status);
-          const newPayment = formatPaymentLabel(newData.payment_status);
-
-          // If old payment was "Not Set", it's being set for first time
-          if (oldPayment === "Not Set") {
-            changes.push(`Payment status set to ${newPayment}`);
-          } else {
-            changes.push(`Payment: ${oldPayment} → ${newPayment}`);
-          }
+        if (old.payment_status !== neu.payment_status) {
+          changes.push(
+            `Pembayaran: ${PAYMENT_LABELS[old.payment_status] || old.payment_status} → ${PAYMENT_LABELS[neu.payment_status] || neu.payment_status}`,
+          );
         }
-
-        // Total amount change
-        if (oldData.grand_total !== newData.grand_total) {
-          const oldTotal = oldData.grand_total;
-          const newTotal = newData.grand_total;
-
-          if (oldTotal && newTotal) {
-            changes.push(
-              `Total: ${formatCurrency(oldTotal)} → ${formatCurrency(newTotal)}`,
-            );
-          } else if (newTotal) {
-            changes.push(`Total set to ${formatCurrency(newTotal)}`);
-          } else {
-            changes.push("Total updated");
-          }
+        if (old.grand_total !== neu.grand_total && neu.grand_total) {
+          changes.push(
+            `Total: ${fmtCurrency(old.grand_total)} → ${fmtCurrency(neu.grand_total)}`,
+          );
         }
-
-        // Amount paid change
-        if (oldData.amount_paid !== newData.amount_paid) {
-          const oldPaid = oldData.amount_paid || 0;
-          const newPaid = newData.amount_paid || 0;
-
-          if (newPaid > oldPaid) {
-            const payment = newPaid - oldPaid;
-            changes.push(`Payment received: ${formatCurrency(payment)}`);
-          } else {
-            changes.push(`Amount paid updated to ${formatCurrency(newPaid)}`);
-          }
+        if (old.amount_paid !== neu.amount_paid) {
+          const diff = (neu.amount_paid || 0) - (old.amount_paid || 0);
+          if (diff > 0) changes.push(`Pembayaran masuk: ${fmtCurrency(diff)}`);
         }
-
-        // Services/items changes
-        if (oldData.services_total !== newData.services_total) {
-          changes.push("Services updated");
-        }
-        if (oldData.items_total !== newData.items_total) {
-          changes.push("Items updated");
-        }
-
-        // Discount/tax changes
-        if (oldData.discount !== newData.discount) {
-          changes.push("Discount updated");
-        }
-        if (oldData.tax !== newData.tax) {
-          changes.push("Tax updated");
-        }
-
-        return changes.length > 0 ? changes.join(", ") : "Invoice updated";
+        return changes.length > 0 ? changes.join(", ") : "Faktur diperbarui";
       }
 
-      // Default
-      return event.action;
-    } catch (e) {
-      console.error("Error formatting event:", e);
+      return ACTION_LABELS[event.action] || event.action;
+    } catch {
       return event.action;
     }
   };
 
-  const buildBasicTimeline = () => {
-    const timeline = [];
+  const buildBasicTimeline = (): TimelineEvent[] => {
+    const timeline: TimelineEvent[] = [
+      {
+        id: "created",
+        action: "CREATE",
+        entity_type: "invoices",
+        created_at: invoice.created_at,
+        description: "Faktur dibuat",
+      },
+    ];
 
-    // Invoice created
-    timeline.push({
-      id: "created",
-      action: "CREATE",
-      entity_type: "invoices",
-      created_at: invoice.created_at,
-      description: "Invoice created",
-    });
-
-    // Status changes
     if (invoice.status !== "draft") {
       timeline.push({
         id: "status",
         action: "STATUS_CHANGE",
         entity_type: "invoices",
         created_at: invoice.updated_at,
-        description: `Status set to ${formatStatusLabel(invoice.status)}`,
+        description: `Status diubah ke: ${STATUS_LABELS[invoice.status] || invoice.status}`,
       });
     }
 
-    // Payment status
     if (invoice.payment_status === "paid") {
       timeline.push({
         id: "paid",
         action: "PAYMENT",
         entity_type: "invoices",
         created_at: invoice.updated_at,
-        description: "Invoice paid in full",
+        description: "Faktur telah dilunasi",
       });
     } else if (invoice.payment_status === "partial") {
       timeline.push({
@@ -278,14 +216,13 @@ export function TimelineTab({ invoice }: TimelineTabProps) {
         action: "PAYMENT",
         entity_type: "invoices",
         created_at: invoice.updated_at,
-        description: `Partial payment received: ${formatCurrency(invoice.amount_paid)}`,
+        description: `Pembayaran sebagian: ${fmtCurrency(invoice.amount_paid)}`,
       });
     }
 
     return timeline;
   };
 
-  // Use audit logs if available, otherwise use basic timeline
   const timelineData = events.length > 0 ? events : buildBasicTimeline();
 
   if (loading) {
@@ -303,57 +240,56 @@ export function TimelineTab({ invoice }: TimelineTabProps) {
       <CardHeader>
         <CardTitle className="flex items-center gap-2">
           <Clock className="h-5 w-5" />
-          Timeline & History
+          Riwayat & Timeline
         </CardTitle>
       </CardHeader>
       <CardContent>
         <div className="relative">
-          {/* Timeline line */}
           <div className="absolute left-6 top-0 bottom-0 w-0.5 bg-border" />
 
-          {/* Events */}
           <div className="space-y-6">
-            {timelineData.map((event, index) => (
-              <div key={event.id} className="relative pl-14">
-                {/* Icon */}
-                <div
-                  className={`absolute left-0 w-12 h-12 rounded-full border-2 flex items-center justify-center ${getEventColor(
-                    event.action,
-                  )}`}
-                >
-                  {getEventIcon(event.action)}
-                </div>
-
-                {/* Content */}
-                <div className="bg-card border rounded-lg p-4">
-                  <div className="flex items-start justify-between gap-4">
-                    <div className="flex-1">
-                      <p className="font-medium">
-                        {event.description || formatEventDescription(event)}
-                      </p>
-                      <div className="flex items-center gap-2 mt-1 text-sm text-muted-foreground">
-                        <Clock className="h-3 w-3" />
-                        {format(new Date(event.created_at), "PPP 'at' p")}
-                      </div>
-                      {event.employee && (
-                        <div className="flex items-center gap-2 mt-1 text-sm text-muted-foreground">
-                          <User className="h-3 w-3" />
-                          {event.employee.name}
-                        </div>
-                      )}
-                    </div>
-                    <Badge variant="outline">{event.action}</Badge>
-                  </div>
-                </div>
-              </div>
-            ))}
-
-            {/* Empty state */}
-            {timelineData.length === 0 && (
+            {timelineData.length === 0 ? (
               <div className="text-center py-8 text-muted-foreground">
                 <FileText className="h-12 w-12 mx-auto mb-4 opacity-20" />
-                <p>No timeline events yet</p>
+                <p>Belum ada riwayat aktivitas</p>
               </div>
+            ) : (
+              timelineData.map((event) => (
+                <div key={event.id} className="relative pl-14">
+                  <div
+                    className={`absolute left-0 w-12 h-12 rounded-full border-2 flex items-center justify-center ${getEventColor(event.action)}`}
+                  >
+                    {getEventIcon(event.action)}
+                  </div>
+
+                  <div className="bg-card border rounded-lg p-4">
+                    <div className="flex items-start justify-between gap-4">
+                      <div className="flex-1">
+                        <p className="font-medium">
+                          {event.description || formatEventDescription(event)}
+                        </p>
+                        <div className="flex items-center gap-2 mt-1 text-sm text-muted-foreground">
+                          <Clock className="h-3 w-3" />
+                          {format(
+                            new Date(event.created_at),
+                            "dd MMMM yyyy, HH:mm",
+                            { locale: localeId },
+                          )}
+                        </div>
+                        {event.employee && (
+                          <div className="flex items-center gap-2 mt-1 text-sm text-muted-foreground">
+                            <User className="h-3 w-3" />
+                            {event.employee.name}
+                          </div>
+                        )}
+                      </div>
+                      <Badge variant="outline">
+                        {ACTION_LABELS[event.action] || event.action}
+                      </Badge>
+                    </div>
+                  </div>
+                </div>
+              ))
             )}
           </div>
         </div>

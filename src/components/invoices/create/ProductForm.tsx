@@ -1,3 +1,4 @@
+// ProductForm.tsx (create)
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -34,8 +35,8 @@ export function ProductForm({
     if (!selectedProductId) {
       toast({
         variant: "destructive",
-        title: "Validation Error",
-        description: "Please select a product",
+        title: "Pilih Produk",
+        description: "Silakan pilih produk terlebih dahulu",
       });
       return;
     }
@@ -44,17 +45,16 @@ export function ProductForm({
     if (qty < 1) {
       toast({
         variant: "destructive",
-        title: "Validation Error",
-        description: "Quantity must be at least 1",
+        title: "Jumlah Tidak Valid",
+        description: "Jumlah minimal adalah 1",
       });
       return;
     }
-
     if (selectedProduct && qty > selectedProduct.stock) {
       toast({
         variant: "destructive",
-        title: "Insufficient Stock",
-        description: `Only ${selectedProduct.stock} items available in stock`,
+        title: "Stok Tidak Cukup",
+        description: `Stok tersedia hanya ${selectedProduct.stock} item`,
       });
       return;
     }
@@ -67,23 +67,24 @@ export function ProductForm({
   return (
     <div className="p-4 border rounded-lg space-y-4 bg-muted/50">
       <div className="space-y-4">
-        {/* Product Selection */}
         <div className="space-y-2">
-          <Label>Product *</Label>
+          <Label>
+            Produk <span className="text-destructive">*</span>
+          </Label>
           <Select
             value={selectedProductId}
             onValueChange={setSelectedProductId}
           >
             <SelectTrigger>
-              <SelectValue placeholder="Select product" />
+              <SelectValue placeholder="Pilih produk" />
             </SelectTrigger>
             <SelectContent>
               {products.map((product) => (
                 <SelectItem key={product.id} value={product.id}>
                   <div className="flex items-center justify-between w-full">
                     <span>{product.name}</span>
-                    <span className="ml-2 text-xs ">
-                      {formatCurrency(product.sell_price)} • Stock:{" "}
+                    <span className="ml-2 text-xs">
+                      {formatCurrency(product.sell_price)} • Stok:{" "}
                       {product.stock}
                     </span>
                   </div>
@@ -93,9 +94,8 @@ export function ProductForm({
           </Select>
         </div>
 
-        {/* Quantity Input */}
         <div className="space-y-2">
-          <Label>Quantity</Label>
+          <Label>Jumlah</Label>
           <Input
             type="number"
             min="1"
@@ -105,22 +105,21 @@ export function ProductForm({
           />
           {selectedProduct && (
             <p className="text-xs text-muted-foreground">
-              Available stock: {selectedProduct.stock} items
+              Stok tersedia: {selectedProduct.stock} item
             </p>
           )}
         </div>
 
-        {/* Price Preview */}
         {selectedProduct && (
           <div className="p-3 rounded-lg bg-background space-y-1">
             <div className="flex justify-between text-sm">
-              <span>Unit Price:</span>
+              <span>Harga Satuan:</span>
               <span className="font-medium">
                 {formatCurrency(selectedProduct.sell_price)}
               </span>
             </div>
             <div className="flex justify-between text-sm">
-              <span>Quantity:</span>
+              <span>Jumlah:</span>
               <span className="font-medium">{quantity}</span>
             </div>
             <div className="h-px bg-border my-2" />
@@ -136,10 +135,9 @@ export function ProductForm({
         )}
       </div>
 
-      {/* Action Buttons */}
       <div className="flex gap-2">
         <Button type="button" onClick={handleSubmit} className="flex-1">
-          Add Product
+          Tambah Produk
         </Button>
         <Button
           type="button"
@@ -147,7 +145,7 @@ export function ProductForm({
           onClick={onCancel}
           className="flex-1"
         >
-          Cancel
+          Batal
         </Button>
       </div>
     </div>

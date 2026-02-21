@@ -1,4 +1,5 @@
-import { useState, useEffect } from "react";
+// ServiceForm.tsx (create)
+import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -10,10 +11,9 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Alert, AlertDescription } from "@/components/ui/alert";
 import { CurrencyInput } from "@/components/ui/currency-input";
 import { LocationPicker } from "@/components/jobs/LocationPicker";
-import { MapPin, Info, Plus } from "lucide-react";
+import { MapPin, Plus } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import { QuickRegisterUnitModal } from "@/components/units/QuickRegisterUnitModal";
@@ -25,7 +25,7 @@ interface ServiceFormProps {
   customerName?: string;
   onSubmit: (service: Omit<ServiceItem, "id">) => void;
   onCancel: () => void;
-  onUnitsRefresh?: () => void;
+  onUnitsRefresh?: () => Promise<void> | void;
 }
 
 export function ServiceForm({
@@ -45,16 +45,20 @@ export function ServiceForm({
   });
   const [quickRegisterOpen, setQuickRegisterOpen] = useState(false);
 
+  // ✅ FIX: Simpan unit baru secara optimistic di local state.
+  // Tidak mengandalkan timing re-render parent setelah refetch —
+  // unit langsung tampil di dropdown begitu didaftarkan.
+  const [localUnits, setLocalUnits] = useState<Unit[]>([]);
+
   const handleSubmit = () => {
     if (!formData.title?.trim()) {
       toast({
         variant: "destructive",
-        title: "Validation Error",
-        description: "Service title is required",
+        title: "Judul Wajib Diisi",
+        description: "Masukkan judul layanan",
       });
       return;
     }
-
     onSubmit(formData as Omit<ServiceItem, "id">);
   };
 
@@ -62,58 +66,69 @@ export function ServiceForm({
     setFormData((prev) => ({ ...prev, [field]: value }));
   };
 
-  const handleUnitRegistered = (unitId: string) => {
-    // Auto-select the newly registered unit
+  const handleUnitRegistered = async (unitId: string) => {
+    // Fetch detail unit baru untuk ditampilkan di dropdown secara langsung
+    try {
+      const { data } = await supabase
+        .from("units")
+        .select("id, customer_id, unit_type, brand, model")
+        .eq("id", unitId)
+        .single();
+
+      if (data) {
+        // Tambahkan ke local list agar langsung muncul di dropdown
+        setLocalUnits((prev) => [...prev, data as Unit]);
+      }
+    } catch {
+      // Jika fetch gagal, tetap coba refetch parent
+    }
+
+    // Set unit yang baru sebagai selected
     updateField("unit_id", unitId);
 
-    // Refresh units list if callback provided
-    if (onUnitsRefresh) {
-      onUnitsRefresh();
-    }
-
-    toast({
-      title: "Unit Selected",
-      description: "The newly registered unit has been selected",
-    });
+    // Trigger refetch di background agar parent state juga sync
+    if (onUnitsRefresh) onUnitsRefresh();
   };
 
-  // Filter units by selected customer
-  const customerUnits = units.filter((unit) => {
-    if (customerId) {
-      return unit.customer_id === customerId;
-    }
-    return false;
-  });
+  // Gabungkan units dari parent + localUnits, deduplikasi berdasarkan id
+  const allUnits = [
+    ...units,
+    ...localUnits.filter((lu) => !units.some((u) => u.id === lu.id)),
+  ];
+
+  const customerUnits = allUnits.filter((unit) =>
+    customerId ? unit.customer_id === customerId : false,
+  );
 
   return (
     <div className="p-4 border rounded-lg space-y-4 bg-muted/50">
       <div className="grid grid-cols-2 gap-4">
-        {/* Service Title */}
+        {/* Judul Layanan */}
         <div className="col-span-2 space-y-2">
           <Label>
-            Service Title <span className="text-destructive">*</span>
+            Judul Layanan <span className="text-destructive">*</span>
           </Label>
           <Input
-            placeholder="e.g., AC Repair, Refrigerator Maintenance"
+            placeholder="Contoh: Servis AC, Perawatan Kulkas"
             value={formData.title || ""}
             onChange={(e) => updateField("title", e.target.value)}
           />
         </div>
 
-        {/* Description */}
+        {/* Deskripsi */}
         <div className="col-span-2 space-y-2">
-          <Label>Description</Label>
+          <Label>Deskripsi (Opsional)</Label>
           <Textarea
-            placeholder="Detailed service description..."
+            placeholder="Deskripsi detail layanan..."
             value={formData.description || ""}
             onChange={(e) => updateField("description", e.target.value)}
             rows={2}
           />
         </div>
 
-        {/* Unit Selection with Quick Register */}
+        {/* Pilih Unit */}
         <div className="space-y-2">
-          <Label>Unit (Optional)</Label>
+          <Label>Unit (Opsional)</Label>
           <div className="flex gap-2">
             <Select
               value={formData.unit_id || ""}
@@ -124,72 +139,65 @@ export function ServiceForm({
                 <SelectValue
                   placeholder={
                     !customerId
-                      ? "Select customer first"
+                      ? "Pilih pelanggan dulu"
                       : customerUnits.length === 0
-                        ? "No units found"
-                        : "Select unit"
+                        ? "Belum ada unit"
+                        : "Pilih unit"
                   }
                 />
               </SelectTrigger>
               <SelectContent>
                 {customerUnits.length === 0 ? (
                   <div className="px-2 py-3 text-xs text-muted-foreground text-center">
-                    No units registered for this customer
+                    Belum ada unit untuk pelanggan ini
                   </div>
                 ) : (
                   customerUnits.map((unit) => (
                     <SelectItem key={unit.id} value={unit.id}>
-                      {unit.unit_type} - {unit.brand || "Unknown Brand"}
+                      {unit.unit_type} - {unit.brand || "Merk Tidak Diketahui"}
                       {unit.model && ` (${unit.model})`}
                     </SelectItem>
                   ))
                 )}
               </SelectContent>
             </Select>
-
-            {/* Quick Register Button */}
             {customerId && (
               <Button
                 type="button"
                 variant="outline"
                 size="icon"
                 onClick={() => setQuickRegisterOpen(true)}
-                title="Quick register unit"
+                title="Daftarkan unit baru"
               >
                 <Plus className="h-4 w-4" />
               </Button>
             )}
           </div>
-
-          {/* Helper Text */}
           {!customerId ? (
             <p className="text-xs text-muted-foreground">
-              Please select a customer first
+              Pilih pelanggan terlebih dahulu
             </p>
           ) : customerUnits.length === 0 ? (
             <p className="text-xs text-muted-foreground flex items-center gap-1">
               <Plus className="h-3 w-3" />
-              No units found. Click + to register a new unit
+              Klik + untuk mendaftarkan unit baru
             </p>
           ) : null}
         </div>
 
-        {/* ⭐ REMOVED: Single Technician Assignment */}
-        {/* Now handled by multi-technician system after invoice creation */}
-
-        {/* Service Cost */}
+        {/* Biaya Layanan */}
         <CurrencyInput
-          label="Service Cost"
+          label="Biaya Layanan"
           value={formData.service_cost || 0}
           onValueChange={(value) => updateField("service_cost", value)}
           min={0}
           required
-          helperText="Service fee (excluding spare parts)"
+          helperText="Biaya jasa (tidak termasuk suku cadang)"
         />
 
-        {/* Priority */}
+        {/* Prioritas */}
         <div className="space-y-2">
-          <Label>Priority</Label>
+          <Label>Prioritas</Label>
           <Select
             value={formData.priority || "normal"}
             onValueChange={(value) => updateField("priority", value)}
@@ -198,17 +206,17 @@ export function ServiceForm({
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="low">Low</SelectItem>
+              <SelectItem value="low">Rendah</SelectItem>
               <SelectItem value="normal">Normal</SelectItem>
-              <SelectItem value="high">High</SelectItem>
-              <SelectItem value="urgent">Urgent</SelectItem>
+              <SelectItem value="high">Tinggi</SelectItem>
+              <SelectItem value="urgent">Mendesak</SelectItem>
             </SelectContent>
           </Select>
         </div>
 
-        {/* Estimated Duration */}
+        {/* Estimasi Durasi */}
         <div className="space-y-2">
-          <Label>Duration (minutes)</Label>
+          <Label>Estimasi Durasi (menit)</Label>
           <Input
             type="number"
             min="15"
@@ -220,9 +228,9 @@ export function ServiceForm({
           />
         </div>
 
-        {/* Scheduled Date */}
+        {/* Jadwal */}
         <div className="space-y-2 col-span-2">
-          <Label>Scheduled Date</Label>
+          <Label>Jadwal Layanan</Label>
           <Input
             type="datetime-local"
             value={formData.scheduled_date || ""}
@@ -230,22 +238,22 @@ export function ServiceForm({
           />
         </div>
 
-        {/* Service Address */}
+        {/* Alamat */}
         <div className="col-span-2 space-y-2">
-          <Label>Service Address</Label>
+          <Label>Alamat Lokasi Layanan</Label>
           <Textarea
-            placeholder="Enter service location address"
+            placeholder="Masukkan alamat lokasi layanan"
             value={formData.service_address || ""}
             onChange={(e) => updateField("service_address", e.target.value)}
             rows={2}
           />
         </div>
 
-        {/* GPS Location Picker */}
+        {/* GPS */}
         <div className="col-span-2 space-y-2">
           <Label className="flex items-center gap-2">
             <MapPin className="h-4 w-4" />
-            GPS Location (for check-in/out validation)
+            Lokasi GPS (untuk validasi check-in/out)
           </Label>
           <LocationPicker
             latitude={formData.service_latitude || null}
@@ -255,29 +263,14 @@ export function ServiceForm({
               updateField("service_latitude", lat || undefined);
               updateField("service_longitude", lng || undefined);
             }}
-            onAddressChange={(addr) => {
-              updateField("service_address", addr);
-            }}
+            onAddressChange={(addr) => updateField("service_address", addr)}
           />
-        </div>
-
-        {/* ⭐ NEW: Info about Team Assignment */}
-        <div className="col-span-2">
-          <Alert className="border-blue-200 bg-blue-50/30">
-            <Info className="h-4 w-4 text-blue-600" />
-            <AlertDescription className="text-xs text-blue-800">
-              <strong>Technician Assignment:</strong> You can assign multiple
-              technicians with different roles (Lead, Senior, Junior, Helper)
-              after creating the invoice in the Services tab.
-            </AlertDescription>
-          </Alert>
         </div>
       </div>
 
-      {/* Action Buttons */}
       <div className="flex gap-2">
         <Button type="button" onClick={handleSubmit} className="flex-1">
-          Add Service
+          Tambah Layanan
         </Button>
         <Button
           type="button"
@@ -285,11 +278,10 @@ export function ServiceForm({
           onClick={onCancel}
           className="flex-1"
         >
-          Cancel
+          Batal
         </Button>
       </div>
 
-      {/* Quick Register Modal */}
       <QuickRegisterUnitModal
         open={quickRegisterOpen}
         onOpenChange={setQuickRegisterOpen}

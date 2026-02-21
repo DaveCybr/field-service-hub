@@ -59,7 +59,7 @@ export function AdvancedFiltersPopover({
       <PopoverTrigger asChild>
         <Button variant="outline" className="relative">
           <SlidersHorizontal className="h-4 w-4 mr-2" />
-          Advanced
+          Filter Lanjutan
           {hasActiveFilters && (
             <span className="absolute -top-1 -right-1 h-4 w-4 bg-primary rounded-full text-[10px] text-primary-foreground flex items-center justify-center">
               {
@@ -76,19 +76,19 @@ export function AdvancedFiltersPopover({
       <PopoverContent className="w-80" align="end">
         <div className="space-y-4">
           <div>
-            <h4 className="font-medium mb-3">Advanced Filters</h4>
+            <h4 className="font-medium mb-3">Filter Lanjutan</h4>
           </div>
 
-          {/* Amount Range */}
+          {/* Rentang Nominal */}
           <div className="space-y-3">
-            <Label className="text-sm font-medium">Amount Range</Label>
+            <Label className="text-sm font-medium">Rentang Nominal</Label>
             <div className="grid grid-cols-2 gap-2">
               <div className="space-y-1">
                 <Label
                   htmlFor="minAmount"
                   className="text-xs text-muted-foreground"
                 >
-                  Min Amount
+                  Nominal Minimum
                 </Label>
                 <Input
                   id="minAmount"
@@ -110,7 +110,7 @@ export function AdvancedFiltersPopover({
                   htmlFor="maxAmount"
                   className="text-xs text-muted-foreground"
                 >
-                  Max Amount
+                  Nominal Maksimum
                 </Label>
                 <Input
                   id="maxAmount"
@@ -130,10 +130,10 @@ export function AdvancedFiltersPopover({
             </div>
           </div>
 
-          {/* Customer Filter */}
+          {/* Filter Pelanggan */}
           <div className="space-y-2">
             <Label htmlFor="customer" className="text-sm font-medium">
-              Customer
+              Pelanggan
             </Label>
             <Select
               value={localFilters.customerId || "all"}
@@ -145,10 +145,10 @@ export function AdvancedFiltersPopover({
               }
             >
               <SelectTrigger>
-                <SelectValue placeholder="All customers" />
+                <SelectValue placeholder="Semua pelanggan" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="all">All Customers</SelectItem>
+                <SelectItem value="all">Semua Pelanggan</SelectItem>
                 {customers.map((customer) => (
                   <SelectItem key={customer.id} value={customer.id}>
                     {customer.name}
@@ -158,7 +158,7 @@ export function AdvancedFiltersPopover({
             </Select>
           </div>
 
-          {/* Actions */}
+          {/* Aksi */}
           <div className="flex gap-2 pt-2">
             <Button
               variant="outline"
@@ -166,10 +166,10 @@ export function AdvancedFiltersPopover({
               onClick={handleClear}
               className="flex-1"
             >
-              Clear
+              Hapus
             </Button>
             <Button size="sm" onClick={handleApply} className="flex-1">
-              Apply
+              Terapkan
             </Button>
           </div>
         </div>

@@ -40,7 +40,6 @@ export function InvoiceStatsCards() {
       const monthStart = startOfMonth(now).toISOString();
       const monthEnd = endOfMonth(now).toISOString();
 
-      // ✅ FIX 1: Fetch ALL invoices (we'll filter in memory for better control)
       const { data: allInvoices, error } = await supabase
         .from("invoices")
         .select(
@@ -50,7 +49,6 @@ export function InvoiceStatsCards() {
 
       if (error) throw error;
 
-      // ✅ FIX 2: Filter by invoice_date for THIS MONTH (not created_at)
       const invoicesThisMonth =
         allInvoices?.filter((inv) => {
           const invoiceDate = new Date(inv.invoice_date);
@@ -60,11 +58,8 @@ export function InvoiceStatsCards() {
           );
         }) || [];
 
-      // Total invoices this month
       const totalThisMonth = invoicesThisMonth.length;
 
-      // ✅ FIX 3: Pending payments - ALL invoices (not just this month)
-      // Pending = invoices yang belum lunas (unpaid atau partial)
       const allPendingInvoices =
         allInvoices?.filter(
           (inv) =>
@@ -78,8 +73,6 @@ export function InvoiceStatsCards() {
 
       const pendingPaymentCount = allPendingInvoices.length;
 
-      // ✅ FIX 4: Overdue - ALL invoices (not just this month)
-      // Overdue = invoices yang sudah lewat due_date dan belum paid
       const overdueCount =
         allInvoices?.filter((inv) => {
           if (!inv.due_date) return false;
@@ -87,8 +80,6 @@ export function InvoiceStatsCards() {
           return isPast(new Date(inv.due_date));
         }).length || 0;
 
-      // ✅ FIX 5: Revenue THIS MONTH - use amount_paid (actual money received)
-      // Revenue = total uang yang diterima bulan ini
       const monthlyRevenue = invoicesThisMonth.reduce(
         (sum, inv) => sum + (inv.amount_paid || 0),
         0,
@@ -126,18 +117,16 @@ export function InvoiceStatsCards() {
 
   return (
     <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-      {/* Total Invoices This Month */}
+      {/* Total Faktur Bulan Ini */}
       <Card>
         <CardContent className="p-6">
           <div className="flex items-center justify-between space-x-4">
             <div className="flex-1">
               <p className="text-sm font-medium text-muted-foreground">
-                This Month
+                Bulan Ini
               </p>
               <p className="text-2xl font-bold">{stats.totalThisMonth}</p>
-              <p className="text-xs text-muted-foreground mt-1">
-                Total invoices
-              </p>
+              <p className="text-xs text-muted-foreground mt-1">Total faktur</p>
             </div>
             <div className="h-12 w-12 rounded-full bg-blue-100 flex items-center justify-center">
               <FileText className="h-6 w-6 text-blue-600" />
@@ -146,20 +135,19 @@ export function InvoiceStatsCards() {
         </CardContent>
       </Card>
 
-      {/* Pending Payment */}
+      {/* Menunggu Pembayaran */}
       <Card>
         <CardContent className="p-6">
           <div className="flex items-center justify-between space-x-4">
             <div className="flex-1">
               <p className="text-sm font-medium text-muted-foreground">
-                Pending Payment
+                Belum Lunas
               </p>
               <p className="text-2xl font-bold">
                 {formatCurrency(stats.pendingPaymentAmount)}
               </p>
               <p className="text-xs text-muted-foreground mt-1">
-                {stats.pendingPaymentCount} invoice
-                {stats.pendingPaymentCount !== 1 ? "s" : ""}
+                {stats.pendingPaymentCount} faktur
               </p>
             </div>
             <div className="h-12 w-12 rounded-full bg-amber-100 flex items-center justify-center">
@@ -169,19 +157,19 @@ export function InvoiceStatsCards() {
         </CardContent>
       </Card>
 
-      {/* Overdue */}
+      {/* Lewat Jatuh Tempo */}
       <Card>
         <CardContent className="p-6">
           <div className="flex items-center justify-between space-x-4">
             <div className="flex-1">
               <p className="text-sm font-medium text-muted-foreground">
-                Overdue
+                Jatuh Tempo
               </p>
               <p className="text-2xl font-bold text-destructive">
                 {stats.overdueCount}
               </p>
               <p className="text-xs text-muted-foreground mt-1">
-                Past due date
+                Melewati batas waktu
               </p>
             </div>
             <div className="h-12 w-12 rounded-full bg-red-100 flex items-center justify-center">
@@ -191,18 +179,18 @@ export function InvoiceStatsCards() {
         </CardContent>
       </Card>
 
-      {/* Monthly Revenue */}
+      {/* Pendapatan Bulan Ini */}
       <Card>
         <CardContent className="p-6">
           <div className="flex items-center justify-between space-x-4">
             <div className="flex-1">
               <p className="text-sm font-medium text-muted-foreground">
-                Revenue
+                Pendapatan
               </p>
               <p className="text-2xl font-bold text-emerald-600">
                 {formatCurrency(stats.monthlyRevenue)}
               </p>
-              <p className="text-xs text-muted-foreground mt-1">This month</p>
+              <p className="text-xs text-muted-foreground mt-1">Bulan ini</p>
             </div>
             <div className="h-12 w-12 rounded-full bg-emerald-100 flex items-center justify-center">
               <TrendingUp className="h-6 w-6 text-emerald-600" />

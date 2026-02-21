@@ -1,12 +1,12 @@
-import { useState, useCallback } from 'react';
-import FullCalendar from '@fullcalendar/react';
-import dayGridPlugin from '@fullcalendar/daygrid';
-import timeGridPlugin from '@fullcalendar/timegrid';
-import interactionPlugin from '@fullcalendar/interaction';
-import { EventDropArg, EventClickArg } from '@fullcalendar/core';
-import { useNavigate } from 'react-router-dom';
-import { supabase } from '@/integrations/supabase/client';
-import { useToast } from '@/hooks/use-toast';
+import { useState, useCallback } from "react";
+import FullCalendar from "@fullcalendar/react";
+import dayGridPlugin from "@fullcalendar/daygrid";
+import timeGridPlugin from "@fullcalendar/timegrid";
+import interactionPlugin from "@fullcalendar/interaction";
+import { EventDropArg, EventClickArg } from "@fullcalendar/core";
+import { useNavigate } from "react-router-dom";
+import { supabase } from "@/integrations/supabase/client";
+import { useToast } from "@/hooks/use-toast";
 import {
   Dialog,
   DialogContent,
@@ -14,9 +14,9 @@ import {
   DialogFooter,
   DialogHeader,
   DialogTitle,
-} from '@/components/ui/dialog';
-import { Button } from '@/components/ui/button';
-import { format } from 'date-fns';
+} from "@/components/ui/dialog";
+import { Button } from "@/components/ui/button";
+import { format } from "date-fns";
 
 interface Service {
   id: string;
@@ -47,33 +47,35 @@ interface RescheduleInfo {
 export default function JobCalendar({ jobs, onJobUpdated }: JobCalendarProps) {
   const navigate = useNavigate();
   const { toast } = useToast();
-  const [rescheduleInfo, setRescheduleInfo] = useState<RescheduleInfo | null>(null);
+  const [rescheduleInfo, setRescheduleInfo] = useState<RescheduleInfo | null>(
+    null,
+  );
   const [isRescheduling, setIsRescheduling] = useState(false);
 
   const getPriorityColor = (priority: string) => {
     const colors: Record<string, string> = {
-      low: 'hsl(var(--chart-4))',
-      normal: 'hsl(var(--chart-2))',
-      high: 'hsl(var(--chart-3))',
-      urgent: 'hsl(var(--destructive))',
+      low: "hsl(var(--chart-4))",
+      normal: "hsl(var(--chart-2))",
+      high: "hsl(var(--chart-3))",
+      urgent: "hsl(var(--destructive))",
     };
-    return colors[priority] || 'hsl(var(--primary))';
+    return colors[priority] || "hsl(var(--primary))";
   };
 
   const getStatusBorderColor = (status: string) => {
     const colors: Record<string, string> = {
-      pending: 'hsl(var(--muted-foreground))',
-      assigned: 'hsl(var(--chart-1))',
-      in_progress: 'hsl(var(--chart-3))',
-      completed: 'hsl(var(--chart-4))',
-      cancelled: 'hsl(var(--destructive))',
+      pending: "hsl(var(--muted-foreground))",
+      assigned: "hsl(var(--chart-1))",
+      in_progress: "hsl(var(--chart-3))",
+      completed: "hsl(var(--chart-4))",
+      cancelled: "hsl(var(--destructive))",
     };
-    return colors[status] || 'hsl(var(--border))';
+    return colors[status] || "hsl(var(--border))";
   };
 
   const events = jobs
-    .filter(job => job.scheduled_date)
-    .map(job => ({
+    .filter((job) => job.scheduled_date)
+    .map((job) => ({
       id: job.id,
       title: `${job.invoice_number} - ${job.title}`,
       start: job.scheduled_date!,
@@ -90,23 +92,29 @@ export default function JobCalendar({ jobs, onJobUpdated }: JobCalendarProps) {
       },
     }));
 
-  const handleEventClick = useCallback((info: EventClickArg) => {
-    const invoiceId = info.event.extendedProps.invoice_id;
-    navigate(`/invoices/${invoiceId}`);
-  }, [navigate]);
+  const handleEventClick = useCallback(
+    (info: EventClickArg) => {
+      const invoiceId = info.event.extendedProps.invoice_id;
+      navigate(`/invoices/${invoiceId}`);
+    },
+    [navigate],
+  );
 
-  const handleEventDrop = useCallback((info: EventDropArg) => {
-    const job = jobs.find(j => j.id === info.event.id);
-    if (!job) return;
+  const handleEventDrop = useCallback(
+    (info: EventDropArg) => {
+      const job = jobs.find((j) => j.id === info.event.id);
+      if (!job) return;
 
-    setRescheduleInfo({
-      serviceId: info.event.id,
-      invoiceNumber: job.invoice_number,
-      title: job.title,
-      oldDate: info.oldEvent.start!,
-      newDate: info.event.start!,
-    });
-  }, [jobs]);
+      setRescheduleInfo({
+        serviceId: info.event.id,
+        invoiceNumber: job.invoice_number,
+        title: job.title,
+        oldDate: info.oldEvent.start!,
+        newDate: info.event.start!,
+      });
+    },
+    [jobs],
+  );
 
   const confirmReschedule = async () => {
     if (!rescheduleInfo) return;
@@ -114,24 +122,24 @@ export default function JobCalendar({ jobs, onJobUpdated }: JobCalendarProps) {
     setIsRescheduling(true);
     try {
       const { error } = await supabase
-        .from('invoice_services')
+        .from("invoice_services")
         .update({ scheduled_date: rescheduleInfo.newDate.toISOString() })
-        .eq('id', rescheduleInfo.serviceId);
+        .eq("id", rescheduleInfo.serviceId);
 
       if (error) throw error;
 
       toast({
-        title: 'Service Rescheduled',
-        description: `Service moved to ${format(rescheduleInfo.newDate, 'MMM d, yyyy')}`,
+        title: "Jadwal Diperbarui",
+        description: `Service dipindahkan ke ${format(rescheduleInfo.newDate, "dd MMM yyyy")}`,
       });
 
       onJobUpdated();
     } catch (error) {
-      console.error('Error rescheduling service:', error);
+      console.error("Error memperbarui jadwal:", error);
       toast({
-        variant: 'destructive',
-        title: 'Reschedule Failed',
-        description: 'Failed to reschedule the service. Please try again.',
+        variant: "destructive",
+        title: "Gagal Memperbarui Jadwal",
+        description: "Gagal memperbarui jadwal service. Silakan coba lagi.",
       });
       onJobUpdated();
     } finally {
@@ -171,9 +179,14 @@ export default function JobCalendar({ jobs, onJobUpdated }: JobCalendarProps) {
           plugins={[dayGridPlugin, timeGridPlugin, interactionPlugin]}
           initialView="dayGridMonth"
           headerToolbar={{
-            left: 'prev,next today',
-            center: 'title',
-            right: 'dayGridMonth,timeGridWeek',
+            left: "prev,next today",
+            center: "title",
+            right: "dayGridMonth,timeGridWeek",
+          }}
+          buttonText={{
+            today: "Hari Ini",
+            month: "Bulan",
+            week: "Minggu",
           }}
           events={events}
           editable={true}
@@ -184,23 +197,27 @@ export default function JobCalendar({ jobs, onJobUpdated }: JobCalendarProps) {
           height="auto"
           dayMaxEvents={3}
           moreLinkClick="popover"
+          locale="id"
         />
       </div>
 
-      <Dialog open={!!rescheduleInfo} onOpenChange={(open) => !open && cancelReschedule()}>
+      <Dialog
+        open={!!rescheduleInfo}
+        onOpenChange={(open) => !open && cancelReschedule()}
+      >
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Confirm Reschedule</DialogTitle>
+            <DialogTitle>Konfirmasi Ubah Jadwal</DialogTitle>
             <DialogDescription>
-              Are you sure you want to reschedule this service?
+              Apakah Anda yakin ingin mengubah jadwal service ini?
             </DialogDescription>
           </DialogHeader>
-          
+
           {rescheduleInfo && (
             <div className="space-y-4 py-4">
               <div className="grid grid-cols-2 gap-4 text-sm">
                 <div>
-                  <span className="text-muted-foreground">Invoice:</span>
+                  <span className="text-muted-foreground">Faktur:</span>
                   <p className="font-medium">{rescheduleInfo.invoiceNumber}</p>
                 </div>
                 <div>
@@ -208,19 +225,21 @@ export default function JobCalendar({ jobs, onJobUpdated }: JobCalendarProps) {
                   <p className="font-medium">{rescheduleInfo.title}</p>
                 </div>
               </div>
-              
+
               <div className="flex items-center gap-4">
                 <div className="flex-1 p-3 rounded-lg bg-muted">
-                  <span className="text-xs text-muted-foreground block">From</span>
+                  <span className="text-xs text-muted-foreground block">
+                    Dari
+                  </span>
                   <span className="font-medium">
-                    {format(rescheduleInfo.oldDate, 'EEEE, MMM d, yyyy')}
+                    {format(rescheduleInfo.oldDate, "EEEE, dd MMM yyyy")}
                   </span>
                 </div>
                 <span className="text-muted-foreground">→</span>
                 <div className="flex-1 p-3 rounded-lg bg-primary/10 border border-primary/20">
-                  <span className="text-xs text-primary block">To</span>
+                  <span className="text-xs text-primary block">Ke</span>
                   <span className="font-medium text-primary">
-                    {format(rescheduleInfo.newDate, 'EEEE, MMM d, yyyy')}
+                    {format(rescheduleInfo.newDate, "EEEE, dd MMM yyyy")}
                   </span>
                 </div>
               </div>
@@ -228,11 +247,15 @@ export default function JobCalendar({ jobs, onJobUpdated }: JobCalendarProps) {
           )}
 
           <DialogFooter>
-            <Button variant="outline" onClick={cancelReschedule} disabled={isRescheduling}>
-              Cancel
+            <Button
+              variant="outline"
+              onClick={cancelReschedule}
+              disabled={isRescheduling}
+            >
+              Batal
             </Button>
             <Button onClick={confirmReschedule} disabled={isRescheduling}>
-              {isRescheduling ? 'Rescheduling...' : 'Confirm'}
+              {isRescheduling ? "Menyimpan..." : "Konfirmasi"}
             </Button>
           </DialogFooter>
         </DialogContent>

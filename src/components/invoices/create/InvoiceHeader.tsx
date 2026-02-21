@@ -1,3 +1,4 @@
+// InvoiceHeader.tsx (create)
 import { Button } from "@/components/ui/button";
 import { ArrowLeft } from "lucide-react";
 import { Link } from "react-router-dom";
@@ -11,11 +12,9 @@ export function InvoiceHeader() {
         </Link>
       </Button>
       <div>
-        <h1 className="text-2xl font-bold tracking-tight">
-          Create New Invoice
-        </h1>
+        <h1 className="text-2xl font-bold tracking-tight">Buat Faktur Baru</h1>
         <p className="text-muted-foreground">
-          Add services and products to create a new invoice transaction
+          Tambahkan layanan dan produk untuk membuat faktur transaksi baru
         </p>
       </div>
     </div>

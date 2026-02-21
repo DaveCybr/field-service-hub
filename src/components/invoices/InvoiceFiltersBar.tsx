@@ -15,8 +15,9 @@ import {
 } from "@/components/ui/popover";
 import { Calendar } from "@/components/ui/calendar";
 import { Badge } from "@/components/ui/badge";
-import { Search, Calendar as CalendarIcon, X, Filter } from "lucide-react";
+import { Search, Calendar as CalendarIcon, X } from "lucide-react";
 import { format } from "date-fns";
+import { id as localeId } from "date-fns/locale";
 import { cn } from "@/lib/utils";
 import { DateRange } from "react-day-picker";
 import { AdvancedFiltersPopover } from "./AdvancedFiltersPopover";
@@ -35,8 +36,24 @@ interface InvoiceFiltersBarProps {
   filters: InvoiceFilters;
   onFiltersChange: (filters: InvoiceFilters) => void;
   onClearFilters: () => void;
-  customers: Array<{ id: string; name: string }>; // NEW
+  customers: Array<{ id: string; name: string }>;
 }
+
+const STATUS_LABELS: Record<string, string> = {
+  draft: "Draft",
+  pending: "Menunggu",
+  assigned: "Ditugaskan",
+  in_progress: "Sedang Dikerjakan",
+  completed: "Selesai",
+  paid: "Lunas",
+  cancelled: "Dibatalkan",
+};
+
+const PAYMENT_LABELS: Record<string, string> = {
+  unpaid: "Belum Bayar",
+  partial: "Bayar Sebagian",
+  paid: "Lunas",
+};
 
 export function InvoiceFiltersBar({
   filters,
@@ -45,7 +62,7 @@ export function InvoiceFiltersBar({
   customers,
 }: InvoiceFiltersBarProps) {
   const [dateRange, setDateRange] = useState<DateRange | undefined>(
-    filters.dateRange
+    filters.dateRange,
   );
 
   const updateFilter = (key: keyof InvoiceFilters, value: any) => {
@@ -67,20 +84,20 @@ export function InvoiceFiltersBar({
 
   return (
     <div className="space-y-4">
-      {/* Main Filters Row */}
+      {/* Baris Filter Utama */}
       <div className="flex flex-col gap-4 md:flex-row md:items-center">
-        {/* Search */}
+        {/* Pencarian */}
         <div className="relative flex-1 md:max-w-sm">
           <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
           <Input
-            placeholder="Search invoice # or customer..."
+            placeholder="Cari no. faktur atau pelanggan..."
             value={filters.search}
             onChange={(e) => updateFilter("search", e.target.value)}
             className="pl-10"
           />
         </div>
 
-        {/* Status Filter */}
+        {/* Filter Status */}
         <Select
           value={filters.status}
           onValueChange={(value) => updateFilter("status", value)}
@@ -89,54 +106,57 @@ export function InvoiceFiltersBar({
             <SelectValue placeholder="Status" />
           </SelectTrigger>
           <SelectContent>
-            <SelectItem value="all">All Status</SelectItem>
+            <SelectItem value="all">Semua Status</SelectItem>
             <SelectItem value="draft">Draft</SelectItem>
-            <SelectItem value="pending">Pending</SelectItem>
-            <SelectItem value="in_progress">In Progress</SelectItem>
-            <SelectItem value="completed">Completed</SelectItem>
-            <SelectItem value="paid">Paid</SelectItem>
-            <SelectItem value="cancelled">Cancelled</SelectItem>
+            <SelectItem value="pending">Menunggu</SelectItem>
+            <SelectItem value="in_progress">Sedang Dikerjakan</SelectItem>
+            <SelectItem value="completed">Selesai</SelectItem>
+            <SelectItem value="paid">Lunas</SelectItem>
+            <SelectItem value="cancelled">Dibatalkan</SelectItem>
           </SelectContent>
         </Select>
 
-        {/* Payment Status Filter */}
+        {/* Filter Status Pembayaran */}
         <Select
           value={filters.paymentStatus}
           onValueChange={(value) => updateFilter("paymentStatus", value)}
         >
           <SelectTrigger className="w-full md:w-[180px]">
-            <SelectValue placeholder="Payment" />
+            <SelectValue placeholder="Pembayaran" />
           </SelectTrigger>
           <SelectContent>
-            <SelectItem value="all">All Payment</SelectItem>
-            <SelectItem value="unpaid">Unpaid</SelectItem>
-            <SelectItem value="partial">Partial</SelectItem>
-            <SelectItem value="paid">Paid</SelectItem>
+            <SelectItem value="all">Semua Pembayaran</SelectItem>
+            <SelectItem value="unpaid">Belum Bayar</SelectItem>
+            <SelectItem value="partial">Bayar Sebagian</SelectItem>
+            <SelectItem value="paid">Lunas</SelectItem>
           </SelectContent>
         </Select>
 
-        {/* Date Range Picker */}
+        {/* Pilih Rentang Tanggal */}
         <Popover>
           <PopoverTrigger asChild>
             <Button
               variant="outline"
               className={cn(
                 "w-full md:w-[280px] justify-start text-left font-normal",
-                !dateRange && "text-muted-foreground"
+                !dateRange && "text-muted-foreground",
               )}
             >
               <CalendarIcon className="mr-2 h-4 w-4" />
               {dateRange?.from ? (
                 dateRange.to ? (
                   <>
-                    {format(dateRange.from, "LLL dd, y")} -{" "}
-                    {format(dateRange.to, "LLL dd, y")}
+                    {format(dateRange.from, "dd MMM yyyy", {
+                      locale: localeId,
+                    })}{" "}
+                    -{" "}
+                    {format(dateRange.to, "dd MMM yyyy", { locale: localeId })}
                   </>
                 ) : (
-                  format(dateRange.from, "LLL dd, y")
+                  format(dateRange.from, "dd MMM yyyy", { locale: localeId })
                 )
               ) : (
-                <span>Pick a date range</span>
+                <span>Pilih rentang tanggal</span>
               )}
             </Button>
           </PopoverTrigger>
@@ -151,6 +171,7 @@ export function InvoiceFiltersBar({
                 updateFilter("dateRange", range);
               }}
               numberOfMonths={2}
+              locale={localeId}
             />
           </PopoverContent>
         </Popover>
@@ -162,15 +183,12 @@ export function InvoiceFiltersBar({
             customerId: filters.customerId,
           }}
           onFiltersChange={(advancedFilters) => {
-            onFiltersChange({
-              ...filters,
-              ...advancedFilters,
-            });
+            onFiltersChange({ ...filters, ...advancedFilters });
           }}
           customers={customers}
         />
 
-        {/* Clear Filters */}
+        {/* Hapus Filter */}
         {hasActiveFilters && (
           <Button
             variant="ghost"
@@ -179,7 +197,7 @@ export function InvoiceFiltersBar({
             className="shrink-0"
           >
             <X className="mr-2 h-4 w-4" />
-            Clear
+            Hapus Filter
             {activeFilterCount > 0 && (
               <Badge variant="secondary" className="ml-2">
                 {activeFilterCount}
@@ -189,12 +207,12 @@ export function InvoiceFiltersBar({
         )}
       </div>
 
-      {/* Active Filters Display */}
+      {/* Tampilan Filter Aktif */}
       {hasActiveFilters && (
         <div className="flex flex-wrap gap-2">
           {filters.search && (
             <Badge variant="secondary" className="gap-1">
-              Search: {filters.search}
+              Cari: {filters.search}
               <X
                 className="h-3 w-3 cursor-pointer"
                 onClick={() => updateFilter("search", "")}
@@ -203,7 +221,7 @@ export function InvoiceFiltersBar({
           )}
           {filters.status !== "all" && (
             <Badge variant="secondary" className="gap-1">
-              Status: {filters.status}
+              Status: {STATUS_LABELS[filters.status] || filters.status}
               <X
                 className="h-3 w-3 cursor-pointer"
                 onClick={() => updateFilter("status", "all")}
@@ -212,7 +230,8 @@ export function InvoiceFiltersBar({
           )}
           {filters.paymentStatus !== "all" && (
             <Badge variant="secondary" className="gap-1">
-              Payment: {filters.paymentStatus}
+              Pembayaran:{" "}
+              {PAYMENT_LABELS[filters.paymentStatus] || filters.paymentStatus}
               <X
                 className="h-3 w-3 cursor-pointer"
                 onClick={() => updateFilter("paymentStatus", "all")}
@@ -221,8 +240,11 @@ export function InvoiceFiltersBar({
           )}
           {filters.dateRange && (
             <Badge variant="secondary" className="gap-1">
-              Date: {format(filters.dateRange.from!, "MMM dd")} -{" "}
-              {filters.dateRange.to && format(filters.dateRange.to, "MMM dd")}
+              Tanggal:{" "}
+              {format(filters.dateRange.from!, "dd MMM", { locale: localeId })}{" "}
+              -{" "}
+              {filters.dateRange.to &&
+                format(filters.dateRange.to, "dd MMM", { locale: localeId })}
               <X
                 className="h-3 w-3 cursor-pointer"
                 onClick={() => updateFilter("dateRange", undefined)}
@@ -231,7 +253,7 @@ export function InvoiceFiltersBar({
           )}
           {filters.minAmount !== undefined && (
             <Badge variant="secondary" className="gap-1">
-              Min: Rp {filters.minAmount.toLocaleString()}
+              Min: Rp {filters.minAmount.toLocaleString("id-ID")}
               <X
                 className="h-3 w-3 cursor-pointer"
                 onClick={() =>
@@ -240,10 +262,9 @@ export function InvoiceFiltersBar({
               />
             </Badge>
           )}
-
           {filters.maxAmount !== undefined && (
             <Badge variant="secondary" className="gap-1">
-              Max: Rp {filters.maxAmount.toLocaleString()}
+              Maks: Rp {filters.maxAmount.toLocaleString("id-ID")}
               <X
                 className="h-3 w-3 cursor-pointer"
                 onClick={() =>
@@ -252,10 +273,9 @@ export function InvoiceFiltersBar({
               />
             </Badge>
           )}
-
           {filters.customerId && (
             <Badge variant="secondary" className="gap-1">
-              Customer:{" "}
+              Pelanggan:{" "}
               {customers.find((c) => c.id === filters.customerId)?.name}
               <X
                 className="h-3 w-3 cursor-pointer"

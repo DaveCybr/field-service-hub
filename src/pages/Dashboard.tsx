@@ -1,4 +1,4 @@
-// Dashboard.tsx - Main dashboard for Admin/Manager
+// Dashboard.tsx - Dashboard utama untuk Admin/Manager
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
@@ -100,7 +100,7 @@ export default function Dashboard() {
         fetchTechnicians(),
       ]);
     } catch (error) {
-      console.error("Error fetching dashboard data:", error);
+      console.error("Error mengambil data dashboard:", error);
     } finally {
       setLoading(false);
     }
@@ -112,38 +112,38 @@ export default function Dashboard() {
       today.setHours(0, 0, 0, 0);
       const startOfMonth = new Date(today.getFullYear(), today.getMonth(), 1);
 
-      // Today's revenue
+      // Pendapatan hari ini
       const { data: todayInvoices } = await supabase
         .from("invoices")
         .select("grand_total")
         .gte("created_at", today.toISOString())
         .in("payment_status", ["paid", "partial"]);
 
-      // Monthly revenue
+      // Pendapatan bulanan
       const { data: monthlyInvoices } = await supabase
         .from("invoices")
         .select("grand_total")
         .gte("created_at", startOfMonth.toISOString())
         .in("payment_status", ["paid", "partial"]);
 
-      // Total customers
+      // Total pelanggan
       const { count: customersCount } = await supabase
         .from("customers")
         .select("*", { count: "exact", head: true });
 
-      // Active jobs (assigned + in_progress)
+      // Pekerjaan aktif (assigned + in_progress)
       const { count: activeJobsCount } = await supabase
         .from("invoice_services")
         .select("*", { count: "exact", head: true })
         .in("status", ["assigned", "in_progress"]);
 
-      // Pending jobs
+      // Pekerjaan tertunda
       const { count: pendingJobsCount } = await supabase
         .from("invoice_services")
         .select("*", { count: "exact", head: true })
         .eq("status", "pending");
 
-      // Completed jobs today
+      // Pekerjaan selesai hari ini
       const { count: completedTodayCount } = await supabase
         .from("invoice_services")
         .select("*", { count: "exact", head: true })
@@ -167,7 +167,7 @@ export default function Dashboard() {
         completedJobsToday: completedTodayCount || 0,
       });
     } catch (error) {
-      console.error("Error fetching stats:", error);
+      console.error("Error mengambil statistik:", error);
     }
   };
 
@@ -183,7 +183,7 @@ export default function Dashboard() {
 
       setRecentInvoices(data || []);
     } catch (error) {
-      console.error("Error fetching recent invoices:", error);
+      console.error("Error mengambil faktur terbaru:", error);
     }
   };
 
@@ -209,7 +209,7 @@ export default function Dashboard() {
 
       setPendingJobs(data || []);
     } catch (error) {
-      console.error("Error fetching pending jobs:", error);
+      console.error("Error mengambil pekerjaan tertunda:", error);
     }
   };
 
@@ -228,7 +228,7 @@ export default function Dashboard() {
 
       setStockAlerts(data || []);
     } catch (error) {
-      console.error("Error fetching stock alerts:", error);
+      console.error("Error mengambil peringatan stok:", error);
     }
   };
 
@@ -254,22 +254,31 @@ export default function Dashboard() {
 
       setTechnicians(techsWithCount);
     } catch (error) {
-      console.error("Error fetching technicians:", error);
+      console.error("Error mengambil data teknisi:", error);
     }
   };
 
   const getPaymentStatusBadge = (status: string) => {
     const config: Record<string, { label: string; className: string }> = {
-      paid: { label: "Paid", className: "bg-green-100 text-green-800" },
-      partial: { label: "Partial", className: "bg-yellow-100 text-yellow-800" },
-      pending: { label: "Pending", className: "bg-gray-100 text-gray-800" },
-      overdue: { label: "Overdue", className: "bg-red-100 text-red-800" },
+      paid: { label: "Lunas", className: "bg-green-100 text-green-800" },
+      partial: {
+        label: "Sebagian",
+        className: "bg-yellow-100 text-yellow-800",
+      },
+      pending: { label: "Tertunda", className: "bg-gray-100 text-gray-800" },
+      overdue: { label: "Jatuh Tempo", className: "bg-red-100 text-red-800" },
     };
     const { label, className } = config[status] || config.pending;
     return <Badge className={className}>{label}</Badge>;
   };
 
   const getPriorityBadge = (priority: string) => {
+    const priorityLabels: Record<string, string> = {
+      urgent: "MENDESAK",
+      high: "TINGGI",
+      normal: "NORMAL",
+      low: "RENDAH",
+    };
     const config: Record<string, { className: string }> = {
       urgent: { className: "bg-red-100 text-red-800" },
       high: { className: "bg-orange-100 text-orange-800" },
@@ -277,7 +286,11 @@ export default function Dashboard() {
       low: { className: "bg-gray-100 text-gray-800" },
     };
     const { className } = config[priority] || config.normal;
-    return <Badge className={className}>{priority.toUpperCase()}</Badge>;
+    return (
+      <Badge className={className}>
+        {priorityLabels[priority] || priority.toUpperCase()}
+      </Badge>
+    );
   };
 
   if (loading) {
@@ -297,26 +310,26 @@ export default function Dashboard() {
         <div className="flex items-center justify-between">
           <div>
             <h1 className="text-3xl font-bold tracking-tight">
-              Welcome back, {employee?.name}!
+              Selamat datang, {employee?.name}!
             </h1>
             <p className="text-muted-foreground mt-1">
-              Here's what's happening with your business today
+              Berikut ringkasan aktivitas bisnis Anda hari ini
             </p>
           </div>
           <Button onClick={() => navigate("/invoices/new")}>
             <Plus className="mr-2 h-4 w-4" />
-            New Invoice
+            Faktur Baru
           </Button>
         </div>
 
-        {/* Stats Cards */}
+        {/* Kartu Statistik */}
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
           <Card>
             <CardContent className="p-6">
               <div className="flex items-center justify-between">
                 <div>
                   <p className="text-sm font-medium text-muted-foreground">
-                    Today's Revenue
+                    Pendapatan Hari Ini
                   </p>
                   <p className="text-2xl font-bold mt-1">
                     {formatCurrency(stats.todayRevenue)}
@@ -334,7 +347,7 @@ export default function Dashboard() {
               <div className="flex items-center justify-between">
                 <div>
                   <p className="text-sm font-medium text-muted-foreground">
-                    Monthly Revenue
+                    Pendapatan Bulanan
                   </p>
                   <p className="text-2xl font-bold mt-1">
                     {formatCurrency(stats.monthlyRevenue)}
@@ -352,11 +365,11 @@ export default function Dashboard() {
               <div className="flex items-center justify-between">
                 <div>
                   <p className="text-sm font-medium text-muted-foreground">
-                    Active Jobs
+                    Pekerjaan Aktif
                   </p>
                   <p className="text-2xl font-bold mt-1">{stats.activeJobs}</p>
                   <p className="text-xs text-muted-foreground mt-1">
-                    {stats.pendingJobs} pending
+                    {stats.pendingJobs} tertunda
                   </p>
                 </div>
                 <div className="rounded-lg p-3 bg-purple-100">
@@ -371,13 +384,13 @@ export default function Dashboard() {
               <div className="flex items-center justify-between">
                 <div>
                   <p className="text-sm font-medium text-muted-foreground">
-                    Total Customers
+                    Total Pelanggan
                   </p>
                   <p className="text-2xl font-bold mt-1">
                     {stats.totalCustomers}
                   </p>
                   <p className="text-xs text-muted-foreground mt-1">
-                    {stats.completedJobsToday} jobs done today
+                    {stats.completedJobsToday} pekerjaan selesai hari ini
                   </p>
                 </div>
                 <div className="rounded-lg p-3 bg-amber-100">
@@ -388,27 +401,27 @@ export default function Dashboard() {
           </Card>
         </div>
 
-        {/* Two Columns */}
+        {/* Dua Kolom */}
         <div className="grid gap-6 lg:grid-cols-2">
-          {/* Recent Invoices */}
+          {/* Faktur Terbaru */}
           <Card>
             <CardHeader className="flex flex-row items-center justify-between pb-2">
               <CardTitle className="text-base font-semibold">
-                Recent Invoices
+                Faktur Terbaru
               </CardTitle>
               <Button
                 variant="ghost"
                 size="sm"
                 onClick={() => navigate("/invoices")}
               >
-                View All
+                Lihat Semua
                 <ArrowRight className="ml-1 h-4 w-4" />
               </Button>
             </CardHeader>
             <CardContent>
               {recentInvoices.length === 0 ? (
                 <p className="text-sm text-muted-foreground py-4 text-center">
-                  No invoices yet
+                  Belum ada faktur
                 </p>
               ) : (
                 <div className="space-y-3">
@@ -441,12 +454,12 @@ export default function Dashboard() {
             </CardContent>
           </Card>
 
-          {/* Pending Jobs */}
+          {/* Pekerjaan Tertunda */}
           <Card>
             <CardHeader className="flex flex-row items-center justify-between pb-2">
               <CardTitle className="text-base font-semibold">
                 <div className="flex items-center gap-2">
-                  Pending Jobs
+                  Pekerjaan Tertunda
                   {stats.pendingJobs > 0 && (
                     <Badge variant="destructive">{stats.pendingJobs}</Badge>
                   )}
@@ -457,7 +470,7 @@ export default function Dashboard() {
                 size="sm"
                 onClick={() => navigate("/jobs?status=pending")}
               >
-                View All
+                Lihat Semua
                 <ArrowRight className="ml-1 h-4 w-4" />
               </Button>
             </CardHeader>
@@ -466,7 +479,7 @@ export default function Dashboard() {
                 <div className="text-center py-8">
                   <CheckCircle2 className="h-10 w-10 mx-auto text-green-500 mb-2" />
                   <p className="text-sm text-muted-foreground">
-                    All jobs assigned!
+                    Semua pekerjaan sudah ditugaskan!
                   </p>
                 </div>
               ) : (
@@ -496,14 +509,14 @@ export default function Dashboard() {
           </Card>
         </div>
 
-        {/* Bottom Row */}
+        {/* Baris Bawah */}
         <div className="grid gap-6 lg:grid-cols-2">
-          {/* Stock Alerts */}
+          {/* Peringatan Stok */}
           <Card>
             <CardHeader className="flex flex-row items-center justify-between pb-2">
               <CardTitle className="text-base font-semibold">
                 <div className="flex items-center gap-2">
-                  Low Stock Alerts
+                  Peringatan Stok Menipis
                   {stockAlerts.length > 0 && (
                     <Badge variant="destructive">{stockAlerts.length}</Badge>
                   )}
@@ -514,7 +527,7 @@ export default function Dashboard() {
                 size="sm"
                 onClick={() => navigate("/inventory")}
               >
-                View All
+                Lihat Semua
                 <ArrowRight className="ml-1 h-4 w-4" />
               </Button>
             </CardHeader>
@@ -523,7 +536,7 @@ export default function Dashboard() {
                 <div className="text-center py-8">
                   <Package className="h-10 w-10 mx-auto text-green-500 mb-2" />
                   <p className="text-sm text-muted-foreground">
-                    All stock levels good!
+                    Semua stok dalam kondisi baik!
                   </p>
                 </div>
               ) : (
@@ -540,7 +553,7 @@ export default function Dashboard() {
                             {alert.product.name}
                           </p>
                           <p className="text-xs text-muted-foreground">
-                            Current: {alert.product.stock} | Min:{" "}
+                            Saat ini: {alert.product.stock} | Min:{" "}
                             {alert.product.min_stock_threshold}
                           </p>
                         </div>
@@ -552,25 +565,25 @@ export default function Dashboard() {
             </CardContent>
           </Card>
 
-          {/* Technician Status */}
+          {/* Status Teknisi */}
           <Card>
             <CardHeader className="flex flex-row items-center justify-between pb-2">
               <CardTitle className="text-base font-semibold">
-                Technician Status
+                Status Teknisi
               </CardTitle>
               <Button
                 variant="ghost"
                 size="sm"
                 onClick={() => navigate("/technicians")}
               >
-                View All
+                Lihat Semua
                 <ArrowRight className="ml-1 h-4 w-4" />
               </Button>
             </CardHeader>
             <CardContent>
               {technicians.length === 0 ? (
                 <p className="text-sm text-muted-foreground py-4 text-center">
-                  No technicians yet
+                  Belum ada teknisi
                 </p>
               ) : (
                 <div className="space-y-2">
@@ -596,12 +609,12 @@ export default function Dashboard() {
                             className="text-green-600 border-green-600"
                           >
                             <UserCheck className="h-3 w-3 mr-1" />
-                            Available
+                            Tersedia
                           </Badge>
                         ) : (
                           <Badge variant="secondary">
                             <Clock className="h-3 w-3 mr-1" />
-                            {tech.active_jobs_count} active
+                            {tech.active_jobs_count} aktif
                           </Badge>
                         )}
                       </div>

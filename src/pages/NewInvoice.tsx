@@ -1,4 +1,5 @@
-import { useState, useEffect } from "react";
+// NewInvoice.tsx - Layout 2 kolom: kiri konten utama, kanan sticky sidebar
+import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
@@ -6,26 +7,22 @@ import { useAuditLog } from "@/hooks/useAuditLog";
 import { useToast } from "@/hooks/use-toast";
 import DashboardLayout from "@/components/layout/DashboardLayout";
 import { Button } from "@/components/ui/button";
-import { Card } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
+import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
 import { Separator } from "@/components/ui/separator";
-import { ArrowLeft, Loader2 } from "lucide-react";
+import { Loader2, ArrowLeft } from "lucide-react";
 import { Link } from "react-router-dom";
+import { CurrencyInput } from "@/components/ui/currency-input";
+import { formatCurrency } from "@/lib/utils/currency";
 
-// Components
-import { InvoiceHeader } from "@/components/invoices/create/InvoiceHeader";
 import { CustomerSection } from "@/components/invoices/create/CustomerSection";
-import { InvoiceSettings } from "@/components/invoices/create/InvoiceSetting";
 import { ServicesSection } from "@/components/invoices/create/ServiceSection";
 import { ProductsSection } from "@/components/invoices/create/ProductSection";
-import { InvoiceSummary } from "@/components/invoices/create/InvoiceSummary";
 
-// Hooks
 import { useInvoiceData } from "@/hooks/invoices/useInvoiceData";
 import { useInvoiceServices } from "@/hooks/invoices/useInvoiceService";
 import { useInvoiceProducts } from "@/hooks/invoices/useInvoiceProduct";
-
-// Types
-import type { Customer, Unit, Product, Technician } from "@/types/invoice";
 
 export default function NewInvoice() {
   const navigate = useNavigate();
@@ -33,67 +30,70 @@ export default function NewInvoice() {
   const { log: auditLog } = useAuditLog();
   const { toast } = useToast();
 
-  // Data loading
   const {
     customers,
     units,
     products,
     technicians,
     loading: dataLoading,
+    refetch,
   } = useInvoiceData();
 
-  // Invoice state
   const [customerId, setCustomerId] = useState("");
   const [invoiceNotes, setInvoiceNotes] = useState("");
-  const [discount, setDiscount] = useState("0");
-  const [tax, setTax] = useState("0");
+  const [discount, setDiscount] = useState(0);
+  const [tax, setTax] = useState(0);
   const [submitting, setSubmitting] = useState(false);
 
-  // Services management
+  const selectedCustomer = customers.find((c) => c.id === customerId);
+  const selectedCustomerAddress = selectedCustomer?.address || "";
+  const selectedCustomerLat = selectedCustomer?.latitude ?? null;
+  const selectedCustomerLng = selectedCustomer?.longitude ?? null;
+
   const {
     services,
     addService,
     removeService,
-    calculateTotal: calculateServiceTotal,
+    calculateTotal: calcServices,
   } = useInvoiceServices();
-
-  // Products management
   const {
     items,
     addProduct,
     removeProduct,
-    calculateTotal: calculateItemsTotal,
+    calculateTotal: calcItems,
   } = useInvoiceProducts(products);
 
-  // Calculations
-  const subtotal = calculateServiceTotal() + calculateItemsTotal();
-  const discountAmount = parseFloat(discount) || 0;
-  const taxAmount = parseFloat(tax) || 0;
-  const grandTotal = subtotal - discountAmount + taxAmount;
+  const handleAddService = (service: Parameters<typeof addService>[0]) => {
+    addService({
+      ...service,
+      service_address:
+        service.service_address || selectedCustomerAddress || undefined,
+      service_latitude:
+        service.service_latitude ?? selectedCustomerLat ?? undefined,
+      service_longitude:
+        service.service_longitude ?? selectedCustomerLng ?? undefined,
+    });
+  };
 
-  // Form validation
+  const subtotal = calcServices() + calcItems();
+  const grandTotal = subtotal - discount + tax;
   const canSubmit =
     customerId && (services.length > 0 || items.length > 0) && !submitting;
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-
     if (!canSubmit) {
       toast({
         variant: "destructive",
-        title: "Validation Error",
-        description: "Please fill all required fields",
+        title: "Data Tidak Lengkap",
+        description:
+          "Pilih pelanggan dan tambahkan minimal satu layanan atau produk",
       });
       return;
     }
-
     setSubmitting(true);
-
     try {
-      // Generate invoice number
       const invoiceNumber = `INV-${Date.now()}`;
-
-      // Create invoice
       const { data: invoice, error: invoiceError } = await supabase
         .from("invoices")
         .insert([
@@ -102,8 +102,8 @@ export default function NewInvoice() {
             invoice_number: invoiceNumber,
             status: "draft",
             payment_status: "unpaid",
-            discount: discountAmount,
-            tax: taxAmount,
+            discount,
+            tax,
             notes: invoiceNotes,
             created_by: employee?.id,
             created_at: new Date().toISOString(),
@@ -112,37 +112,32 @@ export default function NewInvoice() {
         ])
         .select()
         .single();
-
       if (invoiceError) throw invoiceError;
 
-      // Add services
       if (services.length > 0) {
-        const servicesData = services.map((service) => ({
+        const servicesData = services.map((s) => ({
           invoice_id: invoice.id,
-          title: service.title,
-          description: service.description || null,
-          unit_id: service.unit_id || null,
-          assigned_technician_id: service.technician_id || null,
-          scheduled_date: service.scheduled_date || null,
-          service_address: service.service_address || null,
-          service_latitude: service.service_latitude || null,
-          service_longitude: service.service_longitude || null,
-          estimated_duration_minutes: service.estimated_duration || 60,
-          service_cost: service.service_cost || 0,
+          title: s.title,
+          description: s.description || null,
+          unit_id: s.unit_id || null,
+          assigned_technician_id: s.technician_id || null,
+          scheduled_date: s.scheduled_date || null,
+          service_address: s.service_address || null,
+          service_latitude: s.service_latitude || null,
+          service_longitude: s.service_longitude || null,
+          estimated_duration_minutes: s.estimated_duration || 60,
+          service_cost: s.service_cost || 0,
           parts_cost: 0,
-          total_cost: service.service_cost || 0,
-          priority: service.priority || "normal",
+          total_cost: s.service_cost || 0,
+          priority: s.priority || "normal",
           status: "pending",
         }));
-
-        const { error: servicesError } = await supabase
+        const { error: svcErr } = await supabase
           .from("invoice_services")
           .insert(servicesData);
-
-        if (servicesError) throw servicesError;
+        if (svcErr) throw svcErr;
       }
 
-      // Add products
       if (items.length > 0) {
         const itemsData = items.map((item) => {
           const product = products.find((p) => p.id === item.product_id);
@@ -157,53 +152,41 @@ export default function NewInvoice() {
             total_price: item.unit_price * item.quantity - item.discount,
           };
         });
-
-        const { error: itemsError } = await supabase
+        const { error: itemErr } = await supabase
           .from("invoice_items")
           .insert(itemsData);
-
-        if (itemsError) throw itemsError;
+        if (itemErr) throw itemErr;
       }
 
-      // Audit log
       await auditLog({
         action: "create",
         entityType: "invoice",
         entityId: invoice.id,
         newData: {
           invoice_number: invoice.invoice_number,
-          customer_id: invoice.customer_id,
-          services_count: services.length,
-          items_count: items.length,
           grand_total: grandTotal,
         },
       });
 
-      // ✅ SUCCESS TOAST dengan hint
       toast({
-        title: "Invoice Created Successfully! 🎉",
-        description:
-          services.length > 0
-            ? "You can now assign technician teams in the Services tab"
-            : "Invoice created successfully",
-        duration: 5000,
+        title: "Faktur Berhasil Dibuat!",
+        description: `${invoiceNumber} telah disimpan`,
+        duration: 4000,
       });
-
-      // ✅ REDIRECT dengan state untuk auto-open Services tab
       navigate(`/invoices/${invoice.invoice_number}`, {
-        state: { openServicesTab: services.length > 0 }, // Only auto-open if has services
+        state: { openServicesTab: services.length > 0 },
       });
     } catch (error: any) {
-      console.error("Error creating invoice:", error);
       toast({
         variant: "destructive",
-        title: "Error",
-        description: error.message || "Failed to create invoice",
+        title: "Gagal Membuat Faktur",
+        description: error.message || "Terjadi kesalahan",
       });
     } finally {
       setSubmitting(false);
     }
   };
+
   if (dataLoading) {
     return (
       <DashboardLayout>
@@ -216,75 +199,161 @@ export default function NewInvoice() {
 
   return (
     <DashboardLayout>
-      <div className="space-y-6 animate-fade-in">
-        {/* Header */}
-        <InvoiceHeader />
+      <form onSubmit={handleSubmit}>
+        {/* Page header — ringkas */}
+        <div className="flex items-center gap-3 mb-6">
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon"
+            asChild
+            className="-ml-2"
+          >
+            <Link to="/invoices">
+              <ArrowLeft className="h-4 w-4" />
+            </Link>
+          </Button>
+          <div>
+            <h1 className="text-xl font-semibold">Buat Faktur Baru</h1>
+            <p className="text-sm text-muted-foreground">
+              Tambahkan layanan dan produk ke faktur
+            </p>
+          </div>
+        </div>
 
-        <form onSubmit={handleSubmit} className="space-y-6">
-          <div className="grid gap-6 lg:grid-cols-3">
-            {/* Customer Selection */}
+        {/* Layout 2 kolom */}
+        <div className="grid grid-cols-1 lg:grid-cols-[1fr_300px] gap-6 items-start">
+          {/* === KOLOM KIRI: Konten utama === */}
+          <div className="space-y-4">
             <CustomerSection
               customers={customers}
               selectedCustomer={customerId}
               onCustomerChange={setCustomerId}
+              onRefreshCustomers={refetch}
             />
 
-            {/* Invoice Settings */}
-            <InvoiceSettings
-              discount={discount}
-              tax={tax}
-              notes={invoiceNotes}
-              onDiscountChange={setDiscount}
-              onTaxChange={setTax}
-              onNotesChange={setInvoiceNotes}
+            <ServicesSection
+              services={services}
+              units={units}
+              technicians={technicians}
+              customerId={customerId}
+              customerAddress={selectedCustomerAddress}
+              customerLat={selectedCustomerLat}
+              customerLng={selectedCustomerLng}
+              onAddService={handleAddService}
+              onRemoveService={removeService}
+              onRefreshUnits={refetch}
+            />
+
+            <ProductsSection
+              items={items}
+              products={products}
+              onAddProduct={addProduct}
+              onRemoveProduct={removeProduct}
             />
           </div>
 
-          {/* Services Section */}
-          <ServicesSection
-            services={services}
-            units={units}
-            technicians={technicians}
-            customerId={customerId}
-            onAddService={addService}
-            onRemoveService={removeService}
-          />
+          {/* === KOLOM KANAN: Sticky sidebar === */}
+          <div className="lg:sticky lg:top-6 space-y-4">
+            {/* Ringkasan harga */}
+            <Card>
+              <CardContent className="pt-4 space-y-2.5">
+                <p className="text-sm font-medium mb-3">Ringkasan</p>
 
-          {/* Products Section */}
-          <ProductsSection
-            items={items}
-            products={products}
-            onAddProduct={addProduct}
-            onRemoveProduct={removeProduct}
-          />
+                <div className="flex justify-between text-sm">
+                  <span className="text-muted-foreground">
+                    Layanan ({services.length})
+                  </span>
+                  <span>{formatCurrency(calcServices())}</span>
+                </div>
+                <div className="flex justify-between text-sm">
+                  <span className="text-muted-foreground">
+                    Produk ({items.length})
+                  </span>
+                  <span>{formatCurrency(calcItems())}</span>
+                </div>
 
-          {/* Total Summary */}
-          <InvoiceSummary
-            servicesTotal={calculateServiceTotal()}
-            itemsTotal={calculateItemsTotal()}
-            discount={discountAmount}
-            tax={taxAmount}
-            grandTotal={grandTotal}
-          />
+                <Separator />
 
-          {/* Submit Buttons */}
-          <div className="flex justify-end gap-4">
-            <Button type="button" variant="outline" asChild>
-              <Link to="/invoices">Cancel</Link>
-            </Button>
-            <Button type="submit" disabled={!canSubmit}>
-              {submitting ? (
-                <>
-                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  Creating...
-                </>
-              ) : (
-                "Create Invoice"
-              )}
-            </Button>
+                {/* Diskon */}
+                <CurrencyInput
+                  label="Diskon"
+                  value={discount}
+                  onValueChange={(v) => setDiscount(v || 0)}
+                  min={0}
+                />
+
+                {/* Pajak */}
+                <CurrencyInput
+                  label="Pajak (PPN)"
+                  value={tax}
+                  onValueChange={(v) => setTax(v || 0)}
+                  min={0}
+                />
+
+                <Separator />
+
+                <div className="flex justify-between font-semibold">
+                  <span>Total</span>
+                  <span className="text-primary text-lg">
+                    {formatCurrency(grandTotal)}
+                  </span>
+                </div>
+              </CardContent>
+            </Card>
+
+            {/* Catatan */}
+            <Card>
+              <CardContent className="pt-4 space-y-2">
+                <Label className="text-sm">
+                  Catatan{" "}
+                  <span className="text-muted-foreground font-normal">
+                    (Opsional)
+                  </span>
+                </Label>
+                <Textarea
+                  placeholder="Catatan untuk pelanggan..."
+                  value={invoiceNotes}
+                  onChange={(e) => setInvoiceNotes(e.target.value)}
+                  rows={3}
+                  className="resize-none text-sm"
+                />
+              </CardContent>
+            </Card>
+
+            {/* Tombol aksi */}
+            <div className="flex flex-col gap-2">
+              <Button type="submit" disabled={!canSubmit} className="w-full">
+                {submitting ? (
+                  <>
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    Menyimpan...
+                  </>
+                ) : (
+                  "Buat Faktur"
+                )}
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                className="w-full"
+                asChild
+              >
+                <Link to="/invoices">Batal</Link>
+              </Button>
+            </div>
+
+            {/* Hint validasi */}
+            {!canSubmit && !submitting && (
+              <p className="text-xs text-muted-foreground text-center">
+                {!customerId
+                  ? "Pilih pelanggan terlebih dahulu"
+                  : "Tambahkan minimal 1 layanan atau produk"}
+              </p>
+            )}
           </div>
-        </form>
-      </div>
+        </div>
+      </form>
     </DashboardLayout>
   );
 }

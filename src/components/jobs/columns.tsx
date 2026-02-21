@@ -1,7 +1,7 @@
 // ============================================
-// JOBS TABLE COLUMNS
+// KOLOM TABEL JOBS
 // src/components/jobs/columns.tsx
-// Column definitions for Jobs DataTable with action handlers
+// Definisi kolom untuk DataTable Jobs dengan action handlers
 // ============================================
 
 import { ColumnDef } from "@tanstack/react-table";
@@ -53,23 +53,23 @@ export interface JobColumnActions {
 const getStatusBadge = (status: string) => {
   const config: Record<string, { label: string; className: string }> = {
     pending: {
-      label: "Unassigned",
+      label: "Belum Ditugaskan",
       className: "bg-yellow-100 text-yellow-800 hover:bg-yellow-100",
     },
     assigned: {
-      label: "Assigned",
+      label: "Ditugaskan",
       className: "bg-blue-100 text-blue-800 hover:bg-blue-100",
     },
     in_progress: {
-      label: "In Progress",
+      label: "Sedang Dikerjakan",
       className: "bg-purple-100 text-purple-800 hover:bg-purple-100",
     },
     completed: {
-      label: "Completed",
+      label: "Selesai",
       className: "bg-green-100 text-green-800 hover:bg-green-100",
     },
     cancelled: {
-      label: "Cancelled",
+      label: "Dibatalkan",
       className: "bg-red-100 text-red-800 hover:bg-red-100",
     },
   };
@@ -79,6 +79,12 @@ const getStatusBadge = (status: string) => {
 };
 
 const getPriorityBadge = (priority: string) => {
+  const priorityLabels: Record<string, string> = {
+    low: "RENDAH",
+    normal: "NORMAL",
+    high: "TINGGI",
+    urgent: "MENDESAK",
+  };
   const config: Record<string, { className: string }> = {
     low: { className: "bg-gray-100 text-gray-800 hover:bg-gray-100" },
     normal: { className: "bg-blue-100 text-blue-800 hover:bg-blue-100" },
@@ -87,10 +93,14 @@ const getPriorityBadge = (priority: string) => {
   };
 
   const { className } = config[priority] || config.normal;
-  return <Badge className={className}>{priority.toUpperCase()}</Badge>;
+  return (
+    <Badge className={className}>
+      {priorityLabels[priority] || priority.toUpperCase()}
+    </Badge>
+  );
 };
 
-// ✅ Factory function to create columns with action handlers
+// ✅ Factory function untuk membuat kolom dengan action handlers
 export const createJobColumns = (
   actions?: JobColumnActions,
 ): ColumnDef<Job>[] => {
@@ -104,7 +114,7 @@ export const createJobColumns = (
             onClick={() => column.toggleSorting(column.getIsSorted() === "asc")}
             className="-ml-4"
           >
-            Job Title
+            Judul Pekerjaan
             <ArrowUpDown className="ml-2 h-4 w-4" />
           </Button>
         );
@@ -132,7 +142,7 @@ export const createJobColumns = (
             onClick={() => column.toggleSorting(column.getIsSorted() === "asc")}
             className="-ml-4"
           >
-            Invoice
+            Faktur
             <ArrowUpDown className="ml-2 h-4 w-4" />
           </Button>
         );
@@ -147,7 +157,7 @@ export const createJobColumns = (
     },
     {
       accessorKey: "customer",
-      header: "Customer",
+      header: "Pelanggan",
       cell: ({ row }) => {
         const customer = row.original.invoice.customer;
         return (
@@ -167,7 +177,7 @@ export const createJobColumns = (
             onClick={() => column.toggleSorting(column.getIsSorted() === "asc")}
             className="-ml-4"
           >
-            Scheduled
+            Jadwal
             <ArrowUpDown className="ml-2 h-4 w-4" />
           </Button>
         );
@@ -180,7 +190,9 @@ export const createJobColumns = (
             {format(new Date(date), "dd MMM yyyy, HH:mm")}
           </div>
         ) : (
-          <span className="text-sm text-muted-foreground">Not scheduled</span>
+          <span className="text-sm text-muted-foreground">
+            Belum dijadwalkan
+          </span>
         );
       },
     },
@@ -193,7 +205,7 @@ export const createJobColumns = (
             onClick={() => column.toggleSorting(column.getIsSorted() === "asc")}
             className="-ml-4"
           >
-            Team
+            Tim
             <ArrowUpDown className="ml-2 h-4 w-4" />
           </Button>
         );
@@ -203,14 +215,10 @@ export const createJobColumns = (
         return count > 0 ? (
           <div className="flex items-center gap-2">
             <Users className="h-4 w-4 text-blue-600" />
-            <span className="font-medium text-blue-600">
-              {count} {count === 1 ? "technician" : "technicians"}
-            </span>
+            <span className="font-medium text-blue-600">{count} teknisi</span>
           </div>
         ) : (
-          <span className="text-sm text-muted-foreground">
-            No team assigned
-          </span>
+          <span className="text-sm text-muted-foreground">Belum ada tim</span>
         );
       },
     },
@@ -223,7 +231,7 @@ export const createJobColumns = (
             onClick={() => column.toggleSorting(column.getIsSorted() === "asc")}
             className="-ml-4"
           >
-            Priority
+            Prioritas
             <ArrowUpDown className="ml-2 h-4 w-4" />
           </Button>
         );
@@ -255,12 +263,12 @@ export const createJobColumns = (
           <DropdownMenu>
             <DropdownMenuTrigger asChild onClick={(e) => e.stopPropagation()}>
               <Button variant="ghost" className="h-8 w-8 p-0">
-                <span className="sr-only">Open menu</span>
+                <span className="sr-only">Buka menu</span>
                 <MoreHorizontal className="h-4 w-4" />
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end">
-              <DropdownMenuLabel>Actions</DropdownMenuLabel>
+              <DropdownMenuLabel>Aksi</DropdownMenuLabel>
               <DropdownMenuItem
                 onClick={(e) => {
                   e.stopPropagation();
@@ -271,7 +279,7 @@ export const createJobColumns = (
                   }
                 }}
               >
-                Copy job ID
+                Salin ID pekerjaan
               </DropdownMenuItem>
               <DropdownMenuSeparator />
               <DropdownMenuItem
@@ -282,7 +290,7 @@ export const createJobColumns = (
                   }
                 }}
               >
-                View details
+                Lihat detail
               </DropdownMenuItem>
               <DropdownMenuItem
                 onClick={(e) => {
@@ -292,7 +300,7 @@ export const createJobColumns = (
                   }
                 }}
               >
-                Manage team
+                Kelola tim
               </DropdownMenuItem>
               <DropdownMenuItem
                 onClick={(e) => {
@@ -302,7 +310,7 @@ export const createJobColumns = (
                   }
                 }}
               >
-                View invoice
+                Lihat faktur
               </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
@@ -312,5 +320,5 @@ export const createJobColumns = (
   ];
 };
 
-// ✅ Export default columns without actions (for backward compatibility)
+// ✅ Export kolom default tanpa actions (untuk kompatibilitas mundur)
 export const jobColumns = createJobColumns();
