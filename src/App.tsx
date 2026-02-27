@@ -10,11 +10,9 @@ import { useInitialSetup } from "@/hooks/useInitialSetup";
 import Auth from "./pages/Auth";
 import InitialSetup from "./pages/InitialSetup";
 import Dashboard from "./pages/Dashboard";
-// NEW: Invoice pages
 import Invoices from "./pages/Invoices";
-import NewInvoice from "./pages/NewInvoice"; // TODO: Create this
-import InvoiceDetail from "./pages/InvoiceDetail"; // TODO: Create this
-
+import NewInvoice from "./pages/NewInvoice";
+import InvoiceDetail from "./pages/InvoiceDetail";
 import Technicians from "./pages/Technicians";
 import Customers from "./pages/Customers";
 import Units from "./pages/Units";
@@ -34,9 +32,6 @@ import CustomerJobs from "./pages/portal/CustomerJobs";
 import CustomerJobDetail from "./pages/portal/CustomerJobDetail";
 import CustomerHistory from "./pages/portal/CustomerHistory";
 import EditInvoice from "./pages/EditInvoice";
-import TechnicianJobs from "./components/technician/TechnicionJobs";
-import TechnicianJobsList from "./pages/TechnicianJobsList";
-import TechnicianJobDetail from "./pages/TechnicianJoDetail";
 import Jobs from "./pages/Jobs";
 import JobsDetail from "./pages/JobsDetail";
 import UnitDetail from "./pages/UnitDetail";
@@ -44,29 +39,19 @@ import CustomerDetail from "./pages/CustomerDetail";
 
 const queryClient = new QueryClient();
 
-// Loading component
 const LoadingSpinner = () => (
   <div className="min-h-screen flex items-center justify-center bg-background">
     <div className="h-8 w-8 animate-spin rounded-full border-4 border-primary border-t-transparent" />
   </div>
 );
 
-// Staff Protected Routes
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
   const auth = useAuth();
-
-  if (auth.loading) {
-    return <LoadingSpinner />;
-  }
-
-  if (!auth.user) {
-    return <Navigate to="/auth" replace />;
-  }
-
+  if (auth.loading) return <LoadingSpinner />;
+  if (!auth.user) return <Navigate to="/auth" replace />;
   return <>{children}</>;
 }
 
-// Role-based route protection
 type AllowedRole =
   | "superadmin"
   | "admin"
@@ -82,92 +67,50 @@ function RoleProtectedRoute({
   allowedRoles: AllowedRole[];
 }) {
   const auth = useAuth();
-
-  if (auth.loading) {
-    return <LoadingSpinner />;
-  }
-
-  if (!auth.user) {
-    return <Navigate to="/auth" replace />;
-  }
-
+  if (auth.loading) return <LoadingSpinner />;
+  if (!auth.user) return <Navigate to="/auth" replace />;
   if (auth.userRole && !allowedRoles.includes(auth.userRole)) {
     return <Navigate to="/dashboard" replace />;
   }
-
   return <>{children}</>;
 }
 
-// Customer Protected Routes
 function CustomerProtectedRoute({ children }: { children: React.ReactNode }) {
   const customerAuth = useCustomerAuth();
-
-  if (customerAuth.loading) {
-    return <LoadingSpinner />;
-  }
-
+  if (customerAuth.loading) return <LoadingSpinner />;
   if (!customerAuth.user || !customerAuth.isCustomer) {
     return <Navigate to="/portal/login" replace />;
   }
-
   return <>{children}</>;
 }
 
-// Setup Route Check
 function SetupRoute({ children }: { children: React.ReactNode }) {
   const setup = useInitialSetup();
-
-  if (setup.loading) {
-    return <LoadingSpinner />;
-  }
-
-  if (setup.needsSetup) {
-    return <Navigate to="/setup" replace />;
-  }
-
+  if (setup.loading) return <LoadingSpinner />;
+  if (setup.needsSetup) return <Navigate to="/setup" replace />;
   return <>{children}</>;
 }
 
 function AuthRoute() {
   const setup = useInitialSetup();
-
-  if (setup.loading) {
-    return <LoadingSpinner />;
-  }
-
-  if (setup.needsSetup) {
-    return <Navigate to="/setup" replace />;
-  }
-
+  if (setup.loading) return <LoadingSpinner />;
+  if (setup.needsSetup) return <Navigate to="/setup" replace />;
   return <Auth />;
 }
 
 function SetupPage() {
   const setup = useInitialSetup();
-
-  if (setup.loading) {
-    return <LoadingSpinner />;
-  }
-
-  if (!setup.needsSetup) {
-    return <Navigate to="/auth" replace />;
-  }
-
+  if (setup.loading) return <LoadingSpinner />;
+  if (!setup.needsSetup) return <Navigate to="/auth" replace />;
   return <InitialSetup />;
 }
 
-// Staff Routes Component
 function StaffRoutes() {
   return (
     <Routes>
-      {/* Initial Setup Route */}
       <Route path="/setup" element={<SetupPage />} />
-
-      {/* Password Reset Routes (public) */}
       <Route path="/forgot-password" element={<ForgotPassword />} />
       <Route path="/reset-password" element={<ResetPassword />} />
-
-      {/* Staff Auth */}
       <Route path="/auth" element={<AuthRoute />} />
       <Route
         path="/"
@@ -187,7 +130,6 @@ function StaffRoutes() {
           </SetupRoute>
         }
       />
-
       <Route
         path="/jobs"
         element={
@@ -212,10 +154,6 @@ function StaffRoutes() {
           </SetupRoute>
         }
       />
-
-      {/* ========================================= */}
-      {/* NEW: Invoice Routes (New Structure)      */}
-      {/* ========================================= */}
       <Route
         path="/invoices"
         element={
@@ -226,7 +164,6 @@ function StaffRoutes() {
           </SetupRoute>
         }
       />
-      {/* TODO: Uncomment after creating these pages */}
       <Route
         path="/invoices/new"
         element={
@@ -249,7 +186,6 @@ function StaffRoutes() {
           </SetupRoute>
         }
       />
-
       <Route
         path="/invoices/:id/edit"
         element={
@@ -262,8 +198,6 @@ function StaffRoutes() {
           </SetupRoute>
         }
       />
-
-      {/* Other Routes */}
       <Route
         path="/technicians"
         element={
@@ -272,26 +206,6 @@ function StaffRoutes() {
               allowedRoles={["superadmin", "admin", "manager"]}
             >
               <Technicians />
-            </RoleProtectedRoute>
-          </SetupRoute>
-        }
-      />
-      <Route
-        path="/technician/jobs"
-        element={
-          <SetupRoute>
-            <RoleProtectedRoute allowedRoles={["technician"]}>
-              <TechnicianJobsList />
-            </RoleProtectedRoute>
-          </SetupRoute>
-        }
-      />
-      <Route
-        path="/technician/jobs/:id"
-        element={
-          <SetupRoute>
-            <RoleProtectedRoute allowedRoles={["technician"]}>
-              <TechnicianJobDetail />
             </RoleProtectedRoute>
           </SetupRoute>
         }
@@ -410,13 +324,11 @@ function StaffRoutes() {
           </SetupRoute>
         }
       />
-
       <Route path="*" element={<NotFound />} />
     </Routes>
   );
 }
 
-// Customer Routes Component
 function CustomerRoutes() {
   return (
     <Routes>
@@ -458,7 +370,6 @@ function CustomerRoutes() {
   );
 }
 
-// Main App Component
 const App = () => (
   <QueryClientProvider client={queryClient}>
     <TooltipProvider>
@@ -466,7 +377,6 @@ const App = () => (
       <Sonner />
       <BrowserRouter basename="/v2">
         <Routes>
-          {/* Staff Routes with AuthProvider */}
           <Route
             path="/*"
             element={
@@ -475,8 +385,6 @@ const App = () => (
               </AuthProviders>
             }
           />
-
-          {/* Customer Portal Routes with CustomerAuthProvider */}
           <Route
             path="/portal/*"
             element={

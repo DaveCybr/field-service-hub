@@ -29,12 +29,10 @@ import { Label } from "@/components/ui/label";
 import {
   Plus,
   Search,
-  Star,
   Phone,
   Mail,
   RefreshCw,
   Wrench,
-  Settings,
   Clock,
   UserCheck,
   AlertCircle,
@@ -42,8 +40,6 @@ import {
   TrendingUp,
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
-import SkillsManagementDialog from "@/components/technician/SkillsManagementDialog";
-import AvailabilityManagementDialog from "@/components/technician/AvailabilityManagementDialog";
 
 interface Technician {
   id: string;
@@ -52,10 +48,8 @@ interface Technician {
   email: string;
   phone: string | null;
   status: string;
-  rating: number;
   total_jobs_completed: number;
   avatar_url: string | null;
-  skills: string[];
   active_jobs_count: number;
 }
 
@@ -70,13 +64,8 @@ export default function Technicians() {
   const [newTechEmail, setNewTechEmail] = useState("");
   const [newTechPhone, setNewTechPhone] = useState("");
   const [creating, setCreating] = useState(false);
-  const [skillsDialogOpen, setSkillsDialogOpen] = useState(false);
-  const [availabilityDialogOpen, setAvailabilityDialogOpen] = useState(false);
-  const [selectedTechnician, setSelectedTechnician] =
-    useState<Technician | null>(null);
   const { toast } = useToast();
 
-  // Stats
   const availableTechs = technicians.filter(
     (t) => t.active_jobs_count === 0 && t.status === "available",
   ).length;
@@ -93,7 +82,6 @@ export default function Technicians() {
   const fetchTechnicians = async () => {
     setLoading(true);
     try {
-      // Fetch technicians with active jobs count
       const { data: techData, error: techError } = await supabase
         .from("employees")
         .select(
@@ -107,27 +95,14 @@ export default function Technicians() {
 
       if (techError) throw techError;
 
-      // Fetch skills for all technicians
-      const techIds = techData?.map((t) => t.id) || [];
-      const { data: skillsData } = await supabase
-        .from("technician_skills")
-        .select("technician_id, skill_name")
-        .in("technician_id", techIds);
-
-      // Map skills and active jobs to technicians
-      const techWithSkills =
+      const techWithCount =
         techData?.map((tech) => ({
           ...tech,
-          rating: tech.rating || 0,
           total_jobs_completed: tech.total_jobs_completed || 0,
           active_jobs_count: tech.active_jobs?.[0]?.count || 0,
-          skills:
-            skillsData
-              ?.filter((s) => s.technician_id === tech.id)
-              .map((s) => s.skill_name) || [],
         })) || [];
 
-      setTechnicians(techWithSkills);
+      setTechnicians(techWithCount);
     } catch (error) {
       console.error("Error fetching technicians:", error);
       toast({
@@ -189,54 +164,38 @@ export default function Technicians() {
   };
 
   const getStatusBadge = (status: string, activeJobs: number) => {
-    // Override status based on active jobs
-    if (activeJobs > 0) {
+    // Status locked/off_duty = override manual, tampilkan apa adanya
+    if (status === "locked") {
       return (
-        <Badge className="bg-amber-100 text-amber-800">
+        <Badge className="bg-red-100 text-red-800">
+          <AlertCircle className="h-3 w-3 mr-1" />
+          {t("technicians.locked")}
+        </Badge>
+      );
+    }
+    if (status === "off_duty") {
+      return (
+        <Badge className="bg-gray-100 text-gray-800">
           <Clock className="h-3 w-3 mr-1" />
-          Busy ({activeJobs} active)
+          {t("technicians.offDuty")}
         </Badge>
       );
     }
 
-    const statusConfig: Record<
-      string,
-      { labelKey: string; className: string; icon?: any }
-    > = {
-      available: {
-        labelKey: "technicians.available",
-        className: "bg-green-100 text-green-800",
-        icon: UserCheck,
-      },
-      on_job: {
-        labelKey: "technicians.onJob",
-        className: "bg-blue-100 text-blue-800",
-        icon: Wrench,
-      },
-      locked: {
-        labelKey: "technicians.locked",
-        className: "bg-red-100 text-red-800",
-        icon: AlertCircle,
-      },
-      off_duty: {
-        labelKey: "technicians.offDuty",
-        className: "bg-gray-100 text-gray-800",
-        icon: Clock,
-      },
-    };
-
-    const config = statusConfig[status] || {
-      labelKey: status,
-      className: "",
-      icon: null,
-    };
-
-    const Icon = config.icon;
+    // Status available/on_job = gunakan active_jobs_count sebagai sumber kebenaran
+    if (activeJobs > 0) {
+      return (
+        <Badge className="bg-amber-100 text-amber-800">
+          <Wrench className="h-3 w-3 mr-1" />
+          {t("technicians.onJob")}
+        </Badge>
+      );
+    }
 
     return (
-      <Badge className={config.className}>
-        {Icon && <Icon className="h-3 w-3 mr-1" />}
-        {t(config.labelKey)}
+      <Badge className="bg-green-100 text-green-800">
+        <UserCheck className="h-3 w-3 mr-1" />
+        {t("technicians.available")}
       </Badge>
     );
   };
@@ -442,12 +401,7 @@ export default function Technicians() {
                       <TableHead>{t("common.contact")}</TableHead>
                       <TableHead>{t("common.status")}</TableHead>
                       <TableHead>Active Jobs</TableHead>
-                      <TableHead>{t("technicians.rating")}</TableHead>
                       <TableHead>{t("technicians.jobsCompleted")}</TableHead>
-                      <TableHead>{t("technicians.skills")}</TableHead>
-                      <TableHead className="w-[80px]">
-                        {t("common.actions")}
-                      </TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
@@ -464,7 +418,6 @@ export default function Technicians() {
                                   {getInitials(tech.name)}
                                 </AvatarFallback>
                               </Avatar>
-                              {/* Status indicator dot */}
                               <div
                                 className={`absolute bottom-0 right-0 h-3 w-3 rounded-full border-2 border-white ${
                                   tech.active_jobs_count === 0 &&
@@ -510,20 +463,12 @@ export default function Technicians() {
                                 size="sm"
                                 className="h-6 text-xs"
                                 onClick={() =>
-                                  navigate(`/technician/jobs?tech=${tech.id}`)
+                                  navigate(`/jobs?technician=${tech.id}`)
                                 }
                               >
                                 View
                               </Button>
                             )}
-                          </div>
-                        </TableCell>
-                        <TableCell>
-                          <div className="flex items-center gap-1">
-                            <Star className="h-4 w-4 text-amber-500 fill-amber-500" />
-                            <span className="font-medium">
-                              {tech.rating.toFixed(1)}
-                            </span>
                           </div>
                         </TableCell>
                         <TableCell>
@@ -537,56 +482,6 @@ export default function Technicians() {
                             </span>
                           </div>
                         </TableCell>
-                        <TableCell>
-                          <div className="flex flex-wrap gap-1">
-                            {tech.skills.length > 0 ? (
-                              tech.skills.slice(0, 3).map((skill, idx) => (
-                                <Badge
-                                  key={idx}
-                                  variant="secondary"
-                                  className="text-xs"
-                                >
-                                  {skill}
-                                </Badge>
-                              ))
-                            ) : (
-                              <span className="text-muted-foreground text-sm italic">
-                                {t("technicians.noSkills")}
-                              </span>
-                            )}
-                            {tech.skills.length > 3 && (
-                              <Badge variant="secondary" className="text-xs">
-                                +{tech.skills.length - 3}
-                              </Badge>
-                            )}
-                          </div>
-                        </TableCell>
-                        <TableCell>
-                          <div className="flex items-center gap-1">
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              onClick={() => {
-                                setSelectedTechnician(tech);
-                                setAvailabilityDialogOpen(true);
-                              }}
-                              title={t("technicians.manageAvailability")}
-                            >
-                              <Clock className="h-4 w-4" />
-                            </Button>
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              onClick={() => {
-                                setSelectedTechnician(tech);
-                                setSkillsDialogOpen(true);
-                              }}
-                              title={t("technicians.manageSkills")}
-                            >
-                              <Settings className="h-4 w-4" />
-                            </Button>
-                          </div>
-                        </TableCell>
                       </TableRow>
                     ))}
                   </TableBody>
@@ -595,28 +490,6 @@ export default function Technicians() {
             )}
           </CardContent>
         </Card>
-
-        {/* Skills Management Dialog */}
-        {selectedTechnician && (
-          <SkillsManagementDialog
-            open={skillsDialogOpen}
-            onOpenChange={setSkillsDialogOpen}
-            technicianId={selectedTechnician.id}
-            technicianName={selectedTechnician.name}
-            onSkillsUpdated={fetchTechnicians}
-          />
-        )}
-
-        {/* Availability Management Dialog */}
-        {selectedTechnician && (
-          <AvailabilityManagementDialog
-            open={availabilityDialogOpen}
-            onOpenChange={setAvailabilityDialogOpen}
-            technicianId={selectedTechnician.id}
-            technicianName={selectedTechnician.name}
-            onAvailabilityUpdated={fetchTechnicians}
-          />
-        )}
       </div>
     </DashboardLayout>
   );
