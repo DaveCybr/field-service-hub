@@ -36,6 +36,7 @@ import Jobs from "./pages/Jobs";
 import JobsDetail from "./pages/JobsDetail";
 import UnitDetail from "./pages/UnitDetail";
 import CustomerDetail from "./pages/CustomerDetail";
+import TechnicianTracking from "./pages/TechnicianTracking";
 
 const queryClient = new QueryClient();
 
@@ -206,6 +207,18 @@ function StaffRoutes() {
               allowedRoles={["superadmin", "admin", "manager"]}
             >
               <Technicians />
+            </RoleProtectedRoute>
+          </SetupRoute>
+        }
+      />
+      <Route
+        path="/technician-tracking"
+        element={
+          <SetupRoute>
+            <RoleProtectedRoute
+              allowedRoles={["superadmin", "admin", "manager"]}
+            >
+              <TechnicianTracking />
             </RoleProtectedRoute>
           </SetupRoute>
         }

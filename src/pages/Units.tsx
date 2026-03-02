@@ -42,6 +42,7 @@ import { format } from "date-fns";
 import { QRCodeSVG } from "qrcode.react";
 import { EditUnitModal } from "@/components/units/EditUnitModal";
 import { DeleteUnitDialog } from "@/components/units/DeleteUnitDialog";
+import { RegisterUnitModal } from "@/components/units/RegisterUnitModal"; // ← BARU
 
 interface Unit {
   id: string;
@@ -118,6 +119,7 @@ export default function Units() {
   const [selectedType, setSelectedType] = useState<string>("all");
 
   // Modal state
+  const [registerModalOpen, setRegisterModalOpen] = useState(false); // ← BARU
   const [editModalOpen, setEditModalOpen] = useState(false);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [selectedUnit, setSelectedUnit] = useState<Unit | null>(null);
@@ -135,7 +137,7 @@ export default function Units() {
     searchQuery,
     selectedCustomer,
     selectedType,
-    sortConfig, // Re-fetch when sort changes
+    sortConfig,
   ]);
 
   const fetchCustomers = async () => {
@@ -150,11 +152,9 @@ export default function Units() {
   const fetchUnits = async () => {
     setLoading(true);
     try {
-      // Calculate range for pagination
       const from = (pagination.currentPage - 1) * pagination.itemsPerPage;
       const to = from + pagination.itemsPerPage - 1;
 
-      // Build query
       let query = supabase.from("units").select(
         `
           *,
@@ -166,7 +166,6 @@ export default function Units() {
         { count: "exact" },
       );
 
-      // Apply filters
       if (searchQuery) {
         query = query.or(
           `qr_code.ilike.%${searchQuery}%,unit_type.ilike.%${searchQuery}%,brand.ilike.%${searchQuery}%,model.ilike.%${searchQuery}%,serial_number.ilike.%${searchQuery}%`,
@@ -181,17 +180,14 @@ export default function Units() {
         query = query.eq("unit_type", selectedType);
       }
 
-      // Apply sorting
       query = query.order(sortConfig.field, {
         ascending: sortConfig.order === "asc",
       });
 
-      // Apply pagination
       const { data, error, count } = await query.range(from, to);
 
       if (error) throw error;
 
-      // Process data (handle array from join)
       const processedData =
         data?.map((unit) => ({
           ...unit,
@@ -202,7 +198,6 @@ export default function Units() {
 
       setUnits(processedData);
 
-      // Update pagination info
       const totalCount = count || 0;
       const totalPages = Math.ceil(totalCount / pagination.itemsPerPage);
 
@@ -230,7 +225,6 @@ export default function Units() {
       field,
       order: prev.field === field && prev.order === "asc" ? "desc" : "asc",
     }));
-    // Reset to first page when sorting changes
     setPagination((prev) => ({ ...prev, currentPage: 1 }));
   };
 
@@ -254,13 +248,13 @@ export default function Units() {
     setPagination((prev) => ({
       ...prev,
       itemsPerPage: parseInt(value),
-      currentPage: 1, // Reset to first page
+      currentPage: 1,
     }));
   };
 
   const handleSearch = (value: string) => {
     setSearchQuery(value);
-    setPagination((prev) => ({ ...prev, currentPage: 1 })); // Reset to first page
+    setPagination((prev) => ({ ...prev, currentPage: 1 }));
   };
 
   const handleCustomerFilter = (value: string) => {
@@ -285,14 +279,6 @@ export default function Units() {
 
   const handleViewClick = (unit: Unit) => {
     navigate(`/units/${unit.id}`);
-  };
-
-  const handleEditSuccess = () => {
-    fetchUnits();
-  };
-
-  const handleDeleteSuccess = () => {
-    fetchUnits();
   };
 
   const handleDownloadQR = (unit: Unit) => {
@@ -349,7 +335,6 @@ export default function Units() {
     return Array.from(types);
   };
 
-  // Sortable table head component
   const SortableTableHead = ({
     field,
     children,
@@ -372,7 +357,6 @@ export default function Units() {
     );
   };
 
-  // Pagination component
   const PaginationControls = () => {
     const maxPageButtons = 5;
     const pages: number[] = [];
@@ -395,10 +379,9 @@ export default function Units() {
     }
 
     return (
-      <div className="flex items-center justify-between gap-4 py-4 border-t ">
-        {/* Left: Items per page & info */}
-        <div className="flex items-center gap-4 ">
-          <div className="flex items-center gap-2 px-4 ">
+      <div className="flex items-center justify-between gap-4 py-4 border-t">
+        <div className="flex items-center gap-4">
+          <div className="flex items-center gap-2 px-4">
             <span className="text-sm text-muted-foreground">Show:</span>
             <Select
               value={pagination.itemsPerPage.toString()}
@@ -421,7 +404,6 @@ export default function Units() {
           </span>
         </div>
 
-        {/* Right: Page controls */}
         <div className="flex items-center gap-2">
           <Button
             variant="outline"
@@ -488,9 +470,10 @@ export default function Units() {
               Manage and track all registered units
             </p>
           </div>
-          <Button onClick={() => navigate("/units/register")}>
+          {/* ← UBAH: dari navigate ke buka modal */}
+          <Button onClick={() => setRegisterModalOpen(true)}>
             <Plus className="mr-2 h-4 w-4" />
-            Register Unit
+            Daftarkan Unit
           </Button>
         </div>
 
@@ -501,7 +484,6 @@ export default function Units() {
           </CardHeader>
           <CardContent>
             <div className="grid gap-4 md:grid-cols-3">
-              {/* Search */}
               <div className="relative">
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                 <Input
@@ -512,7 +494,6 @@ export default function Units() {
                 />
               </div>
 
-              {/* Customer filter */}
               <Select
                 value={selectedCustomer}
                 onValueChange={handleCustomerFilter}
@@ -530,7 +511,6 @@ export default function Units() {
                 </SelectContent>
               </Select>
 
-              {/* Type filter */}
               <Select value={selectedType} onValueChange={handleTypeFilter}>
                 <SelectTrigger>
                   <SelectValue placeholder="All Types" />
@@ -584,7 +564,7 @@ export default function Units() {
                       selectedCustomer !== "all" ||
                       selectedType !== "all"
                         ? "No units found matching your filters"
-                        : "No units registered yet"}
+                        : "Belum ada unit yang terdaftar"}
                     </p>
                   </TableCell>
                 </TableRow>
@@ -715,10 +695,16 @@ export default function Units() {
             </TableBody>
           </Table>
 
-          {/* Pagination Controls */}
           {!loading && units.length > 0 && <PaginationControls />}
         </Card>
       </div>
+
+      {/* Register Modal ← BARU */}
+      <RegisterUnitModal
+        open={registerModalOpen}
+        onOpenChange={setRegisterModalOpen}
+        onSuccess={fetchUnits}
+      />
 
       {/* Edit Modal */}
       {selectedUnit && (
@@ -727,7 +713,7 @@ export default function Units() {
           onOpenChange={setEditModalOpen}
           unit={selectedUnit}
           customers={customers}
-          onSuccess={handleEditSuccess}
+          onSuccess={fetchUnits}
         />
       )}
 
@@ -737,7 +723,7 @@ export default function Units() {
           open={deleteDialogOpen}
           onOpenChange={setDeleteDialogOpen}
           unit={selectedUnit}
-          onSuccess={handleDeleteSuccess}
+          onSuccess={fetchUnits}
         />
       )}
     </DashboardLayout>

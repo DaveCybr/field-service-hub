@@ -1,17 +1,22 @@
-// Dashboard.tsx - Dashboard utama untuk Admin/Manager
+// ============================================
+// FILE: src/pages/Dashboard.tsx
+// Enterprise-grade dashboard — clean, data-first
+// ============================================
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
-import DashboardLayout from "@/components/layout/DashboardLayout";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
+import DashboardLayout, {
+  PageHeader,
+} from "@/components/layout/DashboardLayout";
+import { formatCurrency } from "@/lib/utils/currency";
+import { format } from "date-fns";
+import { id as localeId } from "date-fns/locale";
+import { useAuth } from "@/hooks/useAuth";
 import {
-  FileText,
   DollarSign,
-  Users,
-  Wrench,
   TrendingUp,
+  Wrench,
+  Users,
   AlertTriangle,
   Clock,
   CheckCircle2,
@@ -19,11 +24,12 @@ import {
   Package,
   UserCheck,
   ArrowRight,
+  ChevronRight,
+  Activity,
+  Circle,
 } from "lucide-react";
-import { formatCurrency } from "@/lib/utils/currency";
-import { format } from "date-fns";
-import { useAuth } from "@/hooks/useAuth";
 
+// ── Types ────────────────────────────────────────────────────────────────────
 interface DashboardStats {
   todayRevenue: number;
   monthlyRevenue: number;
@@ -32,7 +38,6 @@ interface DashboardStats {
   pendingJobs: number;
   completedJobsToday: number;
 }
-
 interface RecentInvoice {
   id: string;
   invoice_number: string;
@@ -41,26 +46,16 @@ interface RecentInvoice {
   payment_status: string;
   created_at: string;
 }
-
 interface PendingJob {
   id: string;
   title: string;
   priority: string;
-  invoice: {
-    invoice_number: string;
-    customer: { name: string };
-  };
+  invoice: { invoice_number: string; customer: { name: string } };
 }
-
 interface StockAlert {
   id: string;
-  product: {
-    name: string;
-    stock: number;
-    min_stock_threshold: number;
-  };
+  product: { name: string; stock: number; min_stock_threshold: number };
 }
-
 interface TechnicianStatus {
   id: string;
   name: string;
@@ -68,6 +63,248 @@ interface TechnicianStatus {
   active_jobs_count: number;
 }
 
+// ── Helpers ───────────────────────────────────────────────────────────────────
+const PAYMENT_STATUS: Record<
+  string,
+  { label: string; color: string; bg: string }
+> = {
+  paid: { label: "Lunas", color: "#16a34a", bg: "#dcfce7" },
+  partial: { label: "Sebagian", color: "#d97706", bg: "#fef9c3" },
+  unpaid: { label: "Belum Bayar", color: "#6b7280", bg: "#f3f4f6" },
+  overdue: { label: "Jatuh Tempo", color: "#dc2626", bg: "#fee2e2" },
+};
+
+const PRIORITY: Record<string, { label: string; color: string; bg: string }> = {
+  urgent: { label: "Mendesak", color: "#dc2626", bg: "#fee2e2" },
+  high: { label: "Tinggi", color: "#ea580c", bg: "#ffedd5" },
+  normal: { label: "Normal", color: "#2563eb", bg: "#dbeafe" },
+  low: { label: "Rendah", color: "#6b7280", bg: "#f3f4f6" },
+};
+
+function StatusBadge({
+  config,
+}: {
+  config: { label: string; color: string; bg: string };
+}) {
+  return (
+    <span
+      style={{
+        background: config.bg,
+        color: config.color,
+        fontSize: "11px",
+        fontWeight: 600,
+        padding: "2px 8px",
+        borderRadius: "20px",
+        whiteSpace: "nowrap",
+      }}
+    >
+      {config.label}
+    </span>
+  );
+}
+
+// ── Stat Card ─────────────────────────────────────────────────────────────────
+function StatCard({
+  label,
+  value,
+  sub,
+  icon: Icon,
+  iconColor,
+  iconBg,
+  trend,
+}: {
+  label: string;
+  value: string;
+  sub?: string;
+  icon: React.ElementType;
+  iconColor: string;
+  iconBg: string;
+  trend?: { value: string; up: boolean };
+}) {
+  return (
+    <div
+      style={{
+        background: "white",
+        borderRadius: "12px",
+        border: "1px solid #e5e7eb",
+        padding: "20px",
+        boxShadow: "0 1px 2px rgba(0,0,0,0.04)",
+      }}
+    >
+      <div
+        style={{
+          display: "flex",
+          alignItems: "flex-start",
+          justifyContent: "space-between",
+          marginBottom: "16px",
+        }}
+      >
+        <p
+          style={{
+            fontSize: "12px",
+            fontWeight: 600,
+            color: "#6b7280",
+            textTransform: "uppercase",
+            letterSpacing: "0.05em",
+          }}
+        >
+          {label}
+        </p>
+        <div
+          style={{ background: iconBg, borderRadius: "8px", padding: "8px" }}
+        >
+          <Icon style={{ width: "16px", height: "16px", color: iconColor }} />
+        </div>
+      </div>
+      <p
+        style={{
+          fontSize: "26px",
+          fontWeight: 700,
+          color: "#111827",
+          lineHeight: 1,
+          margin: "0 0 6px",
+        }}
+      >
+        {value}
+      </p>
+      {sub && (
+        <p style={{ fontSize: "12px", color: "#9ca3af", margin: 0 }}>{sub}</p>
+      )}
+    </div>
+  );
+}
+
+// ── Section Card ──────────────────────────────────────────────────────────────
+function SectionCard({
+  title,
+  badge,
+  onViewAll,
+  children,
+  viewAllHref,
+}: {
+  title: string;
+  badge?: number;
+  onViewAll?: () => void;
+  children: React.ReactNode;
+  viewAllHref?: string;
+}) {
+  return (
+    <div
+      style={{
+        background: "white",
+        borderRadius: "12px",
+        border: "1px solid #e5e7eb",
+        boxShadow: "0 1px 2px rgba(0,0,0,0.04)",
+        overflow: "hidden",
+      }}
+    >
+      <div
+        style={{
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "space-between",
+          padding: "16px 20px",
+          borderBottom: "1px solid #f3f4f6",
+        }}
+      >
+        <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+          <span style={{ fontWeight: 600, fontSize: "14px", color: "#111827" }}>
+            {title}
+          </span>
+          {badge !== undefined && badge > 0 && (
+            <span
+              style={{
+                background: "#fee2e2",
+                color: "#dc2626",
+                fontSize: "11px",
+                fontWeight: 700,
+                padding: "1px 7px",
+                borderRadius: "20px",
+              }}
+            >
+              {badge}
+            </span>
+          )}
+        </div>
+        {onViewAll && (
+          <button
+            onClick={onViewAll}
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: "4px",
+              fontSize: "12px",
+              fontWeight: 500,
+              color: "#2563eb",
+              background: "none",
+              border: "none",
+              cursor: "pointer",
+              padding: "4px 8px",
+              borderRadius: "6px",
+              transition: "background 0.15s",
+            }}
+            onMouseEnter={(e) => (e.currentTarget.style.background = "#eff6ff")}
+            onMouseLeave={(e) => (e.currentTarget.style.background = "none")}
+          >
+            Lihat Semua <ArrowRight style={{ width: "12px", height: "12px" }} />
+          </button>
+        )}
+      </div>
+      <div style={{ padding: "4px 0" }}>{children}</div>
+    </div>
+  );
+}
+
+// ── Row Item ──────────────────────────────────────────────────────────────────
+function RowItem({
+  onClick,
+  children,
+  warning,
+}: {
+  onClick?: () => void;
+  children: React.ReactNode;
+  warning?: boolean;
+}) {
+  return (
+    <div
+      onClick={onClick}
+      style={{
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "space-between",
+        padding: "10px 20px",
+        cursor: onClick ? "pointer" : "default",
+        borderLeft: warning ? "3px solid #fbbf24" : "3px solid transparent",
+        transition: "background 0.12s",
+      }}
+      onMouseEnter={(e) =>
+        onClick && (e.currentTarget.style.background = "#f9fafb")
+      }
+      onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}
+    >
+      {children}
+    </div>
+  );
+}
+
+// ── Skeleton ──────────────────────────────────────────────────────────────────
+function Skeleton({ w = "100%", h = "16px" }: { w?: string; h?: string }) {
+  return (
+    <div
+      style={{
+        width: w,
+        height: h,
+        borderRadius: "6px",
+        background:
+          "linear-gradient(90deg,#f3f4f6 25%,#e9ebee 50%,#f3f4f6 75%)",
+        backgroundSize: "200% 100%",
+        animation: "shimmer 1.4s infinite",
+      }}
+    />
+  );
+}
+
+// ── Main Component ────────────────────────────────────────────────────────────
 export default function Dashboard() {
   const navigate = useNavigate();
   const { employee } = useAuth();
@@ -86,546 +323,713 @@ export default function Dashboard() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    fetchDashboardData();
+    fetchAll();
   }, []);
 
-  const fetchDashboardData = async () => {
+  const fetchAll = async () => {
     setLoading(true);
-    try {
-      await Promise.all([
-        fetchStats(),
-        fetchRecentInvoices(),
-        fetchPendingJobs(),
-        fetchStockAlerts(),
-        fetchTechnicians(),
-      ]);
-    } catch (error) {
-      console.error("Error mengambil data dashboard:", error);
-    } finally {
-      setLoading(false);
-    }
+    await Promise.all([
+      fetchStats(),
+      fetchRecentInvoices(),
+      fetchPendingJobs(),
+      fetchStockAlerts(),
+      fetchTechnicians(),
+    ]);
+    setLoading(false);
   };
 
   const fetchStats = async () => {
-    try {
-      const today = new Date();
-      today.setHours(0, 0, 0, 0);
-      const startOfMonth = new Date(today.getFullYear(), today.getMonth(), 1);
-
-      // Pendapatan hari ini
-      const { data: todayInvoices } = await supabase
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const startOfMonth = new Date(today.getFullYear(), today.getMonth(), 1);
+    const [
+      todayInv,
+      monthInv,
+      custCount,
+      activeCount,
+      pendingCount,
+      completedCount,
+    ] = await Promise.all([
+      supabase
         .from("invoices")
         .select("grand_total")
         .gte("created_at", today.toISOString())
-        .in("payment_status", ["paid", "partial"]);
-
-      // Pendapatan bulanan
-      const { data: monthlyInvoices } = await supabase
+        .in("payment_status", ["paid", "partial"]),
+      supabase
         .from("invoices")
         .select("grand_total")
         .gte("created_at", startOfMonth.toISOString())
-        .in("payment_status", ["paid", "partial"]);
-
-      // Total pelanggan
-      const { count: customersCount } = await supabase
-        .from("customers")
-        .select("*", { count: "exact", head: true });
-
-      // Pekerjaan aktif (assigned + in_progress)
-      const { count: activeJobsCount } = await supabase
+        .in("payment_status", ["paid", "partial"]),
+      supabase.from("customers").select("*", { count: "exact", head: true }),
+      supabase
         .from("invoice_services")
         .select("*", { count: "exact", head: true })
-        .in("status", ["assigned", "in_progress"]);
-
-      // Pekerjaan tertunda
-      const { count: pendingJobsCount } = await supabase
+        .in("status", ["assigned", "in_progress"]),
+      supabase
         .from("invoice_services")
         .select("*", { count: "exact", head: true })
-        .eq("status", "pending");
-
-      // Pekerjaan selesai hari ini
-      const { count: completedTodayCount } = await supabase
+        .eq("status", "pending"),
+      supabase
         .from("invoice_services")
         .select("*", { count: "exact", head: true })
         .eq("status", "completed")
-        .gte("actual_checkout_at", today.toISOString());
-
-      setStats({
-        todayRevenue:
-          todayInvoices?.reduce(
-            (sum, inv) => sum + (inv.grand_total || 0),
-            0,
-          ) || 0,
-        monthlyRevenue:
-          monthlyInvoices?.reduce(
-            (sum, inv) => sum + (inv.grand_total || 0),
-            0,
-          ) || 0,
-        totalCustomers: customersCount || 0,
-        activeJobs: activeJobsCount || 0,
-        pendingJobs: pendingJobsCount || 0,
-        completedJobsToday: completedTodayCount || 0,
-      });
-    } catch (error) {
-      console.error("Error mengambil statistik:", error);
-    }
+        .gte("actual_checkout_at", today.toISOString()),
+    ]);
+    setStats({
+      todayRevenue:
+        todayInv.data?.reduce((s, i) => s + (i.grand_total || 0), 0) || 0,
+      monthlyRevenue:
+        monthInv.data?.reduce((s, i) => s + (i.grand_total || 0), 0) || 0,
+      totalCustomers: custCount.count || 0,
+      activeJobs: activeCount.count || 0,
+      pendingJobs: pendingCount.count || 0,
+      completedJobsToday: completedCount.count || 0,
+    });
   };
 
   const fetchRecentInvoices = async () => {
-    try {
-      const { data } = await supabase
-        .from("invoices")
-        .select(
-          "id, invoice_number, grand_total, payment_status, created_at, customer:customers(name)",
-        )
-        .order("created_at", { ascending: false })
-        .limit(5);
-
-      setRecentInvoices(data || []);
-    } catch (error) {
-      console.error("Error mengambil faktur terbaru:", error);
-    }
+    const { data } = await supabase
+      .from("invoices")
+      .select(
+        "id,invoice_number,grand_total,payment_status,created_at,customer:customers(name)",
+      )
+      .order("created_at", { ascending: false })
+      .limit(5);
+    setRecentInvoices(data || []);
   };
 
   const fetchPendingJobs = async () => {
-    try {
-      const { data } = await supabase
-        .from("invoice_services")
-        .select(
-          `
-          id, 
-          title, 
-          priority,
-          invoice:invoices!inner(
-            invoice_number,
-            customer:customers(name)
-          )
-        `,
-        )
-        .eq("status", "pending")
-        .order("priority", { ascending: true })
-        .order("created_at", { ascending: true })
-        .limit(5);
-
-      setPendingJobs(data || []);
-    } catch (error) {
-      console.error("Error mengambil pekerjaan tertunda:", error);
-    }
+    const { data } = await supabase
+      .from("invoice_services")
+      .select(
+        "id,title,priority,invoice:invoices!inner(invoice_number,customer:customers(name))",
+      )
+      .eq("status", "pending")
+      .order("priority", { ascending: true })
+      .order("created_at", { ascending: true })
+      .limit(5);
+    setPendingJobs(data || []);
   };
 
   const fetchStockAlerts = async () => {
-    try {
-      const { data } = await supabase
-        .from("stock_alerts")
-        .select(
-          `
-          id,
-          product:products!inner(name, stock, min_stock_threshold)
-        `,
-        )
-        .eq("status", "active")
-        .limit(5);
-
-      setStockAlerts(data || []);
-    } catch (error) {
-      console.error("Error mengambil peringatan stok:", error);
-    }
+    const { data } = await supabase
+      .from("stock_alerts")
+      .select("id,product:products!inner(name,stock,min_stock_threshold)")
+      .eq("status", "active")
+      .limit(5);
+    setStockAlerts(data || []);
   };
 
   const fetchTechnicians = async () => {
-    try {
-      const { data } = await supabase
-        .from("employees")
-        .select(
-          `
-          id,
-          name,
-          status,
-          active_jobs:invoice_services!assigned_technician_id(count)
-        `,
-        )
-        .eq("role", "technician")
-        .order("name");
-
-      const techsWithCount = (data || []).map((tech: any) => ({
-        ...tech,
-        active_jobs_count: tech.active_jobs?.[0]?.count || 0,
-      }));
-
-      setTechnicians(techsWithCount);
-    } catch (error) {
-      console.error("Error mengambil data teknisi:", error);
-    }
-  };
-
-  const getPaymentStatusBadge = (status: string) => {
-    const config: Record<string, { label: string; className: string }> = {
-      paid: { label: "Lunas", className: "bg-green-100 text-green-800" },
-      partial: {
-        label: "Sebagian",
-        className: "bg-yellow-100 text-yellow-800",
-      },
-      pending: { label: "Tertunda", className: "bg-gray-100 text-gray-800" },
-      overdue: { label: "Jatuh Tempo", className: "bg-red-100 text-red-800" },
-    };
-    const { label, className } = config[status] || config.pending;
-    return <Badge className={className}>{label}</Badge>;
-  };
-
-  const getPriorityBadge = (priority: string) => {
-    const priorityLabels: Record<string, string> = {
-      urgent: "MENDESAK",
-      high: "TINGGI",
-      normal: "NORMAL",
-      low: "RENDAH",
-    };
-    const config: Record<string, { className: string }> = {
-      urgent: { className: "bg-red-100 text-red-800" },
-      high: { className: "bg-orange-100 text-orange-800" },
-      normal: { className: "bg-blue-100 text-blue-800" },
-      low: { className: "bg-gray-100 text-gray-800" },
-    };
-    const { className } = config[priority] || config.normal;
-    return (
-      <Badge className={className}>
-        {priorityLabels[priority] || priority.toUpperCase()}
-      </Badge>
+    const { data } = await supabase
+      .from("employees")
+      .select(
+        "id,name,status,active_jobs:invoice_services!assigned_technician_id(count)",
+      )
+      .eq("role", "technician")
+      .order("name");
+    setTechnicians(
+      (data || []).map((t: any) => ({
+        ...t,
+        active_jobs_count: t.active_jobs?.[0]?.count || 0,
+      })),
     );
   };
 
-  if (loading) {
-    return (
-      <DashboardLayout>
-        <div className="flex items-center justify-center min-h-[400px]">
-          <div className="h-8 w-8 animate-spin rounded-full border-4 border-primary border-t-transparent" />
-        </div>
-      </DashboardLayout>
-    );
-  }
+  const today = new Date();
 
   return (
     <DashboardLayout>
-      <div className="space-y-6 animate-fade-in">
-        {/* Header */}
-        <div className="flex items-center justify-between">
+      <style>{`
+        @keyframes shimmer { 0%{background-position:200% 0} 100%{background-position:-200% 0} }
+        @keyframes fadeIn { from{opacity:0;transform:translateY(6px)} to{opacity:1;transform:none} }
+        .dash-fade { animation: fadeIn 0.25s ease; }
+      `}</style>
+
+      <div
+        className="dash-fade"
+        style={{ display: "flex", flexDirection: "column", gap: "24px" }}
+      >
+        {/* ── Header ── */}
+        <div
+          style={{
+            display: "flex",
+            alignItems: "flex-start",
+            justifyContent: "space-between",
+          }}
+        >
           <div>
-            <h1 className="text-3xl font-bold tracking-tight">
-              Selamat datang, {employee?.name}!
+            <h1
+              style={{
+                fontSize: "20px",
+                fontWeight: 700,
+                color: "#111827",
+                margin: "0 0 4px",
+                letterSpacing: "-0.01em",
+              }}
+            >
+              Selamat datang, {employee?.name?.split(" ")[0]} 👋
             </h1>
-            <p className="text-muted-foreground mt-1">
-              Berikut ringkasan aktivitas bisnis Anda hari ini
+            <p style={{ fontSize: "13px", color: "#6b7280", margin: 0 }}>
+              {format(today, "EEEE, d MMMM yyyy", { locale: localeId })} ·
+              Ringkasan aktivitas bisnis hari ini
             </p>
           </div>
-          <Button onClick={() => navigate("/invoices/new")}>
-            <Plus className="mr-2 h-4 w-4" />
+          <button
+            onClick={() => navigate("/invoices/new")}
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: "7px",
+              background: "#2563eb",
+              color: "white",
+              border: "none",
+              borderRadius: "9px",
+              padding: "9px 18px",
+              fontSize: "13px",
+              fontWeight: 600,
+              cursor: "pointer",
+              boxShadow: "0 1px 2px rgba(37,99,235,0.3)",
+              transition: "background 0.15s",
+            }}
+            onMouseEnter={(e) => (e.currentTarget.style.background = "#1d4ed8")}
+            onMouseLeave={(e) => (e.currentTarget.style.background = "#2563eb")}
+          >
+            <Plus style={{ width: "15px", height: "15px" }} />
             Faktur Baru
-          </Button>
+          </button>
         </div>
 
-        {/* Kartu Statistik */}
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-          <Card>
-            <CardContent className="p-6">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm font-medium text-muted-foreground">
-                    Pendapatan Hari Ini
-                  </p>
-                  <p className="text-2xl font-bold mt-1">
-                    {formatCurrency(stats.todayRevenue)}
-                  </p>
-                </div>
-                <div className="rounded-lg p-3 bg-green-100">
-                  <DollarSign className="h-6 w-6 text-green-600" />
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardContent className="p-6">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm font-medium text-muted-foreground">
-                    Pendapatan Bulanan
-                  </p>
-                  <p className="text-2xl font-bold mt-1">
-                    {formatCurrency(stats.monthlyRevenue)}
-                  </p>
-                </div>
-                <div className="rounded-lg p-3 bg-blue-100">
-                  <TrendingUp className="h-6 w-6 text-blue-600" />
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardContent className="p-6">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm font-medium text-muted-foreground">
-                    Pekerjaan Aktif
-                  </p>
-                  <p className="text-2xl font-bold mt-1">{stats.activeJobs}</p>
-                  <p className="text-xs text-muted-foreground mt-1">
-                    {stats.pendingJobs} tertunda
-                  </p>
-                </div>
-                <div className="rounded-lg p-3 bg-purple-100">
-                  <Wrench className="h-6 w-6 text-purple-600" />
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardContent className="p-6">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm font-medium text-muted-foreground">
-                    Total Pelanggan
-                  </p>
-                  <p className="text-2xl font-bold mt-1">
-                    {stats.totalCustomers}
-                  </p>
-                  <p className="text-xs text-muted-foreground mt-1">
-                    {stats.completedJobsToday} pekerjaan selesai hari ini
-                  </p>
-                </div>
-                <div className="rounded-lg p-3 bg-amber-100">
-                  <Users className="h-6 w-6 text-amber-600" />
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-        </div>
-
-        {/* Dua Kolom */}
-        <div className="grid gap-6 lg:grid-cols-2">
-          {/* Faktur Terbaru */}
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between pb-2">
-              <CardTitle className="text-base font-semibold">
-                Faktur Terbaru
-              </CardTitle>
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={() => navigate("/invoices")}
+        {/* ── Stats Grid ── */}
+        {loading ? (
+          <div
+            style={{
+              display: "grid",
+              gridTemplateColumns: "repeat(4,1fr)",
+              gap: "16px",
+            }}
+          >
+            {[1, 2, 3, 4].map((i) => (
+              <div
+                key={i}
+                style={{
+                  background: "white",
+                  borderRadius: "12px",
+                  border: "1px solid #e5e7eb",
+                  padding: "20px",
+                }}
               >
-                Lihat Semua
-                <ArrowRight className="ml-1 h-4 w-4" />
-              </Button>
-            </CardHeader>
-            <CardContent>
-              {recentInvoices.length === 0 ? (
-                <p className="text-sm text-muted-foreground py-4 text-center">
-                  Belum ada faktur
-                </p>
-              ) : (
-                <div className="space-y-3">
-                  {recentInvoices.map((invoice) => (
-                    <div
-                      key={invoice.id}
-                      className="flex items-center justify-between p-3 rounded-lg border hover:bg-muted/50 cursor-pointer transition-colors"
-                      onClick={() =>
-                        navigate(`/invoices/${invoice.invoice_number}`)
-                      }
-                    >
-                      <div className="flex-1 min-w-0">
-                        <p className="font-medium text-sm truncate">
-                          {invoice.customer.name}
-                        </p>
-                        <p className="text-xs text-muted-foreground font-mono">
-                          {invoice.invoice_number}
-                        </p>
-                      </div>
-                      <div className="text-right ml-4">
-                        <p className="font-medium text-sm">
-                          {formatCurrency(invoice.grand_total)}
-                        </p>
-                        {getPaymentStatusBadge(invoice.payment_status)}
-                      </div>
-                    </div>
-                  ))}
+                <div style={{ marginBottom: "16px" }}>
+                  <Skeleton w="50%" h="12px" />
                 </div>
-              )}
-            </CardContent>
-          </Card>
+                <div style={{ marginBottom: "8px" }}>
+                  <Skeleton w="60%" h="28px" />
+                </div>
+                <Skeleton w="40%" h="12px" />
+              </div>
+            ))}
+          </div>
+        ) : (
+          <div
+            style={{
+              display: "grid",
+              gridTemplateColumns: "repeat(4,1fr)",
+              gap: "16px",
+            }}
+          >
+            <StatCard
+              label="Pendapatan Hari Ini"
+              value={formatCurrency(stats.todayRevenue)}
+              icon={DollarSign}
+              iconColor="#16a34a"
+              iconBg="#dcfce7"
+            />
+            <StatCard
+              label="Pendapatan Bulan Ini"
+              value={formatCurrency(stats.monthlyRevenue)}
+              sub={`Periode ${format(today, "MMMM yyyy", { locale: localeId })}`}
+              icon={TrendingUp}
+              iconColor="#2563eb"
+              iconBg="#dbeafe"
+            />
+            <StatCard
+              label="Pekerjaan Aktif"
+              value={String(stats.activeJobs)}
+              sub={`${stats.pendingJobs} menunggu penugasan · ${stats.completedJobsToday} selesai hari ini`}
+              icon={Wrench}
+              iconColor="#7c3aed"
+              iconBg="#ede9fe"
+            />
+            <StatCard
+              label="Total Pelanggan"
+              value={String(stats.totalCustomers)}
+              icon={Users}
+              iconColor="#d97706"
+              iconBg="#fef9c3"
+            />
+          </div>
+        )}
+
+        {/* ── Two column ── */}
+        <div
+          style={{
+            display: "grid",
+            gridTemplateColumns: "1fr 1fr",
+            gap: "16px",
+          }}
+        >
+          {/* Faktur Terbaru */}
+          <SectionCard
+            title="Faktur Terbaru"
+            onViewAll={() => navigate("/invoices")}
+          >
+            {loading ? (
+              <div
+                style={{
+                  padding: "12px 20px",
+                  display: "flex",
+                  flexDirection: "column",
+                  gap: "12px",
+                }}
+              >
+                {[1, 2, 3].map((i) => (
+                  <div
+                    key={i}
+                    style={{
+                      display: "flex",
+                      justifyContent: "space-between",
+                      alignItems: "center",
+                    }}
+                  >
+                    <div
+                      style={{
+                        display: "flex",
+                        flexDirection: "column",
+                        gap: "6px",
+                        flex: 1,
+                      }}
+                    >
+                      <Skeleton w="55%" h="13px" />
+                      <Skeleton w="35%" h="11px" />
+                    </div>
+                    <Skeleton w="20%" h="22px" />
+                  </div>
+                ))}
+              </div>
+            ) : recentInvoices.length === 0 ? (
+              <EmptyState
+                icon={
+                  <DollarSign
+                    style={{ width: "24px", height: "24px", color: "#d1d5db" }}
+                  />
+                }
+                message="Belum ada faktur"
+              />
+            ) : (
+              recentInvoices.map((inv) => {
+                const statusCfg =
+                  PAYMENT_STATUS[inv.payment_status] || PAYMENT_STATUS.unpaid;
+                return (
+                  <RowItem
+                    key={inv.id}
+                    onClick={() => navigate(`/invoices/${inv.invoice_number}`)}
+                  >
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <p
+                        style={{
+                          fontSize: "13px",
+                          fontWeight: 600,
+                          color: "#111827",
+                          margin: "0 0 2px",
+                          overflow: "hidden",
+                          textOverflow: "ellipsis",
+                          whiteSpace: "nowrap",
+                        }}
+                      >
+                        {inv.customer.name}
+                      </p>
+                      <p
+                        style={{
+                          fontSize: "11px",
+                          color: "#9ca3af",
+                          fontFamily: "monospace",
+                          margin: 0,
+                        }}
+                      >
+                        {inv.invoice_number}
+                      </p>
+                    </div>
+                    <div
+                      style={{
+                        display: "flex",
+                        alignItems: "center",
+                        gap: "10px",
+                        marginLeft: "12px",
+                      }}
+                    >
+                      <span
+                        style={{
+                          fontSize: "13px",
+                          fontWeight: 600,
+                          color: "#374151",
+                          whiteSpace: "nowrap",
+                        }}
+                      >
+                        {formatCurrency(inv.grand_total)}
+                      </span>
+                      <StatusBadge config={statusCfg} />
+                    </div>
+                  </RowItem>
+                );
+              })
+            )}
+          </SectionCard>
 
           {/* Pekerjaan Tertunda */}
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between pb-2">
-              <CardTitle className="text-base font-semibold">
-                <div className="flex items-center gap-2">
-                  Pekerjaan Tertunda
-                  {stats.pendingJobs > 0 && (
-                    <Badge variant="destructive">{stats.pendingJobs}</Badge>
-                  )}
-                </div>
-              </CardTitle>
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={() => navigate("/jobs?status=pending")}
+          <SectionCard
+            title="Pekerjaan Tertunda"
+            badge={stats.pendingJobs}
+            onViewAll={() => navigate("/jobs?status=pending")}
+          >
+            {loading ? (
+              <div
+                style={{
+                  padding: "12px 20px",
+                  display: "flex",
+                  flexDirection: "column",
+                  gap: "12px",
+                }}
               >
-                Lihat Semua
-                <ArrowRight className="ml-1 h-4 w-4" />
-              </Button>
-            </CardHeader>
-            <CardContent>
-              {pendingJobs.length === 0 ? (
-                <div className="text-center py-8">
-                  <CheckCircle2 className="h-10 w-10 mx-auto text-green-500 mb-2" />
-                  <p className="text-sm text-muted-foreground">
-                    Semua pekerjaan sudah ditugaskan!
-                  </p>
-                </div>
-              ) : (
-                <div className="space-y-3">
-                  {pendingJobs.map((job) => (
+                {[1, 2, 3].map((i) => (
+                  <div
+                    key={i}
+                    style={{
+                      display: "flex",
+                      justifyContent: "space-between",
+                      alignItems: "center",
+                    }}
+                  >
                     <div
-                      key={job.id}
-                      className="flex items-center justify-between p-3 rounded-lg border border-yellow-200 bg-yellow-50 hover:bg-yellow-100 cursor-pointer transition-colors"
-                      onClick={() => navigate(`/jobs/${job.id}`)}
+                      style={{
+                        display: "flex",
+                        flexDirection: "column",
+                        gap: "6px",
+                        flex: 1,
+                      }}
                     >
-                      <div className="flex-1 min-w-0">
-                        <p className="font-medium text-sm truncate">
-                          {job.title}
-                        </p>
-                        <p className="text-xs text-muted-foreground">
-                          {job.invoice.customer.name}
-                        </p>
-                      </div>
-                      <div className="ml-4">
-                        {getPriorityBadge(job.priority)}
-                      </div>
+                      <Skeleton w="65%" h="13px" />
+                      <Skeleton w="40%" h="11px" />
                     </div>
-                  ))}
-                </div>
-              )}
-            </CardContent>
-          </Card>
+                    <Skeleton w="18%" h="22px" />
+                  </div>
+                ))}
+              </div>
+            ) : pendingJobs.length === 0 ? (
+              <EmptyState
+                icon={
+                  <CheckCircle2
+                    style={{ width: "24px", height: "24px", color: "#16a34a" }}
+                  />
+                }
+                message="Semua pekerjaan sudah ditugaskan"
+                positive
+              />
+            ) : (
+              pendingJobs.map((job) => {
+                const priCfg = PRIORITY[job.priority] || PRIORITY.normal;
+                return (
+                  <RowItem
+                    key={job.id}
+                    onClick={() => navigate(`/jobs/${job.id}`)}
+                    warning
+                  >
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <p
+                        style={{
+                          fontSize: "13px",
+                          fontWeight: 600,
+                          color: "#111827",
+                          margin: "0 0 2px",
+                          overflow: "hidden",
+                          textOverflow: "ellipsis",
+                          whiteSpace: "nowrap",
+                        }}
+                      >
+                        {job.title}
+                      </p>
+                      <p
+                        style={{
+                          fontSize: "11px",
+                          color: "#9ca3af",
+                          margin: 0,
+                        }}
+                      >
+                        {job.invoice.customer.name}
+                      </p>
+                    </div>
+                    <StatusBadge config={priCfg} />
+                  </RowItem>
+                );
+              })
+            )}
+          </SectionCard>
         </div>
 
-        {/* Baris Bawah */}
-        <div className="grid gap-6 lg:grid-cols-2">
-          {/* Peringatan Stok */}
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between pb-2">
-              <CardTitle className="text-base font-semibold">
-                <div className="flex items-center gap-2">
-                  Peringatan Stok Menipis
-                  {stockAlerts.length > 0 && (
-                    <Badge variant="destructive">{stockAlerts.length}</Badge>
-                  )}
-                </div>
-              </CardTitle>
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={() => navigate("/inventory")}
+        {/* ── Bottom row ── */}
+        <div
+          style={{
+            display: "grid",
+            gridTemplateColumns: "1fr 1fr",
+            gap: "16px",
+          }}
+        >
+          {/* Stok Menipis */}
+          <SectionCard
+            title="Peringatan Stok"
+            badge={stockAlerts.length}
+            onViewAll={() => navigate("/inventory")}
+          >
+            {loading ? (
+              <div
+                style={{
+                  padding: "12px 20px",
+                  display: "flex",
+                  flexDirection: "column",
+                  gap: "12px",
+                }}
               >
-                Lihat Semua
-                <ArrowRight className="ml-1 h-4 w-4" />
-              </Button>
-            </CardHeader>
-            <CardContent>
-              {stockAlerts.length === 0 ? (
-                <div className="text-center py-8">
-                  <Package className="h-10 w-10 mx-auto text-green-500 mb-2" />
-                  <p className="text-sm text-muted-foreground">
-                    Semua stok dalam kondisi baik!
-                  </p>
-                </div>
-              ) : (
-                <div className="space-y-3">
-                  {stockAlerts.map((alert) => (
+                {[1, 2].map((i) => (
+                  <Skeleton key={i} h="40px" />
+                ))}
+              </div>
+            ) : stockAlerts.length === 0 ? (
+              <EmptyState
+                icon={
+                  <Package
+                    style={{ width: "24px", height: "24px", color: "#16a34a" }}
+                  />
+                }
+                message="Semua stok dalam kondisi baik"
+                positive
+              />
+            ) : (
+              stockAlerts.map((alert) => (
+                <RowItem key={alert.id} warning>
+                  <div
+                    style={{
+                      display: "flex",
+                      alignItems: "center",
+                      gap: "10px",
+                      flex: 1,
+                    }}
+                  >
                     <div
-                      key={alert.id}
-                      className="flex items-center justify-between p-3 rounded-lg border border-amber-200 bg-amber-50"
+                      style={{
+                        background: "#fef9c3",
+                        borderRadius: "8px",
+                        padding: "6px",
+                        flexShrink: 0,
+                      }}
                     >
-                      <div className="flex items-center gap-3">
-                        <AlertTriangle className="h-5 w-5 text-amber-600" />
-                        <div>
-                          <p className="font-medium text-sm">
-                            {alert.product.name}
-                          </p>
-                          <p className="text-xs text-muted-foreground">
-                            Saat ini: {alert.product.stock} | Min:{" "}
-                            {alert.product.min_stock_threshold}
-                          </p>
-                        </div>
-                      </div>
+                      <AlertTriangle
+                        style={{
+                          width: "14px",
+                          height: "14px",
+                          color: "#d97706",
+                        }}
+                      />
                     </div>
-                  ))}
-                </div>
-              )}
-            </CardContent>
-          </Card>
+                    <div>
+                      <p
+                        style={{
+                          fontSize: "13px",
+                          fontWeight: 600,
+                          color: "#111827",
+                          margin: "0 0 1px",
+                        }}
+                      >
+                        {alert.product.name}
+                      </p>
+                      <p
+                        style={{
+                          fontSize: "11px",
+                          color: "#9ca3af",
+                          margin: 0,
+                        }}
+                      >
+                        Stok:{" "}
+                        <strong style={{ color: "#dc2626" }}>
+                          {alert.product.stock}
+                        </strong>{" "}
+                        · Min: {alert.product.min_stock_threshold}
+                      </p>
+                    </div>
+                  </div>
+                </RowItem>
+              ))
+            )}
+          </SectionCard>
 
           {/* Status Teknisi */}
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between pb-2">
-              <CardTitle className="text-base font-semibold">
-                Status Teknisi
-              </CardTitle>
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={() => navigate("/technicians")}
+          <SectionCard
+            title="Status Teknisi"
+            onViewAll={() => navigate("/technicians")}
+          >
+            {loading ? (
+              <div
+                style={{
+                  padding: "12px 20px",
+                  display: "flex",
+                  flexDirection: "column",
+                  gap: "10px",
+                }}
               >
-                Lihat Semua
-                <ArrowRight className="ml-1 h-4 w-4" />
-              </Button>
-            </CardHeader>
-            <CardContent>
-              {technicians.length === 0 ? (
-                <p className="text-sm text-muted-foreground py-4 text-center">
-                  Belum ada teknisi
-                </p>
-              ) : (
-                <div className="space-y-2">
-                  {technicians.map((tech) => (
+                {[1, 2, 3].map((i) => (
+                  <div
+                    key={i}
+                    style={{
+                      display: "flex",
+                      justifyContent: "space-between",
+                      alignItems: "center",
+                    }}
+                  >
                     <div
-                      key={tech.id}
-                      className="flex items-center justify-between p-3 rounded-lg border"
+                      style={{
+                        display: "flex",
+                        alignItems: "center",
+                        gap: "10px",
+                      }}
                     >
-                      <div className="flex items-center gap-3">
-                        <div
-                          className={`h-2 w-2 rounded-full ${
-                            tech.active_jobs_count === 0
-                              ? "bg-green-500"
-                              : "bg-amber-500"
-                          }`}
-                        />
-                        <span className="font-medium text-sm">{tech.name}</span>
-                      </div>
-                      <div className="text-right">
-                        {tech.active_jobs_count === 0 ? (
-                          <Badge
-                            variant="outline"
-                            className="text-green-600 border-green-600"
-                          >
-                            <UserCheck className="h-3 w-3 mr-1" />
-                            Tersedia
-                          </Badge>
-                        ) : (
-                          <Badge variant="secondary">
-                            <Clock className="h-3 w-3 mr-1" />
-                            {tech.active_jobs_count} aktif
-                          </Badge>
-                        )}
-                      </div>
+                      <Skeleton w="28px" h="28px" />
+                      <Skeleton w="100px" h="13px" />
                     </div>
-                  ))}
-                </div>
-              )}
-            </CardContent>
-          </Card>
+                    <Skeleton w="70px" h="22px" />
+                  </div>
+                ))}
+              </div>
+            ) : technicians.length === 0 ? (
+              <EmptyState
+                icon={
+                  <Users
+                    style={{ width: "24px", height: "24px", color: "#d1d5db" }}
+                  />
+                }
+                message="Belum ada teknisi terdaftar"
+              />
+            ) : (
+              technicians.map((tech) => {
+                const isAvailable = tech.active_jobs_count === 0;
+                return (
+                  <RowItem key={tech.id}>
+                    <div
+                      style={{
+                        display: "flex",
+                        alignItems: "center",
+                        gap: "10px",
+                        flex: 1,
+                      }}
+                    >
+                      {/* Avatar initial */}
+                      <div
+                        style={{
+                          width: "28px",
+                          height: "28px",
+                          borderRadius: "50%",
+                          flexShrink: 0,
+                          background: isAvailable ? "#dcfce7" : "#fef9c3",
+                          display: "flex",
+                          alignItems: "center",
+                          justifyContent: "center",
+                          fontSize: "10px",
+                          fontWeight: 700,
+                          color: isAvailable ? "#16a34a" : "#d97706",
+                        }}
+                      >
+                        {tech.name
+                          .split(" ")
+                          .map((n: string) => n[0])
+                          .join("")
+                          .toUpperCase()
+                          .slice(0, 2)}
+                      </div>
+                      <span
+                        style={{
+                          fontSize: "13px",
+                          fontWeight: 500,
+                          color: "#374151",
+                        }}
+                      >
+                        {tech.name}
+                      </span>
+                    </div>
+                    <span
+                      style={{
+                        display: "flex",
+                        alignItems: "center",
+                        gap: "5px",
+                        fontSize: "11px",
+                        fontWeight: 600,
+                        color: isAvailable ? "#16a34a" : "#d97706",
+                        background: isAvailable ? "#dcfce7" : "#fef9c3",
+                        padding: "3px 10px",
+                        borderRadius: "20px",
+                      }}
+                    >
+                      <span
+                        style={{
+                          width: "5px",
+                          height: "5px",
+                          borderRadius: "50%",
+                          background: "currentColor",
+                          display: "inline-block",
+                        }}
+                      />
+                      {isAvailable
+                        ? "Tersedia"
+                        : `${tech.active_jobs_count} Job Aktif`}
+                    </span>
+                  </RowItem>
+                );
+              })
+            )}
+          </SectionCard>
         </div>
       </div>
     </DashboardLayout>
+  );
+}
+
+// ── Empty State ───────────────────────────────────────────────────────────────
+function EmptyState({
+  icon,
+  message,
+  positive,
+}: {
+  icon: React.ReactNode;
+  message: string;
+  positive?: boolean;
+}) {
+  return (
+    <div style={{ padding: "32px 20px", textAlign: "center" }}>
+      <div
+        style={{
+          marginBottom: "8px",
+          display: "flex",
+          justifyContent: "center",
+        }}
+      >
+        {icon}
+      </div>
+      <p
+        style={{
+          fontSize: "13px",
+          color: positive ? "#16a34a" : "#9ca3af",
+          fontWeight: 500,
+          margin: 0,
+        }}
+      >
+        {message}
+      </p>
+    </div>
   );
 }

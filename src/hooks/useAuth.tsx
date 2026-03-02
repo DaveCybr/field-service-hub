@@ -1,5 +1,7 @@
 // ============================================
-// FILE 2: src/hooks/useAuth.tsx (UPDATED)
+// FILE: src/hooks/useAuth.tsx (FIXED)
+// Removed fetchUserRole() yang query ke user_roles (tabel sudah dihapus)
+// Role sekarang diambil langsung dari employees table
 // ============================================
 import {
   createContext,
@@ -40,7 +42,7 @@ interface AuthContextType {
     email: string,
     password: string,
     name: string,
-    role?: string
+    role?: string,
   ) => Promise<{ error: Error | null }>;
   signOut: () => Promise<void>;
 }
@@ -60,10 +62,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         .from("employees")
         .select("*")
         .eq("user_id", userId)
-        .maybeSingle(); // ← Changed from .single()
+        .maybeSingle();
 
       if (!error && data) {
         setEmployee(data as Employee);
+        // Role diambil dari employees, bukan user_roles
+        setUserRole(data.role as EmployeeRole);
       } else if (error) {
         console.log("No employee record found:", error.message);
       }
@@ -72,39 +76,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   };
 
-  const fetchUserRole = async (userId: string) => {
-    try {
-      const { data, error } = await supabase
-        .from("user_roles")
-        .select("role")
-        .eq("user_id", userId)
-        .maybeSingle(); // ← Changed from .single()
-
-      if (!error && data) {
-        setUserRole(data.role as EmployeeRole);
-      } else if (error) {
-        console.log("No user role found:", error.message);
-      }
-    } catch (err) {
-      console.error("Error fetching user role:", err);
-    }
-  };
-
   useEffect(() => {
-    // Set up auth state listener FIRST
     const {
       data: { subscription },
     } = supabase.auth.onAuthStateChange((event, session) => {
-      console.log("Auth state changed:", event, session?.user?.email);
-
       setSession(session);
       setUser(session?.user ?? null);
 
-      // Defer Supabase calls with setTimeout
       if (session?.user) {
         setTimeout(() => {
           fetchEmployee(session.user.id);
-          fetchUserRole(session.user.id);
         }, 0);
       } else {
         setEmployee(null);
@@ -114,14 +95,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setLoading(false);
     });
 
-    // THEN check for existing session
     supabase.auth.getSession().then(({ data: { session } }) => {
       setSession(session);
       setUser(session?.user ?? null);
 
       if (session?.user) {
         fetchEmployee(session.user.id);
-        fetchUserRole(session.user.id);
       }
 
       setLoading(false);
@@ -142,7 +121,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     email: string,
     password: string,
     name: string,
-    role: string = "technician"
+    role: string = "technician",
   ) => {
     const redirectUrl = `${window.location.origin}/`;
 
