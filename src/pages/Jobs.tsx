@@ -22,7 +22,7 @@ import {
 import { cn } from "@/lib/utils";
 import DashboardLayout from "@/components/layout/DashboardLayout";
 import { DialogHeader } from "@/components/ui/dialog";
-import { supabase } from "@/services/technicianService";
+import { assignmentService } from "@/services/technicianService";
 import {
   Dialog,
   DialogContent,
@@ -31,6 +31,7 @@ import {
 } from "@radix-ui/react-dialog";
 import { useState, useEffect, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
+import { supabase } from "@/integrations/supabase/client";
 
 const STATUS_TABS = [
   { value: "all", label: "Semua", count: null },
@@ -119,30 +120,8 @@ export default function Jobs() {
   }, [jobs]);
 
   const fetchStats = async () => {
-    const [p, a, ip, c] = await Promise.all([
-      supabase
-        .from("invoice_services")
-        .select("*", { count: "exact", head: true })
-        .eq("status", "pending"),
-      supabase
-        .from("invoice_services")
-        .select("*", { count: "exact", head: true })
-        .eq("status", "assigned"),
-      supabase
-        .from("invoice_services")
-        .select("*", { count: "exact", head: true })
-        .eq("status", "in_progress"),
-      supabase
-        .from("invoice_services")
-        .select("*", { count: "exact", head: true })
-        .eq("status", "completed"),
-    ]);
-    setStats({
-      pending: p.count || 0,
-      assigned: a.count || 0,
-      in_progress: ip.count || 0,
-      completed: c.count || 0,
-    });
+    const data = await assignmentService.getStats();
+    setStats(data);
   };
 
   const fetchTeamCounts = async () => {

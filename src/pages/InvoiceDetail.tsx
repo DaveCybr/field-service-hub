@@ -80,11 +80,11 @@ export default function InvoiceDetail() {
         services={services}
         items={items}
         companyInfo={{
-          name: "REKAMTEKNIK",
-          address: "Jember, Jawa Timur",
-          phone: "+62 xxx-xxxx-xxxx",
-          email: "info@rekamteknik.com",
-          logo: "/logo.png",
+          name: "RAFA ELEKTRONIK",
+          address: "Tekoan, Tanggul Kulon, Tanggul, Jember Regency, East Java",
+          phone: "+62 823-3570-4609",
+          email: "rafaelektronik99@gmail.com",
+          logo: "/logo-rafa.jpg",
         }}
       />
 

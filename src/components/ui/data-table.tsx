@@ -1,6 +1,6 @@
 // ============================================
 // SERVER-SIDE DATA TABLE COMPONENT
-// src/components/ui/data-table-server.tsx
+// src/components/ui/data-table.tsx
 // Table with backend pagination for large datasets
 // ============================================
 
@@ -58,6 +58,9 @@ interface DataTableServerProps<TData, TValue> {
   totalRows: number;
   pagination: PaginationState;
   onPaginationChange: (pagination: PaginationState) => void;
+  // ✅ Sorting props — controlled from parent
+  sorting?: SortingState;
+  onSortingChange?: (sorting: SortingState) => void;
   loading?: boolean;
   searchKey?: string;
   searchPlaceholder?: string;
@@ -78,6 +81,8 @@ export function DataTableServer<TData, TValue>({
   totalRows,
   pagination,
   onPaginationChange,
+  sorting: externalSorting,
+  onSortingChange: externalOnSortingChange,
   loading = false,
   searchKey,
   searchPlaceholder = "Search...",
@@ -90,12 +95,15 @@ export function DataTableServer<TData, TValue>({
   emptyMessage = "No results found",
   emptyDescription,
 }: DataTableServerProps<TData, TValue>) {
-  const [sorting, setSorting] = useState<SortingState>([]);
+  // Gunakan sorting eksternal jika ada, fallback ke internal
+  const [internalSorting, setInternalSorting] = useState<SortingState>([]);
+  const sorting = externalSorting ?? internalSorting;
+  const setSorting = externalOnSortingChange ?? setInternalSorting;
+
   const [columnFilters, setColumnFilters] = useState<ColumnFiltersState>([]);
   const [columnVisibility, setColumnVisibility] = useState<VisibilityState>({});
   const [rowSelection, setRowSelection] = useState({});
 
-  // Add selection column if multi-select enabled
   const tableColumns = enableMultiSelect
     ? [
         {
@@ -135,18 +143,22 @@ export function DataTableServer<TData, TValue>({
       rowSelection,
       pagination,
     },
-    onSortingChange: setSorting,
+    onSortingChange: (updater) => {
+      // updater bisa berupa fungsi atau value langsung
+      const newSorting =
+        typeof updater === "function" ? updater(sorting) : updater;
+      setSorting(newSorting);
+    },
     onColumnFiltersChange: setColumnFilters,
     onColumnVisibilityChange: setColumnVisibility,
     onRowSelectionChange: setRowSelection,
     onPaginationChange,
     getCoreRowModel: getCoreRowModel(),
-    manualPagination: true, // ✅ Server-side pagination
-    manualSorting: true, // ✅ Server-side sorting (optional)
-    manualFiltering: true, // ✅ Server-side filtering (optional)
+    manualPagination: true,
+    manualSorting: true,
+    manualFiltering: true,
   });
 
-  // Notify parent of selection changes
   useEffect(() => {
     if (onSelectionChange && enableMultiSelect) {
       const selectedRows = table
@@ -163,7 +175,6 @@ export function DataTableServer<TData, TValue>({
       {/* Toolbar */}
       <div className="flex items-center justify-between gap-4">
         <div className="flex flex-1 items-center gap-2">
-          {/* Search */}
           {searchKey && onSearchChange && (
             <div className="relative max-w-sm">
               <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
@@ -186,7 +197,6 @@ export function DataTableServer<TData, TValue>({
             </div>
           )}
 
-          {/* Selection Count */}
           {enableMultiSelect && selectedCount > 0 && (
             <Badge variant="secondary" className="ml-2">
               {selectedCount} selected
@@ -194,7 +204,6 @@ export function DataTableServer<TData, TValue>({
           )}
         </div>
 
-        {/* Column Visibility */}
         {enableColumnVisibility && (
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
@@ -211,20 +220,18 @@ export function DataTableServer<TData, TValue>({
                     typeof column.accessorFn !== "undefined" &&
                     column.getCanHide(),
                 )
-                .map((column) => {
-                  return (
-                    <DropdownMenuCheckboxItem
-                      key={column.id}
-                      className="capitalize"
-                      checked={column.getIsVisible()}
-                      onCheckedChange={(value) =>
-                        column.toggleVisibility(!!value)
-                      }
-                    >
-                      {column.id}
-                    </DropdownMenuCheckboxItem>
-                  );
-                })}
+                .map((column) => (
+                  <DropdownMenuCheckboxItem
+                    key={column.id}
+                    className="capitalize"
+                    checked={column.getIsVisible()}
+                    onCheckedChange={(value) =>
+                      column.toggleVisibility(!!value)
+                    }
+                  >
+                    {column.id}
+                  </DropdownMenuCheckboxItem>
+                ))}
             </DropdownMenuContent>
           </DropdownMenu>
         )}
@@ -236,18 +243,16 @@ export function DataTableServer<TData, TValue>({
           <TableHeader>
             {table.getHeaderGroups().map((headerGroup) => (
               <TableRow key={headerGroup.id}>
-                {headerGroup.headers.map((header) => {
-                  return (
-                    <TableHead key={header.id}>
-                      {header.isPlaceholder
-                        ? null
-                        : flexRender(
-                            header.column.columnDef.header,
-                            header.getContext(),
-                          )}
-                    </TableHead>
-                  );
-                })}
+                {headerGroup.headers.map((header) => (
+                  <TableHead key={header.id}>
+                    {header.isPlaceholder
+                      ? null
+                      : flexRender(
+                          header.column.columnDef.header,
+                          header.getContext(),
+                        )}
+                  </TableHead>
+                ))}
               </TableRow>
             ))}
           </TableHeader>
@@ -326,7 +331,6 @@ export function DataTableServer<TData, TValue>({
           </div>
 
           <div className="flex items-center gap-6">
-            {/* Rows per page */}
             <div className="flex items-center gap-2">
               <p className="text-sm font-medium">Rows per page</p>
               <Select
@@ -335,7 +339,7 @@ export function DataTableServer<TData, TValue>({
                   onPaginationChange({
                     ...pagination,
                     pageSize: Number(value),
-                    pageIndex: 0, // Reset to first page
+                    pageIndex: 0,
                   });
                 }}
               >
@@ -352,12 +356,10 @@ export function DataTableServer<TData, TValue>({
               </Select>
             </div>
 
-            {/* Page info */}
             <div className="flex items-center justify-center text-sm font-medium">
               Page {pagination.pageIndex + 1} of {pageCount}
             </div>
 
-            {/* Pagination buttons */}
             <div className="flex items-center gap-1">
               <Button
                 variant="outline"

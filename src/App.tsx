@@ -336,7 +336,7 @@ const App = () => (
     <TooltipProvider>
       <Toaster />
       <Sonner />
-      <BrowserRouter basename="/v2">
+      <BrowserRouter basename="/">
         <Routes>
           <Route
             path="/*"

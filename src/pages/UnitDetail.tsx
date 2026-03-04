@@ -1,16 +1,7 @@
-// ============================================
-// FILE: src/pages/UnitDetail.tsx
-// FIX Bug 2: Teknisi diambil dari service_technician_assignments
-//      jika assigned_technician_id null
-// FIX Bug 4: Stats menggunakan updated_at bukan actual_checkout_at
-// ============================================
 import { useEffect, useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import DashboardLayout from "@/components/layout/DashboardLayout";
-import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
@@ -23,6 +14,14 @@ import {
   AlertTriangle,
   Package,
   History,
+  RefreshCw,
+  ShieldCheck,
+  ShieldOff,
+  User,
+  Calendar,
+  Hash,
+  Cpu,
+  Zap,
 } from "lucide-react";
 import { format } from "date-fns";
 import { formatCurrency } from "@/lib/utils/currency";
@@ -34,6 +33,7 @@ import { RecurringIssuesAlert } from "@/components/units/RecurringIssuesAlert";
 import { PartsHistoryTimeline } from "@/components/units/PartsHistoryTimeline";
 import { ServiceTimeline } from "@/components/units/ServiceTimeline";
 import { useUnitInsights } from "@/hooks/useUnitInsights";
+import { cn } from "@/lib/utils";
 
 interface UnitDetail {
   id: string;
@@ -77,6 +77,32 @@ interface Customer {
   name: string;
 }
 
+function InfoRow({
+  label,
+  value,
+  mono,
+}: {
+  label: string;
+  value: string;
+  mono?: boolean;
+}) {
+  return (
+    <div className="space-y-1">
+      <p className="text-[11px] font-bold uppercase tracking-widest text-slate-400">
+        {label}
+      </p>
+      <p
+        className={cn(
+          "text-sm font-semibold text-slate-800",
+          mono && "font-mono",
+        )}
+      >
+        {value}
+      </p>
+    </div>
+  );
+}
+
 export default function UnitDetail() {
   const { id } = useParams();
   const navigate = useNavigate();
@@ -115,15 +141,12 @@ export default function UnitDetail() {
   const fetchUnitDetails = async () => {
     setLoading(true);
     try {
-      // ── Unit info ──────────────────────────────────────────────────────────
       const { data: unitData, error: unitError } = await supabase
         .from("units")
         .select(`*, customer:customers (id, name, phone, email)`)
         .eq("id", id)
         .single();
-
       if (unitError) throw unitError;
-
       setUnit({
         ...unitData,
         customer: Array.isArray(unitData.customer)
@@ -131,55 +154,35 @@ export default function UnitDetail() {
           : unitData.customer,
       });
 
-      // ── Service history ────────────────────────────────────────────────────
       const { data: historyData, error: historyError } = await supabase
         .from("invoice_services")
         .select(
-          `
-          id, title, description, status, priority,
-          service_cost, parts_cost, total_cost,
-          scheduled_date, actual_checkin_at, actual_checkout_at,
-          service_address, technician_notes,
-          invoice:invoices (invoice_number, invoice_date),
-          assigned_technician:employees!invoice_services_assigned_technician_id_fkey (name)
-        `,
+          `id, title, description, status, priority, service_cost, parts_cost, total_cost, scheduled_date, actual_checkin_at, actual_checkout_at, service_address, technician_notes, invoice:invoices (invoice_number, invoice_date), assigned_technician:employees!invoice_services_assigned_technician_id_fkey (name)`,
         )
         .eq("unit_id", id)
         .order("created_at", { ascending: false });
-
       if (historyError) throw historyError;
 
-      // ── FIX Bug 2: Untuk service yang assigned_technician null,
-      //    cari dari service_technician_assignments (lead technician) ──────────
       const serviceIds = historyData?.map((s) => s.id) || [];
-
       let assignmentMap: Record<string, string> = {};
       if (serviceIds.length > 0) {
         const { data: assignments } = await supabase
           .from("service_technician_assignments")
           .select(
-            `
-            service_id,
-            technician:employees!service_technician_assignments_technician_id_fkey (name)
-          `,
+            `service_id, technician:employees!service_technician_assignments_technician_id_fkey (name)`,
           )
           .in("service_id", serviceIds)
-          .eq("role", "lead") // Ambil lead technician
+          .eq("role", "lead")
           .order("assigned_at", { ascending: true });
 
-        // Jika tidak ada lead, ambil semua dan ambil yang pertama
         if (!assignments?.length) {
           const { data: allAssignments } = await supabase
             .from("service_technician_assignments")
             .select(
-              `
-              service_id,
-              technician:employees!service_technician_assignments_technician_id_fkey (name)
-            `,
+              `service_id, technician:employees!service_technician_assignments_technician_id_fkey (name)`,
             )
             .in("service_id", serviceIds)
             .order("assigned_at", { ascending: true });
-
           for (const a of allAssignments || []) {
             if (!assignmentMap[a.service_id]) {
               const tech = Array.isArray(a.technician)
@@ -203,11 +206,7 @@ export default function UnitDetail() {
           const directTech = Array.isArray(item.assigned_technician)
             ? item.assigned_technician[0]
             : item.assigned_technician;
-
-          // Gunakan assigned_technician_id jika ada,
-          // fallback ke service_technician_assignments
           const techName = directTech?.name || assignmentMap[item.id] || null;
-
           return {
             ...item,
             invoice: Array.isArray(item.invoice)
@@ -218,7 +217,6 @@ export default function UnitDetail() {
         }) || [],
       );
     } catch (error: any) {
-      console.error("Error fetching unit details:", error);
       toast({
         variant: "destructive",
         title: "Error",
@@ -276,8 +274,12 @@ export default function UnitDetail() {
   if (loading) {
     return (
       <DashboardLayout>
-        <div className="flex items-center justify-center min-h-[400px]">
-          <div className="h-8 w-8 animate-spin rounded-full border-4 border-primary border-t-transparent" />
+        <div
+          className="flex flex-col items-center justify-center min-h-[400px] gap-3"
+          style={{ fontFamily: "'Plus Jakarta Sans', system-ui" }}
+        >
+          <RefreshCw className="h-6 w-6 animate-spin text-slate-300" />
+          <p className="text-sm text-slate-400">Memuat data unit...</p>
         </div>
       </DashboardLayout>
     );
@@ -286,133 +288,154 @@ export default function UnitDetail() {
   if (!unit) {
     return (
       <DashboardLayout>
-        <div className="text-center py-12">
-          <h3 className="text-lg font-medium">Unit tidak ditemukan</h3>
-          <Button onClick={() => navigate("/units")} className="mt-4">
+        <div
+          className="flex flex-col items-center justify-center min-h-[400px] gap-4"
+          style={{ fontFamily: "'Plus Jakarta Sans', system-ui" }}
+        >
+          <div className="rounded-full bg-slate-100 p-4">
+            <Package className="h-8 w-8 text-slate-400" />
+          </div>
+          <div className="text-center">
+            <h3 className="font-bold text-slate-900">Unit Tidak Ditemukan</h3>
+            <p className="text-sm text-slate-500 mt-1">
+              Data unit tidak tersedia atau telah dihapus.
+            </p>
+          </div>
+          <button
+            onClick={() => navigate("/units")}
+            className="h-9 px-4 rounded-lg border border-slate-200 text-slate-600 text-sm font-semibold hover:bg-slate-50 transition-all"
+          >
             Kembali ke Daftar Unit
-          </Button>
+          </button>
         </div>
       </DashboardLayout>
     );
   }
 
+  const completed = serviceHistory.filter(
+    (s) => s.status === "completed",
+  ).length;
+  const inProgress = serviceHistory.filter(
+    (s) => s.status === "in_progress",
+  ).length;
+
   return (
     <DashboardLayout>
-      <div className="space-y-6 animate-fade-in">
-        {/* Header */}
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-4">
-            <Button
-              variant="ghost"
-              size="icon"
+      <style>{`
+        @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap');
+        .udetail-root { font-family: 'Plus Jakarta Sans', system-ui, sans-serif; }
+        .udetail-fade { animation: fadeUp 0.2s ease; }
+        @keyframes fadeUp { from{opacity:0;transform:translateY(6px)} to{opacity:1;transform:none} }
+      `}</style>
+
+      <div className="udetail-root udetail-fade space-y-5">
+        {/* ── Header ── */}
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+          <div className="flex items-center gap-3">
+            <button
               onClick={() => navigate("/units")}
+              className="h-9 w-9 rounded-lg border border-slate-200 flex items-center justify-center text-slate-500 hover:bg-slate-50 transition-all shrink-0"
             >
-              <ArrowLeft className="h-5 w-5" />
-            </Button>
+              <ArrowLeft className="h-4 w-4" />
+            </button>
+            <div className="rounded-xl p-2.5 bg-blue-100 shrink-0">
+              <Package className="h-5 w-5 text-blue-600" />
+            </div>
             <div>
-              <h1 className="text-2xl font-bold tracking-tight">
+              <h1 className="text-2xl font-bold text-slate-900 tracking-tight">
                 {unit.unit_type}
               </h1>
-              <p className="text-muted-foreground">
+              <p className="text-sm text-slate-500 mt-0.5">
                 {[unit.brand, unit.model].filter(Boolean).join(" ") ||
-                  "Tidak ada merk/model"}
+                  "Tidak ada merek/model"}
               </p>
             </div>
           </div>
-          <div className="flex gap-2">
-            <Button variant="outline" onClick={() => setShowQR(!showQR)}>
-              <QrCode className="mr-2 h-4 w-4" />
-              {showQR ? "Sembunyikan" : "Tampilkan"} QR
-            </Button>
-            <Button variant="outline" onClick={() => setEditModalOpen(true)}>
-              <Edit className="h-4 w-4 mr-2" />
-              Edit
-            </Button>
-            <Button
-              variant="outline"
-              onClick={() => setDeleteOpen(true)}
-              className="text-destructive hover:bg-destructive/10"
+
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => setShowQR(!showQR)}
+              className="flex items-center gap-2 h-9 px-4 rounded-lg bg-white border border-slate-200 text-slate-700 text-sm font-semibold hover:bg-slate-50 transition-all"
             >
-              <Trash2 className="h-4 w-4 mr-2" />
+              <QrCode className="h-3.5 w-3.5" />
+              {showQR ? "Sembunyikan" : "Tampilkan"} QR
+            </button>
+            <button
+              onClick={() => setEditModalOpen(true)}
+              className="flex items-center gap-2 h-9 px-4 rounded-lg bg-white border border-slate-200 text-slate-700 text-sm font-semibold hover:bg-slate-50 transition-all"
+            >
+              <Edit className="h-3.5 w-3.5" />
+              Edit
+            </button>
+            <button
+              onClick={() => setDeleteOpen(true)}
+              className="flex items-center gap-2 h-9 px-4 rounded-lg bg-white border border-red-200 text-red-600 text-sm font-semibold hover:bg-red-50 transition-all"
+            >
+              <Trash2 className="h-3.5 w-3.5" />
               Hapus
-            </Button>
+            </button>
           </div>
         </div>
 
-        {/* Issues alert */}
+        {/* ── Issues Alert ── */}
         {!insightsLoading && insights.criticalIssuesCount > 0 && (
-          <div className="flex gap-2">
-            <Badge variant="destructive" className="animate-pulse">
-              <AlertTriangle className="h-3 w-3 mr-1" />
-              {insights.criticalIssuesCount} Masalah Kritis
-            </Badge>
-            {insights.activeIssuesCount > insights.criticalIssuesCount && (
-              <Badge
-                variant="outline"
-                className="border-yellow-500 text-yellow-700"
-              >
-                <AlertTriangle className="h-3 w-3 mr-1" />
-                {insights.activeIssuesCount - insights.criticalIssuesCount}{" "}
-                Masalah Aktif Lainnya
-              </Badge>
-            )}
+          <div className="flex items-center gap-3 p-3.5 bg-red-50 border border-red-200 rounded-xl">
+            <AlertTriangle className="h-4 w-4 text-red-600 shrink-0" />
+            <span className="text-sm font-semibold text-red-800">
+              {insights.criticalIssuesCount} masalah kritis terdeteksi
+              {insights.activeIssuesCount > insights.criticalIssuesCount &&
+                ` · ${insights.activeIssuesCount - insights.criticalIssuesCount} masalah aktif lainnya`}
+            </span>
           </div>
         )}
 
-        <div className="grid gap-6 lg:grid-cols-3">
-          {/* Main Content */}
-          <div className="lg:col-span-2 space-y-6">
-            <Card>
-              <CardHeader>
-                <CardTitle className="text-base">Informasi Unit</CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <div className="grid grid-cols-2 gap-4">
-                  {[
-                    { label: "QR Code", value: unit.qr_code, mono: true },
-                    { label: "Tipe Unit", value: unit.unit_type },
-                    { label: "Merk", value: unit.brand || "-" },
-                    { label: "Model", value: unit.model || "-" },
-                    {
-                      label: "No. Seri",
-                      value: unit.serial_number || "-",
-                      mono: true,
-                    },
-                    { label: "Kapasitas", value: unit.capacity || "-" },
-                  ].map((f) => (
-                    <div key={f.label}>
-                      <p className="text-sm text-muted-foreground">{f.label}</p>
-                      <p className={`font-medium ${f.mono ? "font-mono" : ""}`}>
-                        {f.value}
-                      </p>
-                    </div>
-                  ))}
+        <div className="grid gap-5 lg:grid-cols-3">
+          {/* ── Main Column ── */}
+          <div className="lg:col-span-2 space-y-5">
+            {/* Info Unit */}
+            <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
+              <div className="px-5 py-4 border-b border-slate-100">
+                <span className="text-[11px] font-bold uppercase tracking-widest text-slate-400">
+                  Informasi Unit
+                </span>
+              </div>
+              <div className="p-5 space-y-5">
+                <div className="grid grid-cols-2 sm:grid-cols-3 gap-5">
+                  <InfoRow label="QR Code" value={unit.qr_code} mono />
+                  <InfoRow label="Tipe Unit" value={unit.unit_type} />
+                  <InfoRow label="Merek" value={unit.brand || "—"} />
+                  <InfoRow label="Model" value={unit.model || "—"} />
+                  <InfoRow
+                    label="No. Seri"
+                    value={unit.serial_number || "—"}
+                    mono
+                  />
+                  <InfoRow label="Kapasitas" value={unit.capacity || "—"} />
                 </div>
 
                 {unit.warranty_expiry_date && (
                   <>
-                    <Separator />
+                    <div className="h-px bg-slate-100" />
                     <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-2">
-                        <Shield
-                          className={`h-5 w-5 ${isWarrantyActive() ? "text-green-600" : "text-muted-foreground"}`}
-                        />
-                        <div>
-                          <p className="text-sm text-muted-foreground">
-                            Status Garansi
-                          </p>
-                          <p
-                            className={`font-medium ${isWarrantyActive() ? "text-green-600" : "text-muted-foreground"}`}
-                          >
-                            {isWarrantyActive() ? "Aktif" : "Kadaluarsa"}
-                          </p>
-                        </div>
-                      </div>
-                      <div className="text-right">
-                        <p className="text-sm text-muted-foreground">
-                          Berlaku sampai
+                      <div className="space-y-1">
+                        <p className="text-[11px] font-bold uppercase tracking-widest text-slate-400">
+                          Status Garansi
                         </p>
-                        <p className="font-medium">
+                        {isWarrantyActive() ? (
+                          <span className="flex items-center gap-1.5 text-sm font-bold text-emerald-700">
+                            <ShieldCheck className="h-4 w-4" /> Garansi Aktif
+                          </span>
+                        ) : (
+                          <span className="flex items-center gap-1.5 text-sm font-bold text-slate-500">
+                            <ShieldOff className="h-4 w-4" /> Garansi Kadaluarsa
+                          </span>
+                        )}
+                      </div>
+                      <div className="text-right space-y-1">
+                        <p className="text-[11px] font-bold uppercase tracking-widest text-slate-400">
+                          Berlaku Sampai
+                        </p>
+                        <p className="text-sm font-semibold text-slate-800">
                           {format(
                             new Date(unit.warranty_expiry_date),
                             "d MMM yyyy",
@@ -423,17 +446,20 @@ export default function UnitDetail() {
                   </>
                 )}
 
-                <Separator />
-                <div>
-                  <p className="text-sm text-muted-foreground">
+                <div className="h-px bg-slate-100" />
+                <div className="space-y-1">
+                  <p className="text-[11px] font-bold uppercase tracking-widest text-slate-400">
                     Tanggal Registrasi
                   </p>
-                  <p className="font-medium">
-                    {format(new Date(unit.created_at), "d MMMM yyyy")}
-                  </p>
+                  <div className="flex items-center gap-1.5">
+                    <Calendar className="h-3.5 w-3.5 text-slate-400" />
+                    <p className="text-sm font-semibold text-slate-800">
+                      {format(new Date(unit.created_at), "d MMMM yyyy")}
+                    </p>
+                  </div>
                 </div>
-              </CardContent>
-            </Card>
+              </div>
+            </div>
 
             {!insightsLoading && insights.recurringIssues.length > 0 && (
               <RecurringIssuesAlert
@@ -442,27 +468,31 @@ export default function UnitDetail() {
               />
             )}
 
+            {/* Tabs */}
             <Tabs defaultValue="services" className="w-full">
-              <TabsList className="grid w-full grid-cols-2">
+              <TabsList className="grid w-full grid-cols-2 bg-slate-100 rounded-xl p-1">
                 <TabsTrigger
                   value="services"
-                  className="flex items-center gap-2"
+                  className="rounded-lg flex items-center gap-2 text-sm font-semibold data-[state=active]:bg-white data-[state=active]:shadow-sm"
                 >
-                  <History className="h-4 w-4" /> Riwayat Service
+                  <History className="h-3.5 w-3.5" /> Riwayat Service
                 </TabsTrigger>
-                <TabsTrigger value="parts" className="flex items-center gap-2">
-                  <Package className="h-4 w-4" /> Riwayat Sparepart
+                <TabsTrigger
+                  value="parts"
+                  className="rounded-lg flex items-center gap-2 text-sm font-semibold data-[state=active]:bg-white data-[state=active]:shadow-sm"
+                >
+                  <Package className="h-3.5 w-3.5" /> Riwayat Sparepart
                   {insights.partsHistory.length > 0 && (
-                    <Badge variant="secondary" className="ml-1">
+                    <span className="text-[11px] font-bold bg-slate-200 text-slate-600 px-1.5 py-0.5 rounded-full">
                       {insights.partsHistory.length}
-                    </Badge>
+                    </span>
                   )}
                 </TabsTrigger>
               </TabsList>
-              <TabsContent value="services" className="mt-6">
+              <TabsContent value="services" className="mt-4">
                 <ServiceTimeline services={serviceHistory} />
               </TabsContent>
-              <TabsContent value="parts" className="mt-6">
+              <TabsContent value="parts" className="mt-4">
                 <PartsHistoryTimeline
                   parts={insights.partsHistory}
                   totalCost={insights.totalPartsCost}
@@ -472,137 +502,159 @@ export default function UnitDetail() {
             </Tabs>
           </div>
 
-          {/* Sidebar */}
-          <div className="space-y-6">
+          {/* ── Sidebar ── */}
+          <div className="space-y-5">
+            {/* QR Code */}
             {showQR && (
-              <Card>
-                <CardHeader>
-                  <CardTitle className="text-base">QR Code</CardTitle>
-                </CardHeader>
-                <CardContent className="flex flex-col items-center gap-4">
-                  <div className="bg-white p-4 rounded-lg border">
+              <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
+                <div className="px-5 py-4 border-b border-slate-100">
+                  <span className="text-[11px] font-bold uppercase tracking-widest text-slate-400">
+                    QR Code
+                  </span>
+                </div>
+                <div className="p-5 flex flex-col items-center gap-4">
+                  <div className="bg-white p-3 rounded-xl border border-slate-200">
                     <QRCodeSVG
                       id="unit-qr-code"
                       value={unit.qr_code}
-                      size={160}
+                      size={140}
                       level="H"
                       includeMargin
                     />
                   </div>
-                  <Button
-                    variant="outline"
+                  <button
                     onClick={handleDownloadQR}
-                    className="w-full"
+                    className="w-full flex items-center justify-center gap-2 h-9 rounded-lg border border-slate-200 text-slate-700 text-sm font-semibold hover:bg-slate-50 transition-all"
                   >
-                    <Download className="mr-2 h-4 w-4" />
+                    <Download className="h-3.5 w-3.5" />
                     Download QR
-                  </Button>
-                </CardContent>
-              </Card>
+                  </button>
+                </div>
+              </div>
             )}
 
-            <Card>
-              <CardHeader>
-                <CardTitle className="text-base">Pelanggan</CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-3">
-                <div>
-                  <p className="text-sm text-muted-foreground">Nama</p>
-                  <p className="font-medium">{unit.customer.name}</p>
+            {/* Pelanggan */}
+            <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
+              <div className="px-5 py-4 border-b border-slate-100">
+                <span className="text-[11px] font-bold uppercase tracking-widest text-slate-400">
+                  Pelanggan
+                </span>
+              </div>
+              <div className="p-5 space-y-3">
+                <div className="flex items-center gap-3">
+                  <div className="rounded-xl bg-blue-100 p-2.5 shrink-0">
+                    <User className="h-4 w-4 text-blue-600" />
+                  </div>
+                  <div>
+                    <p className="text-sm font-bold text-slate-800">
+                      {unit.customer.name}
+                    </p>
+                    {unit.customer.phone && (
+                      <p className="text-xs text-slate-400">
+                        {unit.customer.phone}
+                      </p>
+                    )}
+                  </div>
                 </div>
-                {unit.customer.phone && (
-                  <div>
-                    <p className="text-sm text-muted-foreground">Telepon</p>
-                    <p className="font-medium">{unit.customer.phone}</p>
-                  </div>
-                )}
                 {unit.customer.email && (
-                  <div>
-                    <p className="text-sm text-muted-foreground">Email</p>
-                    <p className="font-medium">{unit.customer.email}</p>
-                  </div>
+                  <p className="text-xs text-slate-500 pl-1">
+                    {unit.customer.email}
+                  </p>
                 )}
-                <Button
-                  variant="outline"
-                  className="w-full"
+                <button
                   onClick={() => navigate(`/customers/${unit.customer.id}`)}
+                  className="w-full flex items-center justify-center gap-2 h-9 rounded-lg border border-slate-200 text-slate-700 text-sm font-semibold hover:bg-slate-50 transition-all mt-1"
                 >
-                  Lihat Pelanggan
-                </Button>
-              </CardContent>
-            </Card>
+                  Lihat Profil Pelanggan
+                </button>
+              </div>
+            </div>
 
-            <Card>
-              <CardHeader>
-                <CardTitle className="text-base">Statistik</CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-3">
-                {[
-                  { label: "Total Service", value: serviceHistory.length },
-                  {
-                    label: "Selesai",
-                    value: serviceHistory.filter(
-                      (s) => s.status === "completed",
-                    ).length,
-                  },
-                  {
-                    label: "Sedang Berjalan",
-                    value: serviceHistory.filter(
-                      (s) => s.status === "in_progress",
-                    ).length,
-                  },
-                ].map((s) => (
-                  <div
-                    key={s.label}
-                    className="flex items-center justify-between"
-                  >
-                    <span className="text-sm text-muted-foreground">
-                      {s.label}
-                    </span>
-                    <span className="font-bold text-lg">{s.value}</span>
-                  </div>
-                ))}
-                <Separator />
-                {[
-                  {
-                    label: "Biaya Service",
-                    value: formatCurrency(
-                      serviceHistory.reduce(
-                        (sum, s) => sum + s.service_cost,
-                        0,
-                      ),
-                    ),
-                  },
-                  {
-                    label: "Biaya Sparepart",
-                    value: formatCurrency(insights.totalPartsCost),
-                  },
-                  {
-                    label: "Total Biaya",
-                    value: formatCurrency(
-                      serviceHistory.reduce((sum, s) => sum + s.total_cost, 0),
-                    ),
-                    bold: true,
-                  },
-                ].map((s) => (
-                  <div
-                    key={s.label}
-                    className="flex items-center justify-between"
-                  >
-                    <span className="text-sm text-muted-foreground">
-                      {s.label}
-                    </span>
-                    <span
-                      className={
-                        s.bold ? "font-bold text-primary" : "font-bold"
-                      }
+            {/* Statistik */}
+            <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
+              <div className="px-5 py-4 border-b border-slate-100">
+                <span className="text-[11px] font-bold uppercase tracking-widest text-slate-400">
+                  Statistik
+                </span>
+              </div>
+              <div className="p-5 space-y-3">
+                <div className="grid grid-cols-3 gap-2">
+                  {[
+                    {
+                      label: "Total",
+                      value: serviceHistory.length,
+                      color: "text-slate-900",
+                    },
+                    {
+                      label: "Selesai",
+                      value: completed,
+                      color: "text-emerald-600",
+                    },
+                    {
+                      label: "Berjalan",
+                      value: inProgress,
+                      color: "text-blue-600",
+                    },
+                  ].map((s) => (
+                    <div
+                      key={s.label}
+                      className="rounded-xl bg-slate-50 border border-slate-100 p-3 text-center"
                     >
-                      {s.value}
+                      <p
+                        className={cn(
+                          "text-xl font-bold tabular-nums",
+                          s.color,
+                        )}
+                      >
+                        {s.value}
+                      </p>
+                      <p className="text-[10px] font-bold text-slate-400 mt-0.5 uppercase tracking-wide">
+                        {s.label}
+                      </p>
+                    </div>
+                  ))}
+                </div>
+
+                <div className="h-px bg-slate-100" />
+
+                <div className="space-y-2.5">
+                  {[
+                    {
+                      label: "Biaya Service",
+                      value: formatCurrency(
+                        serviceHistory.reduce((s, h) => s + h.service_cost, 0),
+                      ),
+                    },
+                    {
+                      label: "Biaya Sparepart",
+                      value: formatCurrency(insights.totalPartsCost),
+                    },
+                  ].map((s) => (
+                    <div
+                      key={s.label}
+                      className="flex items-center justify-between"
+                    >
+                      <span className="text-xs text-slate-400 font-medium">
+                        {s.label}
+                      </span>
+                      <span className="text-sm font-bold text-slate-700">
+                        {s.value}
+                      </span>
+                    </div>
+                  ))}
+                  <div className="flex items-center justify-between pt-1 border-t border-slate-100">
+                    <span className="text-xs font-bold text-slate-500 uppercase tracking-wide">
+                      Total
+                    </span>
+                    <span className="text-sm font-bold text-slate-900">
+                      {formatCurrency(
+                        serviceHistory.reduce((s, h) => s + h.total_cost, 0),
+                      )}
                     </span>
                   </div>
-                ))}
-              </CardContent>
-            </Card>
+                </div>
+              </div>
+            </div>
           </div>
         </div>
       </div>

@@ -2,16 +2,7 @@ import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import DashboardLayout from "@/components/layout/DashboardLayout";
-import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
 import {
   Select,
   SelectContent,
@@ -19,8 +10,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Badge } from "@/components/ui/badge";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
   Plus,
   Search,
@@ -36,13 +25,19 @@ import {
   ArrowUpDown,
   ArrowUp,
   ArrowDown,
+  RefreshCw,
+  Package,
+  ShieldCheck,
+  ShieldOff,
+  Users,
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { format } from "date-fns";
 import { QRCodeSVG } from "qrcode.react";
 import { EditUnitModal } from "@/components/units/EditUnitModal";
 import { DeleteUnitDialog } from "@/components/units/DeleteUnitDialog";
-import { RegisterUnitModal } from "@/components/units/RegisterUnitModal"; // ← BARU
+import { RegisterUnitModal } from "@/components/units/RegisterUnitModal";
+import { cn } from "@/lib/utils";
 
 interface Unit {
   id: string;
@@ -55,10 +50,7 @@ interface Unit {
   capacity: string | null;
   warranty_expiry_date: string | null;
   created_at: string;
-  customer: {
-    id: string;
-    name: string;
-  };
+  customer: { id: string; name: string };
 }
 
 interface Customer {
@@ -83,21 +75,20 @@ type SortField =
   | "warranty_expiry_date";
 type SortOrder = "asc" | "desc";
 
-interface SortConfig {
-  field: SortField;
-  order: SortOrder;
-}
-
 export default function Units() {
   const navigate = useNavigate();
   const { toast } = useToast();
 
-  // Data state
   const [units, setUnits] = useState<Unit[]>([]);
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [loading, setLoading] = useState(true);
+  const [stats, setStats] = useState({
+    total: 0,
+    activeWarranty: 0,
+    expiredWarranty: 0,
+    noWarranty: 0,
+  });
 
-  // Pagination state
   const [pagination, setPagination] = useState<PaginationInfo>({
     currentPage: 1,
     totalPages: 1,
@@ -106,20 +97,12 @@ export default function Units() {
     from: 0,
     to: 0,
   });
-
-  // Sorting state
-  const [sortConfig, setSortConfig] = useState<SortConfig>({
-    field: "created_at",
-    order: "desc",
-  });
-
-  // Filter state
+  const [sortField, setSortField] = useState<SortField>("created_at");
+  const [sortOrder, setSortOrder] = useState<SortOrder>("desc");
   const [searchQuery, setSearchQuery] = useState("");
-  const [selectedCustomer, setSelectedCustomer] = useState<string>("all");
-  const [selectedType, setSelectedType] = useState<string>("all");
-
-  // Modal state
-  const [registerModalOpen, setRegisterModalOpen] = useState(false); // ← BARU
+  const [selectedCustomer, setSelectedCustomer] = useState("all");
+  const [selectedType, setSelectedType] = useState("all");
+  const [registerModalOpen, setRegisterModalOpen] = useState(false);
   const [editModalOpen, setEditModalOpen] = useState(false);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [selectedUnit, setSelectedUnit] = useState<Unit | null>(null);
@@ -127,8 +110,8 @@ export default function Units() {
 
   useEffect(() => {
     fetchCustomers();
+    fetchStats();
   }, []);
-
   useEffect(() => {
     fetchUnits();
   }, [
@@ -137,7 +120,8 @@ export default function Units() {
     searchQuery,
     selectedCustomer,
     selectedType,
-    sortConfig,
+    sortField,
+    sortOrder,
   ]);
 
   const fetchCustomers = async () => {
@@ -149,71 +133,76 @@ export default function Units() {
     if (data) setCustomers(data);
   };
 
+  const fetchStats = async () => {
+    const { count: total } = await supabase
+      .from("units")
+      .select("*", { count: "exact", head: true });
+    const now = new Date().toISOString();
+    const { count: active } = await supabase
+      .from("units")
+      .select("*", { count: "exact", head: true })
+      .gt("warranty_expiry_date", now);
+    const { count: expired } = await supabase
+      .from("units")
+      .select("*", { count: "exact", head: true })
+      .lt("warranty_expiry_date", now)
+      .not("warranty_expiry_date", "is", null);
+    const { count: noWarr } = await supabase
+      .from("units")
+      .select("*", { count: "exact", head: true })
+      .is("warranty_expiry_date", null);
+    setStats({
+      total: total || 0,
+      activeWarranty: active || 0,
+      expiredWarranty: expired || 0,
+      noWarranty: noWarr || 0,
+    });
+  };
+
   const fetchUnits = async () => {
     setLoading(true);
     try {
       const from = (pagination.currentPage - 1) * pagination.itemsPerPage;
       const to = from + pagination.itemsPerPage - 1;
 
-      let query = supabase.from("units").select(
-        `
-          *,
-          customer:customers!units_customer_id_fkey (
-            id,
-            name
-          )
-        `,
-        { count: "exact" },
-      );
+      let query = supabase
+        .from("units")
+        .select(`*, customer:customers!units_customer_id_fkey (id, name)`, {
+          count: "exact",
+        });
 
-      if (searchQuery) {
+      if (searchQuery)
         query = query.or(
           `qr_code.ilike.%${searchQuery}%,unit_type.ilike.%${searchQuery}%,brand.ilike.%${searchQuery}%,model.ilike.%${searchQuery}%,serial_number.ilike.%${searchQuery}%`,
         );
-      }
-
-      if (selectedCustomer !== "all") {
+      if (selectedCustomer !== "all")
         query = query.eq("customer_id", selectedCustomer);
-      }
-
-      if (selectedType !== "all") {
-        query = query.eq("unit_type", selectedType);
-      }
-
-      query = query.order(sortConfig.field, {
-        ascending: sortConfig.order === "asc",
-      });
+      if (selectedType !== "all") query = query.eq("unit_type", selectedType);
+      query = query.order(sortField, { ascending: sortOrder === "asc" });
 
       const { data, error, count } = await query.range(from, to);
-
       if (error) throw error;
 
-      const processedData =
-        data?.map((unit) => ({
-          ...unit,
-          customer: Array.isArray(unit.customer)
-            ? unit.customer[0]
-            : unit.customer,
-        })) || [];
-
-      setUnits(processedData);
+      setUnits(
+        data?.map((u) => ({
+          ...u,
+          customer: Array.isArray(u.customer) ? u.customer[0] : u.customer,
+        })) || [],
+      );
 
       const totalCount = count || 0;
-      const totalPages = Math.ceil(totalCount / pagination.itemsPerPage);
-
       setPagination((prev) => ({
         ...prev,
-        totalPages,
+        totalPages: Math.ceil(totalCount / prev.itemsPerPage),
         totalCount,
         from: totalCount > 0 ? from + 1 : 0,
-        to: Math.min(from + pagination.itemsPerPage, totalCount),
+        to: Math.min(from + prev.itemsPerPage, totalCount),
       }));
     } catch (error: any) {
-      console.error("Error fetching units:", error);
       toast({
         variant: "destructive",
         title: "Error",
-        description: "Failed to load units",
+        description: "Gagal memuat data unit",
       });
     } finally {
       setLoading(false);
@@ -221,509 +210,550 @@ export default function Units() {
   };
 
   const handleSort = (field: SortField) => {
-    setSortConfig((prev) => ({
-      field,
-      order: prev.field === field && prev.order === "asc" ? "desc" : "asc",
-    }));
+    if (sortField === field)
+      setSortOrder((o) => (o === "asc" ? "desc" : "asc"));
+    else {
+      setSortField(field);
+      setSortOrder("asc");
+    }
     setPagination((prev) => ({ ...prev, currentPage: 1 }));
   };
 
-  const getSortIcon = (field: SortField) => {
-    if (sortConfig.field !== field) {
-      return <ArrowUpDown className="ml-2 h-4 w-4 text-muted-foreground" />;
-    }
-    return sortConfig.order === "asc" ? (
-      <ArrowUp className="ml-2 h-4 w-4" />
+  const SortIcon = ({ field }: { field: SortField }) => {
+    if (sortField !== field)
+      return <ArrowUpDown className="h-3.5 w-3.5 text-slate-300" />;
+    return sortOrder === "asc" ? (
+      <ArrowUp className="h-3.5 w-3.5 text-slate-900" />
     ) : (
-      <ArrowDown className="ml-2 h-4 w-4" />
+      <ArrowDown className="h-3.5 w-3.5 text-slate-900" />
     );
   };
 
-  const handlePageChange = (newPage: number) => {
-    if (newPage < 1 || newPage > pagination.totalPages) return;
-    setPagination((prev) => ({ ...prev, currentPage: newPage }));
-  };
+  const SortTh = ({
+    field,
+    children,
+    className,
+  }: {
+    field: SortField;
+    children: React.ReactNode;
+    className?: string;
+  }) => (
+    <th className={cn("px-4 py-3 text-left", className)}>
+      <button
+        onClick={() => handleSort(field)}
+        className="flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-widest text-slate-400 hover:text-slate-600 transition-colors"
+      >
+        {children} <SortIcon field={field} />
+      </button>
+    </th>
+  );
 
-  const handleItemsPerPageChange = (value: string) => {
-    setPagination((prev) => ({
-      ...prev,
-      itemsPerPage: parseInt(value),
-      currentPage: 1,
-    }));
-  };
-
-  const handleSearch = (value: string) => {
-    setSearchQuery(value);
-    setPagination((prev) => ({ ...prev, currentPage: 1 }));
-  };
-
-  const handleCustomerFilter = (value: string) => {
-    setSelectedCustomer(value);
-    setPagination((prev) => ({ ...prev, currentPage: 1 }));
-  };
-
-  const handleTypeFilter = (value: string) => {
-    setSelectedType(value);
-    setPagination((prev) => ({ ...prev, currentPage: 1 }));
-  };
-
-  const handleEditClick = (unit: Unit) => {
-    setSelectedUnit(unit);
-    setEditModalOpen(true);
-  };
-
-  const handleDeleteClick = (unit: Unit) => {
-    setSelectedUnit(unit);
-    setDeleteDialogOpen(true);
-  };
-
-  const handleViewClick = (unit: Unit) => {
-    navigate(`/units/${unit.id}`);
-  };
+  const isWarrantyActive = (date: string | null) =>
+    date ? new Date(date) > new Date() : false;
+  const getUnitTypes = () => Array.from(new Set(units.map((u) => u.unit_type)));
 
   const handleDownloadQR = (unit: Unit) => {
     const svg = document.getElementById(`qr-${unit.id}`);
     if (!svg) return;
-
     const svgData = new XMLSerializer().serializeToString(svg);
     const canvas = document.createElement("canvas");
     const ctx = canvas.getContext("2d");
     const img = new Image();
-
     img.onload = () => {
       canvas.width = 300;
       canvas.height = 350;
       if (ctx) {
         ctx.fillStyle = "white";
-        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        ctx.fillRect(0, 0, 300, 350);
         ctx.drawImage(img, 50, 20, 200, 200);
-
         ctx.fillStyle = "black";
         ctx.font = "bold 14px Arial";
         ctx.textAlign = "center";
         ctx.fillText(unit.qr_code, 150, 250);
         ctx.font = "12px Arial";
         ctx.fillText(unit.unit_type, 150, 275);
-        if (unit.brand || unit.model) {
+        if (unit.brand || unit.model)
           ctx.fillText(
             `${unit.brand || ""} ${unit.model || ""}`.trim(),
             150,
             295,
           );
-        }
         ctx.fillText(unit.customer.name, 150, 315);
-
         const link = document.createElement("a");
         link.download = `QR-${unit.qr_code}.png`;
         link.href = canvas.toDataURL("image/png");
         link.click();
       }
     };
-
     img.src =
       "data:image/svg+xml;base64," +
       btoa(unescape(encodeURIComponent(svgData)));
   };
 
-  const isWarrantyActive = (date: string | null) => {
-    if (!date) return false;
-    return new Date(date) > new Date();
-  };
-
-  const getUnitTypes = () => {
-    const types = new Set(units.map((u) => u.unit_type));
-    return Array.from(types);
-  };
-
-  const SortableTableHead = ({
-    field,
-    children,
-    className = "",
-  }: {
-    field: SortField;
-    children: React.ReactNode;
-    className?: string;
-  }) => {
-    return (
-      <TableHead className={className}>
-        <button
-          className="flex items-center hover:text-foreground transition-colors font-medium"
-          onClick={() => handleSort(field)}
-        >
-          {children}
-          {getSortIcon(field)}
-        </button>
-      </TableHead>
-    );
-  };
-
-  const PaginationControls = () => {
-    const maxPageButtons = 5;
-    const pages: number[] = [];
-
-    let startPage = Math.max(
-      1,
-      pagination.currentPage - Math.floor(maxPageButtons / 2),
-    );
-    let endPage = Math.min(
-      pagination.totalPages,
-      startPage + maxPageButtons - 1,
-    );
-
-    if (endPage - startPage < maxPageButtons - 1) {
-      startPage = Math.max(1, endPage - maxPageButtons + 1);
-    }
-
-    for (let i = startPage; i <= endPage; i++) {
-      pages.push(i);
-    }
-
-    return (
-      <div className="flex items-center justify-between gap-4 py-4 border-t">
-        <div className="flex items-center gap-4">
-          <div className="flex items-center gap-2 px-4">
-            <span className="text-sm text-muted-foreground">Show:</span>
-            <Select
-              value={pagination.itemsPerPage.toString()}
-              onValueChange={handleItemsPerPageChange}
-            >
-              <SelectTrigger className="w-[70px]">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="10">10</SelectItem>
-                <SelectItem value="20">20</SelectItem>
-                <SelectItem value="50">50</SelectItem>
-                <SelectItem value="100">100</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-          <span className="text-sm text-muted-foreground">
-            Showing {pagination.from}-{pagination.to} of {pagination.totalCount}{" "}
-            units
-          </span>
-        </div>
-
-        <div className="flex items-center gap-2">
-          <Button
-            variant="outline"
-            size="icon"
-            onClick={() => handlePageChange(1)}
-            disabled={pagination.currentPage === 1 || loading}
-          >
-            <ChevronsLeft className="h-4 w-4" />
-          </Button>
-          <Button
-            variant="outline"
-            size="icon"
-            onClick={() => handlePageChange(pagination.currentPage - 1)}
-            disabled={pagination.currentPage === 1 || loading}
-          >
-            <ChevronLeft className="h-4 w-4" />
-          </Button>
-
-          {pages.map((page) => (
-            <Button
-              key={page}
-              variant={page === pagination.currentPage ? "default" : "outline"}
-              size="icon"
-              onClick={() => handlePageChange(page)}
-              disabled={loading}
-            >
-              {page}
-            </Button>
-          ))}
-
-          <Button
-            variant="outline"
-            size="icon"
-            onClick={() => handlePageChange(pagination.currentPage + 1)}
-            disabled={
-              pagination.currentPage === pagination.totalPages || loading
-            }
-          >
-            <ChevronRight className="h-4 w-4" />
-          </Button>
-          <Button
-            variant="outline"
-            size="icon"
-            onClick={() => handlePageChange(pagination.totalPages)}
-            disabled={
-              pagination.currentPage === pagination.totalPages || loading
-            }
-          >
-            <ChevronsRight className="h-4 w-4" />
-          </Button>
-        </div>
-      </div>
-    );
-  };
+  const STAT_CARDS = [
+    {
+      key: "total",
+      label: "Total Unit",
+      icon: Package,
+      color: "text-blue-600",
+      bg: "bg-blue-50",
+      border: "border-blue-100",
+    },
+    {
+      key: "activeWarranty",
+      label: "Garansi Aktif",
+      icon: ShieldCheck,
+      color: "text-emerald-600",
+      bg: "bg-emerald-50",
+      border: "border-emerald-100",
+    },
+    {
+      key: "expiredWarranty",
+      label: "Garansi Expired",
+      icon: ShieldOff,
+      color: "text-amber-600",
+      bg: "bg-amber-50",
+      border: "border-amber-100",
+    },
+    {
+      key: "noWarranty",
+      label: "Tanpa Garansi",
+      icon: Users,
+      color: "text-slate-500",
+      bg: "bg-slate-50",
+      border: "border-slate-200",
+    },
+  ];
 
   return (
     <DashboardLayout>
-      <div className="space-y-6 animate-fade-in">
-        {/* Header */}
-        <div className="flex items-center justify-between">
+      <style>{`
+        @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap');
+        .units-root { font-family: 'Plus Jakarta Sans', system-ui, sans-serif; }
+        .units-fade { animation: fadeUp 0.2s ease; }
+        @keyframes fadeUp { from{opacity:0;transform:translateY(6px)} to{opacity:1;transform:none} }
+        .stat-card { transition: box-shadow 0.18s, transform 0.18s; }
+        .stat-card:hover { box-shadow: 0 8px 32px -4px rgba(15,23,42,0.10); transform: translateY(-1px); }
+        .trow { transition: background 0.1s; }
+        .trow:hover { background: #f8fafc; }
+      `}</style>
+
+      <div className="units-root units-fade space-y-5">
+        {/* ── Header ── */}
+        <div className="flex items-start justify-between">
           <div>
-            <h1 className="text-3xl font-bold tracking-tight">Units</h1>
-            <p className="text-muted-foreground">
-              Manage and track all registered units
+            <div className="flex items-center gap-2 mb-1">
+              <span className="text-xs font-bold uppercase tracking-widest text-slate-400">
+                Inventaris
+              </span>
+            </div>
+            <h1 className="text-2xl font-bold text-slate-900 tracking-tight">
+              Manajemen Unit
+            </h1>
+            <p className="text-sm text-slate-500 mt-0.5">
+              Kelola dan lacak semua unit terdaftar
             </p>
           </div>
-          {/* ← UBAH: dari navigate ke buka modal */}
-          <Button onClick={() => setRegisterModalOpen(true)}>
-            <Plus className="mr-2 h-4 w-4" />
-            Daftarkan Unit
-          </Button>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => {
+                fetchUnits();
+                fetchStats();
+              }}
+              disabled={loading}
+              className="flex items-center gap-2 h-9 px-4 rounded-lg bg-white border border-slate-200 text-slate-600 text-sm font-semibold hover:bg-slate-50 transition-all disabled:opacity-50"
+            >
+              <RefreshCw
+                className={cn("h-3.5 w-3.5", loading && "animate-spin")}
+              />
+              Refresh
+            </button>
+            <button
+              onClick={() => setRegisterModalOpen(true)}
+              className="flex items-center gap-2 h-9 px-4 rounded-lg bg-slate-900 text-white text-sm font-semibold hover:bg-slate-800 transition-all shadow-sm"
+            >
+              <Plus className="h-3.5 w-3.5" />
+              Daftarkan Unit
+            </button>
+          </div>
         </div>
 
-        {/* Filters */}
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-base">Filters</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="grid gap-4 md:grid-cols-3">
-              <div className="relative">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                <Input
-                  placeholder="Search by QR, type, brand, model, serial..."
-                  value={searchQuery}
-                  onChange={(e) => handleSearch(e.target.value)}
-                  className="pl-9"
-                />
+        {/* ── Stat Cards ── */}
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+          {STAT_CARDS.map(({ key, label, icon: Icon, color, bg, border }) => (
+            <div
+              key={key}
+              className={cn("stat-card bg-white rounded-xl border p-5", border)}
+            >
+              <div className="flex items-start justify-between">
+                <div>
+                  <p className="text-[11px] font-bold uppercase tracking-wide text-slate-400">
+                    {label}
+                  </p>
+                  <p className="text-3xl font-bold text-slate-900 mt-2 leading-none tabular-nums">
+                    {(stats as any)[key]}
+                  </p>
+                  <p className="text-xs text-slate-400 mt-1.5">unit</p>
+                </div>
+                <div className={cn("rounded-lg p-2.5", bg)}>
+                  <Icon className={cn("h-5 w-5", color)} />
+                </div>
               </div>
-
-              <Select
-                value={selectedCustomer}
-                onValueChange={handleCustomerFilter}
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder="All Customers" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">All Customers</SelectItem>
-                  {customers.map((customer) => (
-                    <SelectItem key={customer.id} value={customer.id}>
-                      {customer.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-
-              <Select value={selectedType} onValueChange={handleTypeFilter}>
-                <SelectTrigger>
-                  <SelectValue placeholder="All Types" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">All Types</SelectItem>
-                  {getUnitTypes().map((type) => (
-                    <SelectItem key={type} value={type}>
-                      {type}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
             </div>
-          </CardContent>
-        </Card>
+          ))}
+        </div>
 
-        {/* Table */}
-        <Card>
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <SortableTableHead field="qr_code">QR Code</SortableTableHead>
-                <SortableTableHead field="unit_type">Type</SortableTableHead>
-                <SortableTableHead field="brand">Brand/Model</SortableTableHead>
-                <TableHead>Serial Number</TableHead>
-                <TableHead>Customer</TableHead>
-                <SortableTableHead field="warranty_expiry_date">
-                  Warranty
-                </SortableTableHead>
-                <SortableTableHead field="created_at">
-                  Registered
-                </SortableTableHead>
-                <TableHead className="text-right">Actions</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {loading ? (
-                <TableRow>
-                  <TableCell colSpan={8} className="text-center py-12">
-                    <div className="flex items-center justify-center">
-                      <div className="h-8 w-8 animate-spin rounded-full border-4 border-primary border-t-transparent" />
-                    </div>
-                  </TableCell>
-                </TableRow>
-              ) : units.length === 0 ? (
-                <TableRow>
-                  <TableCell colSpan={8} className="text-center py-12">
-                    <p className="text-muted-foreground">
-                      {searchQuery ||
-                      selectedCustomer !== "all" ||
-                      selectedType !== "all"
-                        ? "No units found matching your filters"
-                        : "Belum ada unit yang terdaftar"}
-                    </p>
-                  </TableCell>
-                </TableRow>
-              ) : (
-                units.map((unit) => (
-                  <TableRow
-                    key={unit.id}
-                    className="cursor-pointer hover:bg-muted/50"
-                    onClick={() => handleViewClick(unit)}
-                  >
-                    <TableCell>
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          setShowQRUnit(
-                            showQRUnit?.id === unit.id ? null : unit,
-                          );
-                        }}
-                        className="flex items-center gap-2 hover:text-primary transition-colors"
-                      >
-                        <div className="bg-muted p-1.5 rounded">
-                          <QrCode className="h-4 w-4" />
-                        </div>
-                        <span className="font-mono text-sm">
-                          {unit.qr_code}
+        {/* ── Table Card ── */}
+        <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
+          {/* Filters */}
+          <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3 px-5 py-4 border-b border-slate-100">
+            <div className="relative flex-1 max-w-sm">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-slate-400" />
+              <input
+                placeholder="Cari QR, tipe, merek, model..."
+                value={searchQuery}
+                onChange={(e) => {
+                  setSearchQuery(e.target.value);
+                  setPagination((p) => ({ ...p, currentPage: 1 }));
+                }}
+                className="w-full h-8 pl-9 pr-3 text-sm rounded-lg border border-slate-200 bg-slate-50 text-slate-700 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-slate-900/10 focus:border-slate-300 transition-all"
+              />
+            </div>
+            <Select
+              value={selectedCustomer}
+              onValueChange={(v) => {
+                setSelectedCustomer(v);
+                setPagination((p) => ({ ...p, currentPage: 1 }));
+              }}
+            >
+              <SelectTrigger className="w-[180px] h-8 text-sm border-slate-200">
+                <SelectValue placeholder="Semua Pelanggan" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">Semua Pelanggan</SelectItem>
+                {customers.map((c) => (
+                  <SelectItem key={c.id} value={c.id}>
+                    {c.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <Select
+              value={selectedType}
+              onValueChange={(v) => {
+                setSelectedType(v);
+                setPagination((p) => ({ ...p, currentPage: 1 }));
+              }}
+            >
+              <SelectTrigger className="w-[150px] h-8 text-sm border-slate-200">
+                <SelectValue placeholder="Semua Tipe" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">Semua Tipe</SelectItem>
+                {getUnitTypes().map((t) => (
+                  <SelectItem key={t} value={t}>
+                    {t}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            {pagination.totalCount > 0 && (
+              <span className="ml-auto text-xs text-slate-400 font-medium shrink-0">
+                {pagination.totalCount.toLocaleString("id-ID")} unit
+              </span>
+            )}
+          </div>
+
+          {/* Table */}
+          <div className="overflow-x-auto">
+            <table className="w-full">
+              <thead className="border-b border-slate-100 bg-slate-50/50">
+                <tr>
+                  <SortTh field="qr_code">QR Code</SortTh>
+                  <SortTh field="unit_type">Tipe</SortTh>
+                  <SortTh field="brand">Merek / Model</SortTh>
+                  <th className="px-4 py-3 text-left text-[11px] font-bold uppercase tracking-widest text-slate-400">
+                    No. Seri
+                  </th>
+                  <th className="px-4 py-3 text-left text-[11px] font-bold uppercase tracking-widest text-slate-400">
+                    Pelanggan
+                  </th>
+                  <SortTh field="warranty_expiry_date">Garansi</SortTh>
+                  <SortTh field="created_at">Terdaftar</SortTh>
+                  <th className="px-4 py-3 text-right text-[11px] font-bold uppercase tracking-widest text-slate-400">
+                    Aksi
+                  </th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100">
+                {loading ? (
+                  <tr>
+                    <td colSpan={8} className="py-16 text-center">
+                      <RefreshCw className="h-5 w-5 animate-spin text-slate-300 mx-auto" />
+                    </td>
+                  </tr>
+                ) : units.length === 0 ? (
+                  <tr>
+                    <td colSpan={8} className="py-16 text-center">
+                      <Package className="h-8 w-8 text-slate-200 mx-auto mb-2" />
+                      <p className="text-sm font-semibold text-slate-400">
+                        {searchQuery ||
+                        selectedCustomer !== "all" ||
+                        selectedType !== "all"
+                          ? "Tidak ada unit yang cocok dengan filter"
+                          : "Belum ada unit yang terdaftar"}
+                      </p>
+                    </td>
+                  </tr>
+                ) : (
+                  units.map((unit) => (
+                    <tr
+                      key={unit.id}
+                      className="trow cursor-pointer"
+                      onClick={() => navigate(`/units/${unit.id}`)}
+                    >
+                      <td className="px-4 py-3">
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setShowQRUnit(
+                              showQRUnit?.id === unit.id ? null : unit,
+                            );
+                          }}
+                          className="flex items-center gap-2 group"
+                        >
+                          <div className="bg-slate-100 group-hover:bg-slate-200 p-1.5 rounded-lg transition-colors">
+                            <QrCode className="h-3.5 w-3.5 text-slate-500" />
+                          </div>
+                          <span className="font-mono text-sm font-semibold text-slate-700">
+                            {unit.qr_code}
+                          </span>
+                        </button>
+                        {showQRUnit?.id === unit.id && (
+                          <div
+                            className="mt-2 p-3 bg-white rounded-lg border border-slate-200 inline-block shadow-sm"
+                            onClick={(e) => e.stopPropagation()}
+                          >
+                            <QRCodeSVG
+                              id={`qr-${unit.id}`}
+                              value={unit.qr_code}
+                              size={100}
+                              level="H"
+                              includeMargin
+                            />
+                            <button
+                              onClick={() => handleDownloadQR(unit)}
+                              className="mt-2 w-full flex items-center justify-center gap-1.5 h-7 rounded-lg border border-slate-200 text-xs font-semibold text-slate-600 hover:bg-slate-50 transition-all"
+                            >
+                              <Download className="h-3 w-3" /> Download
+                            </button>
+                          </div>
+                        )}
+                      </td>
+                      <td className="px-4 py-3">
+                        <span className="text-sm font-semibold text-slate-800">
+                          {unit.unit_type}
                         </span>
-                      </button>
-                      {showQRUnit?.id === unit.id && (
-                        <div className="mt-2 p-4 bg-white rounded-lg border inline-block">
-                          <QRCodeSVG
-                            id={`qr-${unit.id}`}
-                            value={unit.qr_code}
-                            size={120}
-                            level="H"
-                            includeMargin
-                          />
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            className="mt-2 w-full"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              handleDownloadQR(unit);
-                            }}
-                          >
-                            <Download className="h-3 w-3 mr-1" />
-                            Download
-                          </Button>
-                        </div>
-                      )}
-                    </TableCell>
-                    <TableCell>
-                      <span className="font-medium">{unit.unit_type}</span>
-                    </TableCell>
-                    <TableCell>
-                      <div>
-                        <p className="font-medium">{unit.brand || "-"}</p>
-                        <p className="text-sm text-muted-foreground">
-                          {unit.model || "-"}
+                      </td>
+                      <td className="px-4 py-3">
+                        <p className="text-sm font-semibold text-slate-800">
+                          {unit.brand || "—"}
                         </p>
-                      </div>
-                    </TableCell>
-                    <TableCell>
-                      <span className="font-mono text-sm">
-                        {unit.serial_number || "-"}
-                      </span>
-                    </TableCell>
-                    <TableCell>{unit.customer.name}</TableCell>
-                    <TableCell>
-                      {unit.warranty_expiry_date ? (
-                        <div>
-                          <Badge
-                            variant={
-                              isWarrantyActive(unit.warranty_expiry_date)
-                                ? "default"
-                                : "secondary"
-                            }
-                          >
-                            {isWarrantyActive(unit.warranty_expiry_date)
-                              ? "Active"
-                              : "Expired"}
-                          </Badge>
-                          <p className="text-xs text-muted-foreground mt-1">
-                            {format(
-                              new Date(unit.warranty_expiry_date),
-                              "MMM d, yyyy",
+                        <p className="text-xs text-slate-400">
+                          {unit.model || "—"}
+                        </p>
+                      </td>
+                      <td className="px-4 py-3">
+                        <span className="font-mono text-xs text-slate-500">
+                          {unit.serial_number || "—"}
+                        </span>
+                      </td>
+                      <td className="px-4 py-3">
+                        <span className="text-sm text-slate-700">
+                          {unit.customer.name}
+                        </span>
+                      </td>
+                      <td className="px-4 py-3">
+                        {unit.warranty_expiry_date ? (
+                          <div>
+                            {isWarrantyActive(unit.warranty_expiry_date) ? (
+                              <span className="flex items-center gap-1 text-[11px] font-bold px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-700 w-fit">
+                                <ShieldCheck className="h-3 w-3" /> Aktif
+                              </span>
+                            ) : (
+                              <span className="flex items-center gap-1 text-[11px] font-bold px-2 py-0.5 rounded-full bg-slate-100 text-slate-500 w-fit">
+                                <ShieldOff className="h-3 w-3" /> Expired
+                              </span>
                             )}
-                          </p>
+                            <p className="text-xs text-slate-400 mt-1">
+                              {format(
+                                new Date(unit.warranty_expiry_date),
+                                "d MMM yyyy",
+                              )}
+                            </p>
+                          </div>
+                        ) : (
+                          <span className="text-xs text-slate-400">—</span>
+                        )}
+                      </td>
+                      <td className="px-4 py-3">
+                        <span className="text-sm text-slate-500">
+                          {format(new Date(unit.created_at), "d MMM yyyy")}
+                        </span>
+                      </td>
+                      <td className="px-4 py-3">
+                        <div
+                          className="flex justify-end gap-1"
+                          onClick={(e) => e.stopPropagation()}
+                        >
+                          <button
+                            onClick={() => navigate(`/units/${unit.id}`)}
+                            className="h-7 w-7 rounded-lg flex items-center justify-center text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition-all"
+                          >
+                            <Eye className="h-3.5 w-3.5" />
+                          </button>
+                          <button
+                            onClick={() => {
+                              setSelectedUnit(unit);
+                              setEditModalOpen(true);
+                            }}
+                            className="h-7 w-7 rounded-lg flex items-center justify-center text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition-all"
+                          >
+                            <Edit className="h-3.5 w-3.5" />
+                          </button>
+                          <button
+                            onClick={() => {
+                              setSelectedUnit(unit);
+                              setDeleteDialogOpen(true);
+                            }}
+                            className="h-7 w-7 rounded-lg flex items-center justify-center text-slate-400 hover:text-red-600 hover:bg-red-50 transition-all"
+                          >
+                            <Trash2 className="h-3.5 w-3.5" />
+                          </button>
                         </div>
-                      ) : (
-                        "-"
-                      )}
-                    </TableCell>
-                    <TableCell>
-                      {format(new Date(unit.created_at), "MMM d, yyyy")}
-                    </TableCell>
-                    <TableCell className="text-right">
-                      <div
-                        className="flex justify-end gap-2"
-                        onClick={(e) => e.stopPropagation()}
-                      >
-                        <Button
-                          size="icon"
-                          variant="ghost"
-                          onClick={() => handleViewClick(unit)}
-                        >
-                          <Eye className="h-4 w-4" />
-                        </Button>
-                        <Button
-                          size="icon"
-                          variant="ghost"
-                          onClick={() => handleEditClick(unit)}
-                        >
-                          <Edit className="h-4 w-4" />
-                        </Button>
-                        <Button
-                          size="icon"
-                          variant="ghost"
-                          onClick={() => handleDeleteClick(unit)}
-                        >
-                          <Trash2 className="h-4 w-4" />
-                        </Button>
-                      </div>
-                    </TableCell>
-                  </TableRow>
-                ))
-              )}
-            </TableBody>
-          </Table>
+                      </td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
+          </div>
 
-          {!loading && units.length > 0 && <PaginationControls />}
-        </Card>
+          {/* Pagination */}
+          {!loading && pagination.totalCount > 0 && (
+            <div className="flex items-center justify-between px-5 py-3 border-t border-slate-100">
+              <div className="flex items-center gap-3">
+                <div className="flex items-center gap-2">
+                  <span className="text-xs text-slate-400 font-medium">
+                    Tampilkan
+                  </span>
+                  <Select
+                    value={pagination.itemsPerPage.toString()}
+                    onValueChange={(v) =>
+                      setPagination((p) => ({
+                        ...p,
+                        itemsPerPage: parseInt(v),
+                        currentPage: 1,
+                      }))
+                    }
+                  >
+                    <SelectTrigger className="h-7 w-[60px] text-xs border-slate-200">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {[10, 20, 50, 100].map((n) => (
+                        <SelectItem key={n} value={n.toString()}>
+                          {n}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <span className="text-xs text-slate-400">
+                  {pagination.from}–{pagination.to} dari{" "}
+                  {pagination.totalCount.toLocaleString("id-ID")} unit
+                </span>
+              </div>
+              <div className="flex items-center gap-1">
+                {[
+                  {
+                    icon: ChevronsLeft,
+                    action: () =>
+                      setPagination((p) => ({ ...p, currentPage: 1 })),
+                    disabled: pagination.currentPage === 1,
+                  },
+                  {
+                    icon: ChevronLeft,
+                    action: () =>
+                      setPagination((p) => ({
+                        ...p,
+                        currentPage: p.currentPage - 1,
+                      })),
+                    disabled: pagination.currentPage === 1,
+                  },
+                  {
+                    icon: ChevronRight,
+                    action: () =>
+                      setPagination((p) => ({
+                        ...p,
+                        currentPage: p.currentPage + 1,
+                      })),
+                    disabled: pagination.currentPage === pagination.totalPages,
+                  },
+                  {
+                    icon: ChevronsRight,
+                    action: () =>
+                      setPagination((p) => ({
+                        ...p,
+                        currentPage: pagination.totalPages,
+                      })),
+                    disabled: pagination.currentPage === pagination.totalPages,
+                  },
+                ].map(({ icon: Icon, action, disabled }, i) => (
+                  <button
+                    key={i}
+                    onClick={action}
+                    disabled={disabled || loading}
+                    className="h-7 w-7 rounded-lg flex items-center justify-center border border-slate-200 text-slate-500 hover:bg-slate-50 disabled:opacity-30 disabled:cursor-not-allowed transition-all"
+                  >
+                    <Icon className="h-3.5 w-3.5" />
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
       </div>
 
-      {/* Register Modal ← BARU */}
       <RegisterUnitModal
         open={registerModalOpen}
         onOpenChange={setRegisterModalOpen}
-        onSuccess={fetchUnits}
+        onSuccess={() => {
+          fetchUnits();
+          fetchStats();
+        }}
       />
-
-      {/* Edit Modal */}
       {selectedUnit && (
         <EditUnitModal
           open={editModalOpen}
           onOpenChange={setEditModalOpen}
           unit={selectedUnit}
           customers={customers}
-          onSuccess={fetchUnits}
+          onSuccess={() => {
+            fetchUnits();
+            fetchStats();
+          }}
         />
       )}
-
-      {/* Delete Dialog */}
       {selectedUnit && (
         <DeleteUnitDialog
           open={deleteDialogOpen}
           onOpenChange={setDeleteDialogOpen}
           unit={selectedUnit}
-          onSuccess={fetchUnits}
+          onSuccess={() => {
+            fetchUnits();
+            fetchStats();
+          }}
         />
       )}
     </DashboardLayout>

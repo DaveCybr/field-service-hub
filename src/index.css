@@ -1,3 +1,5 @@
+@import url("https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap");
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
@@ -56,7 +58,7 @@
     --warning-foreground: 0 0% 100%;
     --info: 199 89% 48%;
     --info-foreground: 0 0% 100%;
-    
+
     /* Job Status Colors */
     --status-pending: 38 92% 50%;
     --status-approved: 199 89% 48%;
@@ -118,10 +120,15 @@
 
   body {
     @apply bg-background text-foreground;
-    font-family: 'Inter', system-ui, sans-serif;
+    font-family: "Plus Jakarta Sans", system-ui, sans-serif;
   }
 
-  h1, h2, h3, h4, h5, h6 {
+  h1,
+  h2,
+  h3,
+  h4,
+  h5,
+  h6 {
     @apply font-semibold tracking-tight;
   }
 }
@@ -131,19 +138,19 @@
   .badge-status-pending {
     @apply bg-amber-100 text-amber-800 border-amber-200;
   }
-  
+
   .badge-status-approved {
     @apply bg-sky-100 text-sky-800 border-sky-200;
   }
-  
+
   .badge-status-progress {
     @apply bg-blue-100 text-blue-800 border-blue-200;
   }
-  
+
   .badge-status-completed {
     @apply bg-emerald-100 text-emerald-800 border-emerald-200;
   }
-  
+
   .badge-status-cancelled {
     @apply bg-gray-100 text-gray-800 border-gray-200;
   }
@@ -152,15 +159,15 @@
   .badge-priority-low {
     @apply bg-gray-100 text-gray-600;
   }
-  
+
   .badge-priority-normal {
     @apply bg-blue-100 text-blue-700;
   }
-  
+
   .badge-priority-high {
     @apply bg-amber-100 text-amber-700;
   }
-  
+
   .badge-priority-urgent {
     @apply bg-red-100 text-red-700 animate-pulse;
   }
@@ -172,7 +179,11 @@
 
   .stats-card-gradient {
     @apply absolute inset-0 opacity-5;
-    background: linear-gradient(135deg, hsl(var(--primary)) 0%, transparent 60%);
+    background: linear-gradient(
+      135deg,
+      hsl(var(--primary)) 0%,
+      transparent 60%
+    );
   }
 
   /* Sidebar Active Item */
@@ -189,6 +200,7 @@
   .input-focus-ring {
     @apply focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2;
   }
+
   /* FullCalendar Customizations */
   .fc-wrapper {
     @apply rounded-lg;
@@ -275,7 +287,9 @@
 
   /* Subtle shadow for cards */
   .shadow-soft {
-    box-shadow: 0 2px 8px -2px rgba(0, 0, 0, 0.08), 0 4px 16px -4px rgba(0, 0, 0, 0.04);
+    box-shadow:
+      0 2px 8px -2px rgba(0, 0, 0, 0.08),
+      0 4px 16px -4px rgba(0, 0, 0, 0.04);
   }
 
   /* Gradient text */

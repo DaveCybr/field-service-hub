@@ -1,135 +1,70 @@
 /**
  * ============================================
- * FILE: 05_technicianService.ts
+ * FILE: technicianService.ts
  * LOCATION: src/services/technicianService.ts
- * DESCRIPTION: Service layer untuk Technician Module
  * ============================================
  */
 
-/**
- * CARA PAKAI:
- *
- * 1. Copy file ini ke: src/services/technicianService.ts
- * 2. Setup Supabase client (lihat bagian SUPABASE CLIENT)
- * 3. Import di component: import { technicianService } from '@/services/technicianService';
- * 4. Use async/await: const data = await technicianService.getAll();
- */
-
-import { createClient, SupabaseClient } from "@supabase/supabase-js";
+import { supabase } from "@/integrations/supabase/client";
 import type {
-  Technician,
-  TechnicianAssignment,
-  LocationLog,
-  PhotoLog,
-  CreateTechnicianInput,
-  UpdateTechnicianInput,
+  Employee,
+  ServiceAssignment,
+  TechnicianLocation,
   CreateAssignmentInput,
   UpdateAssignmentInput,
-  LogLocationInput,
-  UploadPhotoInput,
-  TechnicianWithAssignments,
+  UpdateEmployeeInput,
   AssignmentWithDetails,
-  TechnicianFilters,
+  EmployeeWithStats,
+  EmployeeFilters,
   AssignmentFilters,
-} from "../types/technician.types";
-
-// ============================================
-// SUPABASE CLIENT SETUP
-// ============================================
-
-/**
- * Setup Supabase Client
- *
- * Environment variables yang dibutuhkan:
- * - NEXT_PUBLIC_SUPABASE_URL
- * - NEXT_PUBLIC_SUPABASE_ANON_KEY
- *
- * Tambahkan di file .env.local:
- * ```
- * NEXT_PUBLIC_SUPABASE_URL=https://your-project.supabase.co
- * NEXT_PUBLIC_SUPABASE_ANON_KEY=your-anon-key-here
- * ```
- */
-
-const supabaseUrl = "https://phaqqnqticnmcabjgzui.supabase.co";
-const supabaseAnonKey =
-  "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InBoYXFxbnF0aWNubWNhYmpnenVpIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Njg0NTc4NzIsImV4cCI6MjA4NDAzMzg3Mn0.xbEN7PdjhKYopJzP6yaggqfdH1uzZFVJ9-6K7u55BN0";
-
-if (!supabaseUrl || !supabaseAnonKey) {
-  throw new Error("Missing Supabase environment variables!");
-}
-
-export const supabase: SupabaseClient = createClient(
-  supabaseUrl,
-  supabaseAnonKey,
-);
+} from "@/types/technician.types";
 
 // ============================================
 // TECHNICIAN SERVICE
-// CRUD operations untuk table technicians
+// Operasi CRUD untuk tabel employees (role: technician)
 // ============================================
 
 export const technicianService = {
   /**
-   * GET ALL TECHNICIANS
-   * Mengambil semua data teknisi dengan jumlah assignments
-   *
-   * @returns Promise<Technician[]>
-   *
-   * @example
-   * ```typescript
-   * const technicians = await technicianService.getAll();
-   * console.log('Total teknisi:', technicians.length);
-   * ```
+   * Ambil semua teknisi beserta jumlah pekerjaan aktif
    */
-  async getAll(): Promise<Technician[]> {
+  async getAll(): Promise<EmployeeWithStats[]> {
     const { data, error } = await supabase
-      .from("technicians")
+      .from("employees")
       .select(
         `
         *,
-        assignments:technician_assignments(count)
+        active_jobs:invoice_services!assigned_technician_id(count)
       `,
       )
-      .order("created_at", { ascending: false });
+      .eq("role", "technician")
+      .order("name");
 
     if (error) {
       console.error("[technicianService.getAll] Error:", error);
-      throw new Error(`Failed to fetch technicians: ${error.message}`);
+      throw new Error(`Gagal mengambil data teknisi: ${error.message}`);
     }
 
-    return data || [];
+    return (data || []).map((t) => ({
+      ...t,
+      active_jobs_count: t.active_jobs?.[0]?.count || 0,
+    }));
   },
 
   /**
-   * GET BY ID
-   * Mengambil detail teknisi berdasarkan ID
-   * Termasuk semua assignments dengan info invoice
-   *
-   * @param id - UUID teknisi
-   * @returns Promise<TechnicianWithAssignments>
-   *
-   * @example
-   * ```typescript
-   * const tech = await technicianService.getById('uuid-here');
-   * console.log('Nama:', tech.name);
-   * console.log('Assignments:', tech.assignments?.length);
-   * ```
+   * Ambil detail teknisi berdasarkan ID beserta riwayat assignment
    */
-  async getById(id: string): Promise<TechnicianWithAssignments> {
+  async getById(id: string): Promise<EmployeeWithStats> {
     const { data, error } = await supabase
-      .from("technicians")
+      .from("employees")
       .select(
         `
         *,
-        assignments:technician_assignments(
+        active_jobs:invoice_services!assigned_technician_id(count),
+        assignments:service_technician_assignments(
           *,
-          invoice:invoices(
-            invoice_number,
-            customer_name,
-            service_type,
-            status
-          )
+          invoice:invoices(invoice_number, status),
+          service:invoice_services(title, status)
         )
       `,
       )
@@ -138,96 +73,73 @@ export const technicianService = {
 
     if (error) {
       console.error("[technicianService.getById] Error:", error);
-      throw new Error(`Failed to fetch technician: ${error.message}`);
+      throw new Error(`Gagal mengambil data teknisi: ${error.message}`);
     }
 
-    return data;
+    return {
+      ...data,
+      active_jobs_count: data.active_jobs?.[0]?.count || 0,
+    };
   },
 
   /**
-   * GET AVAILABLE TECHNICIANS
-   * Mengambil teknisi dengan status 'available'
-   *
-   * @returns Promise<Technician[]>
-   *
-   * @example
-   * ```typescript
-   * const available = await technicianService.getAvailable();
-   * // Use untuk dropdown assign technician
-   * ```
+   * Ambil teknisi yang statusnya available
    */
-  async getAvailable(): Promise<Technician[]> {
+  async getAvailable(): Promise<Employee[]> {
     const { data, error } = await supabase
-      .from("technicians")
+      .from("employees")
       .select("*")
+      .eq("role", "technician")
       .eq("status", "available")
       .order("name");
 
     if (error) {
       console.error("[technicianService.getAvailable] Error:", error);
-      throw new Error(
-        `Failed to fetch available technicians: ${error.message}`,
-      );
+      throw new Error(`Gagal mengambil teknisi tersedia: ${error.message}`);
     }
 
     return data || [];
   },
 
   /**
-   * CREATE TECHNICIAN
-   * Membuat teknisi baru
-   *
-   * @param input - Data teknisi baru
-   * @returns Promise<Technician>
-   *
-   * @example
-   * ```typescript
-   * const newTech = await technicianService.create({
-   *   name: 'John Doe',
-   *   email: 'john@example.com',
-   *   phone: '081234567890',
-   *   specialization: ['AC', 'Kulkas'],
-   *   status: 'available'
-   * });
-   * ```
+   * Ambil teknisi bebas menggunakan DB function
    */
-  async create(input: CreateTechnicianInput): Promise<Technician> {
-    const { data, error } = await supabase
-      .from("technicians")
-      .insert(input)
-      .select()
-      .single();
+  async getFreeTechnicians() {
+    const { data, error } = await supabase.rpc("get_free_technicians");
 
     if (error) {
-      console.error("[technicianService.create] Error:", error);
-      throw new Error(`Failed to create technician: ${error.message}`);
+      console.error("[technicianService.getFreeTechnicians] Error:", error);
+      throw new Error(`Gagal mengambil teknisi bebas: ${error.message}`);
     }
 
-    return data;
+    return data || [];
   },
 
   /**
-   * UPDATE TECHNICIAN
-   * Update data teknisi
-   *
-   * @param id - UUID teknisi
-   * @param updates - Field yang mau diupdate
-   * @returns Promise<Technician>
-   *
-   * @example
-   * ```typescript
-   * await technicianService.update('uuid', {
-   *   phone: '081234567891',
-   *   specialization: ['AC', 'Kulkas', 'Mesin Cuci']
-   * });
-   * ```
+   * Ambil teknisi bebas berdasarkan skill yang dibutuhkan
    */
-  async update(
-    id: string,
-    updates: UpdateTechnicianInput,
-  ): Promise<Technician> {
+  async getFreeTechniciansBySkill(skills: string[]) {
+    const { data, error } = await supabase.rpc("get_free_technician_by_skill", {
+      required_skills: skills,
+    });
+
+    if (error) {
+      console.error(
+        "[technicianService.getFreeTechniciansBySkill] Error:",
+        error,
+      );
+      throw new Error(`Gagal mengambil teknisi: ${error.message}`);
+    }
+
+    return data || [];
+  },
+
+  /**
+   * Update data employee (nama, telepon, level, dll)
+   */
+  async update(id: string, updates: UpdateEmployeeInput): Promise<Employee> {
     const { data, error } = await supabase
-      .from("technicians")
+      .from("employees")
       .update(updates)
       .eq("id", id)
       .select()
@@ -235,124 +147,108 @@ export const technicianService = {
 
     if (error) {
       console.error("[technicianService.update] Error:", error);
-      throw new Error(`Failed to update technician: ${error.message}`);
+      throw new Error(`Gagal update teknisi: ${error.message}`);
     }
 
     return data;
   },
 
   /**
-   * UPDATE STATUS
    * Update status ketersediaan teknisi
-   *
-   * @param id - UUID teknisi
-   * @param status - Status baru (available/busy/off_duty)
-   * @returns Promise<Technician>
-   *
-   * @example
-   * ```typescript
-   * // Set teknisi jadi busy saat assign
-   * await technicianService.updateStatus('uuid', 'busy');
-   *
-   * // Set jadi available saat selesai
-   * await technicianService.updateStatus('uuid', 'available');
-   * ```
    */
   async updateStatus(
     id: string,
-    status: Technician["status"],
-  ): Promise<Technician> {
+    status: Employee["status"],
+  ): Promise<Employee> {
     return this.update(id, { status });
   },
 
   /**
-   * UPDATE LOCATION
-   * Update lokasi current teknisi
-   *
-   * @param id - UUID teknisi
-   * @param latitude - Koordinat latitude
-   * @param longitude - Koordinat longitude
-   * @returns Promise<Technician>
-   *
-   * @example
-   * ```typescript
-   * // Update dari GPS tracking
-   * await technicianService.updateLocation(
-   *   'uuid',
-   *   -6.1234,
-   *   106.5678
-   * );
-   * ```
+   * Update lokasi teknisi di tabel technician_locations (upsert)
    */
   async updateLocation(
-    id: string,
+    technicianId: string,
     latitude: number,
     longitude: number,
-  ): Promise<Technician> {
-    return this.update(id, {
-      current_location: {
-        latitude,
-        longitude,
-        updated_at: new Date().toISOString(),
-      },
-    });
-  },
-
-  /**
-   * DELETE TECHNICIAN
-   * Hapus teknisi
-   *
-   * @param id - UUID teknisi
-   * @returns Promise<void>
-   *
-   * @example
-   * ```typescript
-   * await technicianService.delete('uuid');
-   * ```
-   *
-   * @note
-   * - Akan cascade delete semua assignments
-   * - Pastikan confirm ke user sebelum delete
-   */
-  async delete(id: string): Promise<void> {
-    const { error } = await supabase.from("technicians").delete().eq("id", id);
+    accuracy?: number,
+  ): Promise<TechnicianLocation> {
+    const { data, error } = await supabase
+      .from("technician_locations")
+      .upsert(
+        {
+          technician_id: technicianId,
+          latitude,
+          longitude,
+          accuracy: accuracy ?? null,
+          is_active: true,
+          recorded_at: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+        },
+        { onConflict: "technician_id" },
+      )
+      .select()
+      .single();
 
     if (error) {
-      console.error("[technicianService.delete] Error:", error);
-      throw new Error(`Failed to delete technician: ${error.message}`);
+      console.error("[technicianService.updateLocation] Error:", error);
+      throw new Error(`Gagal update lokasi: ${error.message}`);
     }
+
+    return data;
   },
 
   /**
-   * SEARCH TECHNICIANS
-   * Cari teknisi dengan filters
-   *
-   * @param filters - Filter options
-   * @returns Promise<Technician[]>
-   *
-   * @example
-   * ```typescript
-   * const results = await technicianService.search({
-   *   status: 'available',
-   *   search: 'john',
-   *   specialization: 'AC'
-   * });
-   * ```
+   * Ambil lokasi terakhir teknisi
    */
-  async search(filters: TechnicianFilters): Promise<Technician[]> {
-    let query = supabase.from("technicians").select("*");
+  async getLocation(technicianId: string): Promise<TechnicianLocation | null> {
+    const { data, error } = await supabase
+      .from("technician_locations")
+      .select("*")
+      .eq("technician_id", technicianId)
+      .single();
 
-    // Filter by status
+    if (error) {
+      if (error.code === "PGRST116") return null;
+      console.error("[technicianService.getLocation] Error:", error);
+      throw new Error(`Gagal ambil lokasi: ${error.message}`);
+    }
+
+    return data;
+  },
+
+  /**
+   * Cek apakah teknisi bisa di-assign ke invoice tertentu
+   */
+  async canBeAssigned(
+    invoiceId: string,
+    technicianId: string,
+  ): Promise<boolean> {
+    const { data, error } = await supabase.rpc("can_technician_be_assigned", {
+      p_invoice_id: invoiceId,
+      p_technician_id: technicianId,
+    });
+
+    if (error) {
+      console.error("[technicianService.canBeAssigned] Error:", error);
+      return false;
+    }
+
+    return data ?? false;
+  },
+
+  /**
+   * Cari teknisi dengan filter
+   */
+  async search(filters: EmployeeFilters): Promise<EmployeeWithStats[]> {
+    let query = supabase
+      .from("employees")
+      .select(`*, active_jobs:invoice_services!assigned_technician_id(count)`)
+      .eq("role", "technician");
+
     if (filters.status && filters.status !== "all") {
       query = query.eq("status", filters.status);
     }
 
-    // Filter by specialization
-    if (filters.specialization) {
-      query = query.contains("specialization", [filters.specialization]);
-    }
-
-    // Search by name or email
     if (filters.search) {
       query = query.or(
         `name.ilike.%${filters.search}%,email.ilike.%${filters.search}%`,
@@ -365,40 +261,41 @@ export const technicianService = {
 
     if (error) {
       console.error("[technicianService.search] Error:", error);
-      throw new Error(`Failed to search technicians: ${error.message}`);
+      throw new Error(`Gagal mencari teknisi: ${error.message}`);
     }
 
-    return data || [];
+    return (data || []).map((t) => ({
+      ...t,
+      active_jobs_count: t.active_jobs?.[0]?.count || 0,
+    }));
   },
 };
 
 // ============================================
 // ASSIGNMENT SERVICE
-// CRUD operations untuk penugasan teknisi
+// Operasi untuk tabel service_technician_assignments
 // ============================================
 
 export const assignmentService = {
   /**
-   * GET ALL ASSIGNMENTS
-   * Mengambil semua penugasan dengan detail
-   *
-   * @returns Promise<AssignmentWithDetails[]>
+   * Ambil semua assignment dengan detail lengkap
    */
   async getAll(): Promise<AssignmentWithDetails[]> {
     const { data, error } = await supabase
-      .from("technician_assignments")
+      .from("service_technician_assignments")
       .select(
         `
         *,
-        technician:technicians(*),
+        technician:employees!technician_id(
+          id, name, email, phone, avatar_url, status, rating, technician_level
+        ),
         invoice:invoices(
-          invoice_number,
-          customer_name,
-          customer_phone,
-          service_type,
-          device_info,
-          problem_description,
-          status
+          id, invoice_number, status, payment_status,
+          customer:customers(name, phone)
+        ),
+        service:invoice_services(
+          id, title, status, priority, service_address,
+          scheduled_date, description
         )
       `,
       )
@@ -406,30 +303,44 @@ export const assignmentService = {
 
     if (error) {
       console.error("[assignmentService.getAll] Error:", error);
-      throw new Error(`Failed to fetch assignments: ${error.message}`);
+      throw new Error(`Gagal mengambil data assignment: ${error.message}`);
     }
 
     return data || [];
   },
 
+  async getStats() {
+    const statuses = ["pending", "assigned", "in_progress", "completed"];
+
+    const results = await Promise.all(
+      statuses.map((status) =>
+        supabase
+          .from("invoice_services")
+          .select("*", { count: "exact", head: true })
+          .eq("status", status),
+      ),
+    );
+
+    return {
+      pending: results[0].count || 0,
+      assigned: results[1].count || 0,
+      in_progress: results[2].count || 0,
+      completed: results[3].count || 0,
+    };
+  },
+
   /**
-   * GET BY ID
-   * Mengambil detail assignment lengkap
-   * Termasuk location logs dan photo logs
-   *
-   * @param id - UUID assignment
-   * @returns Promise<AssignmentWithDetails>
+   * Ambil assignment berdasarkan ID
    */
   async getById(id: string): Promise<AssignmentWithDetails> {
     const { data, error } = await supabase
-      .from("technician_assignments")
+      .from("service_technician_assignments")
       .select(
         `
         *,
-        technician:technicians(*),
-        invoice:invoices(*),
-        location_logs(*),
-        photo_logs(*)
+        technician:employees!technician_id(*),
+        invoice:invoices(*, customer:customers(name, phone, address)),
+        service:invoice_services(*)
       `,
       )
       .eq("id", id)
@@ -437,33 +348,25 @@ export const assignmentService = {
 
     if (error) {
       console.error("[assignmentService.getById] Error:", error);
-      throw new Error(`Failed to fetch assignment: ${error.message}`);
+      throw new Error(`Gagal mengambil assignment: ${error.message}`);
     }
 
     return data;
   },
 
   /**
-   * GET BY TECHNICIAN
-   * Mengambil assignments dari teknisi tertentu
-   *
-   * @param technicianId - UUID teknisi
-   * @returns Promise<AssignmentWithDetails[]>
+   * Ambil semua assignment dari satu teknisi
    */
   async getByTechnician(
     technicianId: string,
   ): Promise<AssignmentWithDetails[]> {
     const { data, error } = await supabase
-      .from("technician_assignments")
+      .from("service_technician_assignments")
       .select(
         `
         *,
-        invoice:invoices(
-          invoice_number,
-          customer_name,
-          service_type,
-          status
-        )
+        invoice:invoices(id, invoice_number, status),
+        service:invoice_services(id, title, status, priority, service_address, scheduled_date, description)
       `,
       )
       .eq("technician_id", technicianId)
@@ -471,30 +374,25 @@ export const assignmentService = {
 
     if (error) {
       console.error("[assignmentService.getByTechnician] Error:", error);
-      throw new Error(
-        `Failed to fetch technician assignments: ${error.message}`,
-      );
+      throw new Error(`Gagal mengambil assignment teknisi: ${error.message}`);
     }
 
     return data || [];
   },
 
   /**
-   * GET ACTIVE BY TECHNICIAN
-   * Mengambil assignment aktif (assigned atau in_progress)
-   *
-   * @param technicianId - UUID teknisi
-   * @returns Promise<AssignmentWithDetails[]>
+   * Ambil assignment aktif dari satu teknisi
    */
   async getActiveByTechnician(
     technicianId: string,
   ): Promise<AssignmentWithDetails[]> {
     const { data, error } = await supabase
-      .from("technician_assignments")
+      .from("service_technician_assignments")
       .select(
         `
         *,
-        invoice:invoices(*)
+        invoice:invoices(id, invoice_number, status),
+        service:invoice_services(*)
       `,
       )
       .eq("technician_id", technicianId)
@@ -503,74 +401,63 @@ export const assignmentService = {
 
     if (error) {
       console.error("[assignmentService.getActiveByTechnician] Error:", error);
-      throw new Error(`Failed to fetch active assignments: ${error.message}`);
+      throw new Error(`Gagal mengambil assignment aktif: ${error.message}`);
     }
 
     return data || [];
   },
 
   /**
-   * CREATE ASSIGNMENT
-   * Assign teknisi ke invoice
-   *
-   * @param input - Data assignment
-   * @returns Promise<TechnicianAssignment>
-   *
-   * @example
-   * ```typescript
-   * const assignment = await assignmentService.create({
-   *   invoice_id: 'invoice-uuid',
-   *   technician_id: 'tech-uuid',
-   *   notes: 'Urgent - AC rusak total'
-   * });
-   * ```
-   *
-   * @note
-   * - Auto update technician status jadi 'busy'
-   * - Auto update invoice status jadi 'assigned'
+   * Ambil teknisi yang ditugaskan ke invoice tertentu
    */
-  async create(input: CreateAssignmentInput): Promise<TechnicianAssignment> {
-    // Update technician status to busy
-    await technicianService.updateStatus(input.technician_id, "busy");
+  async getByInvoice(invoiceId: string) {
+    const { data, error } = await supabase.rpc("get_invoice_technicians", {
+      p_invoice_id: invoiceId,
+    });
 
-    // Update invoice status to assigned
-    await supabase
-      .from("invoices")
-      .update({ status: "assigned" })
-      .eq("id", input.invoice_id);
+    if (error) {
+      console.error("[assignmentService.getByInvoice] Error:", error);
+      throw new Error(`Gagal mengambil teknisi invoice: ${error.message}`);
+    }
 
-    // Create assignment
+    return data || [];
+  },
+
+  /**
+   * Buat assignment baru (assign teknisi ke service)
+   */
+  async create(input: CreateAssignmentInput): Promise<ServiceAssignment> {
     const { data, error } = await supabase
-      .from("technician_assignments")
+      .from("service_technician_assignments")
       .insert({
-        ...input,
-        status: input.status || "assigned",
+        invoice_id: input.invoice_id,
+        technician_id: input.technician_id,
+        service_id: input.service_id ?? null,
+        role: input.role ?? "technician",
+        notes: input.notes ?? null,
+        status: "assigned",
+        assigned_at: new Date().toISOString(),
       })
       .select()
       .single();
 
     if (error) {
       console.error("[assignmentService.create] Error:", error);
-      throw new Error(`Failed to create assignment: ${error.message}`);
+      throw new Error(`Gagal membuat assignment: ${error.message}`);
     }
 
     return data;
   },
 
   /**
-   * UPDATE ASSIGNMENT
-   * Update data assignment
-   *
-   * @param id - UUID assignment
-   * @param updates - Field yang mau diupdate
-   * @returns Promise<TechnicianAssignment>
+   * Update assignment
    */
   async update(
     id: string,
     updates: UpdateAssignmentInput,
-  ): Promise<TechnicianAssignment> {
+  ): Promise<ServiceAssignment> {
     const { data, error } = await supabase
-      .from("technician_assignments")
+      .from("service_technician_assignments")
       .update(updates)
       .eq("id", id)
       .select()
@@ -578,141 +465,58 @@ export const assignmentService = {
 
     if (error) {
       console.error("[assignmentService.update] Error:", error);
-      throw new Error(`Failed to update assignment: ${error.message}`);
+      throw new Error(`Gagal update assignment: ${error.message}`);
     }
 
     return data;
   },
 
   /**
-   * START ASSIGNMENT
-   * Mulai pekerjaan (set status jadi in_progress)
-   *
-   * @param id - UUID assignment
-   * @returns Promise<TechnicianAssignment>
-   *
-   * @example
-   * ```typescript
-   * // Saat teknisi check-in dan mulai kerja
-   * await assignmentService.start('assignment-uuid');
-   * ```
-   *
-   * @note
-   * - Set started_at ke timestamp sekarang
-   * - Update invoice status jadi 'in_progress'
+   * Hapus assignment
    */
-  async start(id: string): Promise<TechnicianAssignment> {
-    // Update invoice status
-    const assignment = await this.getById(id);
-    await supabase
-      .from("invoices")
-      .update({ status: "in_progress" })
-      .eq("id", assignment.invoice_id);
+  async delete(id: string): Promise<void> {
+    const { error } = await supabase
+      .from("service_technician_assignments")
+      .delete()
+      .eq("id", id);
 
-    return this.update(id, {
-      status: "in_progress",
-      started_at: new Date().toISOString(),
-    });
+    if (error) {
+      console.error("[assignmentService.delete] Error:", error);
+      throw new Error(`Gagal hapus assignment: ${error.message}`);
+    }
   },
 
   /**
-   * COMPLETE ASSIGNMENT
-   * Selesaikan pekerjaan
-   *
-   * @param id - UUID assignment
-   * @param notes - Catatan hasil pekerjaan (optional)
-   * @returns Promise<TechnicianAssignment>
-   *
-   * @example
-   * ```typescript
-   * await assignmentService.complete(
-   *   'assignment-uuid',
-   *   'AC sudah diperbaiki, filter diganti baru'
-   * );
-   * ```
-   *
-   * @note
-   * - Set completed_at ke timestamp sekarang
-   * - Update technician status jadi 'available'
-   * - Update invoice status jadi 'completed'
-   */
-  async complete(id: string, notes?: string): Promise<TechnicianAssignment> {
-    const assignment = await this.getById(id);
-
-    // Update technician status to available
-    await technicianService.updateStatus(assignment.technician_id, "available");
-
-    // Update invoice status to completed
-    await supabase
-      .from("invoices")
-      .update({ status: "completed" })
-      .eq("id", assignment.invoice_id);
-
-    return this.update(id, {
-      status: "completed",
-      completed_at: new Date().toISOString(),
-      notes,
-    });
-  },
-
-  /**
-   * CANCEL ASSIGNMENT
-   * Batalkan penugasan
-   *
-   * @param id - UUID assignment
-   * @param notes - Alasan pembatalan
-   * @returns Promise<TechnicianAssignment>
-   *
-   * @note
-   * - Update technician status jadi 'available'
-   * - Update invoice status kembali jadi 'pending'
-   */
-  async cancel(id: string, notes?: string): Promise<TechnicianAssignment> {
-    const assignment = await this.getById(id);
-
-    // Update technician status to available
-    await technicianService.updateStatus(assignment.technician_id, "available");
-
-    // Update invoice status back to pending
-    await supabase
-      .from("invoices")
-      .update({ status: "pending" })
-      .eq("id", assignment.invoice_id);
-
-    return this.update(id, {
-      status: "cancelled",
-      notes,
-    });
-  },
-
-  /**
-   * SEARCH ASSIGNMENTS
-   * Cari assignments dengan filters
-   *
-   * @param filters - Filter options
-   * @returns Promise<AssignmentWithDetails[]>
+   * Cari assignment dengan filter
    */
   async search(filters: AssignmentFilters): Promise<AssignmentWithDetails[]> {
-    let query = supabase.from("technician_assignments").select(`
+    let query = supabase.from("service_technician_assignments").select(`
         *,
-        technician:technicians(*),
-        invoice:invoices(*)
+        technician:employees!technician_id(id, name, email, phone, avatar_url, status, rating, technician_level),
+        invoice:invoices(id, invoice_number, status),
+        service:invoice_services(id, title, status, priority, service_address, scheduled_date, description)
       `);
 
-    // Filter by status
     if (filters.status && filters.status !== "all") {
       query = query.eq("status", filters.status);
     }
 
-    // Filter by technician
     if (filters.technician_id) {
       query = query.eq("technician_id", filters.technician_id);
     }
 
-    // Filter by date range
+    if (filters.invoice_id) {
+      query = query.eq("invoice_id", filters.invoice_id);
+    }
+
+    if (filters.service_id) {
+      query = query.eq("service_id", filters.service_id);
+    }
+
     if (filters.date_from) {
       query = query.gte("assigned_at", filters.date_from);
     }
+
     if (filters.date_to) {
       query = query.lte("assigned_at", filters.date_to);
     }
@@ -723,7 +527,7 @@ export const assignmentService = {
 
     if (error) {
       console.error("[assignmentService.search] Error:", error);
-      throw new Error(`Failed to search assignments: ${error.message}`);
+      throw new Error(`Gagal mencari assignment: ${error.message}`);
     }
 
     return data || [];
@@ -732,304 +536,220 @@ export const assignmentService = {
 
 // ============================================
 // LOCATION SERVICE
-// GPS tracking operations
+// Operasi untuk tabel technician_locations
 // ============================================
 
 export const locationService = {
   /**
-   * LOG LOCATION
-   * Catat lokasi teknisi
-   *
-   * @param input - Data lokasi
-   * @returns Promise<LocationLog>
-   *
-   * @example
-   * ```typescript
-   * // Saat check-in
-   * await locationService.logLocation({
-   *   assignment_id: 'uuid',
-   *   latitude: -6.1234,
-   *   longitude: 106.5678,
-   *   activity_type: 'check_in',
-   *   accuracy: 10.5
-   * });
-   * ```
-   *
-   * @note
-   * - Auto update current_location di table technicians
+   * Simpan/update lokasi teknisi (upsert berdasarkan technician_id)
    */
-  async logLocation(input: LogLocationInput): Promise<LocationLog> {
-    // Insert location log
-    const { data, error } = await supabase
-      .from("location_logs")
-      .insert(input)
-      .select()
-      .single();
-
-    if (error) {
-      console.error("[locationService.logLocation] Error:", error);
-      throw new Error(`Failed to log location: ${error.message}`);
-    }
-
-    // Update technician's current location
-    const assignment = await assignmentService.getById(input.assignment_id);
-    await technicianService.updateLocation(
-      assignment.technician_id,
-      input.latitude,
-      input.longitude,
+  async upsert(
+    technicianId: string,
+    latitude: number,
+    longitude: number,
+    accuracy?: number,
+  ): Promise<TechnicianLocation> {
+    return technicianService.updateLocation(
+      technicianId,
+      latitude,
+      longitude,
+      accuracy,
     );
-
-    return data;
   },
 
   /**
-   * GET HISTORY
-   * Ambil history lokasi dari assignment
-   *
-   * @param assignmentId - UUID assignment
-   * @returns Promise<LocationLog[]>
+   * Ambil lokasi terakhir semua teknisi yang aktif
    */
-  async getHistory(assignmentId: string): Promise<LocationLog[]> {
+  async getAllActive(): Promise<TechnicianLocation[]> {
     const { data, error } = await supabase
-      .from("location_logs")
-      .select("*")
-      .eq("assignment_id", assignmentId)
-      .order("recorded_at", { ascending: true });
+      .from("technician_locations")
+      .select(
+        `
+        *,
+        technician:employees!technician_id(id, name, phone, status, avatar_url)
+      `,
+      )
+      .eq("is_active", true)
+      .order("updated_at", { ascending: false });
 
     if (error) {
-      console.error("[locationService.getHistory] Error:", error);
-      throw new Error(`Failed to fetch location history: ${error.message}`);
+      console.error("[locationService.getAllActive] Error:", error);
+      throw new Error(`Gagal mengambil lokasi aktif: ${error.message}`);
     }
 
     return data || [];
   },
 
   /**
-   * GET CURRENT LOCATION
-   * Ambil lokasi terakhir dari assignment
-   *
-   * @param assignmentId - UUID assignment
-   * @returns Promise<LocationLog | null>
+   * Nonaktifkan tracking lokasi teknisi
    */
-  async getCurrent(assignmentId: string): Promise<LocationLog | null> {
-    const { data, error } = await supabase
-      .from("location_logs")
-      .select("*")
-      .eq("assignment_id", assignmentId)
-      .order("recorded_at", { ascending: false })
-      .limit(1)
-      .single();
+  async deactivate(technicianId: string): Promise<void> {
+    const { error } = await supabase
+      .from("technician_locations")
+      .update({ is_active: false, updated_at: new Date().toISOString() })
+      .eq("technician_id", technicianId);
 
     if (error) {
-      if (error.code === "PGRST116") {
-        // No data found
-        return null;
-      }
-      console.error("[locationService.getCurrent] Error:", error);
-      throw new Error(`Failed to fetch current location: ${error.message}`);
+      console.error("[locationService.deactivate] Error:", error);
+      throw new Error(`Gagal nonaktifkan tracking: ${error.message}`);
     }
-
-    return data;
   },
 };
 
 // ============================================
 // PHOTO SERVICE
-// Photo upload and management operations
+// Foto disimpan di kolom before_photos / after_photos
+// di tabel invoice_services (array of URL string)
 // ============================================
 
 export const photoService = {
   /**
-   * UPLOAD PHOTO
-   * Upload foto dokumentasi pekerjaan
-   *
-   * @param input - Data foto dan file
-   * @returns Promise<PhotoLog>
-   *
-   * @example
-   * ```typescript
-   * const file = event.target.files[0];
-   * const photo = await photoService.upload({
-   *   assignment_id: 'uuid',
-   *   file: file,
-   *   photo_type: 'progress',
-   *   description: 'Membersihkan filter AC',
-   *   location: { latitude: -6.1234, longitude: 106.5678 }
-   * });
-   * ```
+   * Upload foto ke Supabase Storage
+   * Return public URL
    */
-  async upload(input: UploadPhotoInput): Promise<PhotoLog> {
-    // Generate filename
-    const fileExt = input.file.name.split(".").pop();
-    const fileName = `${input.assignment_id}/${Date.now()}-${
-      input.photo_type
-    }.${fileExt}`;
-    const filePath = fileName;
+  async upload(
+    serviceId: string,
+    file: File,
+    photoType: "before" | "after",
+  ): Promise<string> {
+    const fileExt = file.name.split(".").pop();
+    const fileName = `${serviceId}/${photoType}-${Date.now()}.${fileExt}`;
 
-    // Upload file to storage
     const { error: uploadError } = await supabase.storage
-      .from("technician-photos")
-      .upload(filePath, input.file, {
-        cacheControl: "3600",
-        upsert: false,
-      });
+      .from("service-photos")
+      .upload(fileName, file, { cacheControl: "3600", upsert: false });
 
     if (uploadError) {
-      console.error("[photoService.upload] Upload error:", uploadError);
-      throw new Error(`Failed to upload photo: ${uploadError.message}`);
+      console.error("[photoService.upload] Error:", uploadError);
+      throw new Error(`Gagal upload foto: ${uploadError.message}`);
     }
 
-    // Get public URL
     const {
       data: { publicUrl },
-    } = supabase.storage.from("technician-photos").getPublicUrl(filePath);
+    } = supabase.storage.from("service-photos").getPublicUrl(fileName);
 
-    // Save metadata to database
-    const { data, error } = await supabase
-      .from("photo_logs")
-      .insert({
-        assignment_id: input.assignment_id,
-        photo_url: publicUrl,
-        photo_type: input.photo_type,
-        description: input.description,
-        location: input.location,
-      })
-      .select()
-      .single();
-
-    if (error) {
-      console.error("[photoService.upload] Database error:", error);
-      throw new Error(`Failed to save photo metadata: ${error.message}`);
-    }
-
-    return data;
+    return publicUrl;
   },
 
   /**
-   * GET BY ASSIGNMENT
-   * Ambil semua foto dari assignment
-   *
-   * @param assignmentId - UUID assignment
-   * @returns Promise<PhotoLog[]>
+   * Tambahkan URL foto ke kolom before_photos atau after_photos
+   * di tabel invoice_services
    */
-  async getByAssignment(assignmentId: string): Promise<PhotoLog[]> {
-    const { data, error } = await supabase
-      .from("photo_logs")
-      .select("*")
-      .eq("assignment_id", assignmentId)
-      .order("uploaded_at", { ascending: true });
+  async addToService(
+    serviceId: string,
+    photoUrl: string,
+    photoType: "before" | "after",
+  ): Promise<void> {
+    const column = photoType === "before" ? "before_photos" : "after_photos";
 
-    if (error) {
-      console.error("[photoService.getByAssignment] Error:", error);
-      throw new Error(`Failed to fetch photos: ${error.message}`);
-    }
-
-    return data || [];
-  },
-
-  /**
-   * GET BY TYPE
-   * Ambil foto berdasarkan tipe
-   *
-   * @param assignmentId - UUID assignment
-   * @param photoType - Jenis foto
-   * @returns Promise<PhotoLog[]>
-   */
-  async getByType(
-    assignmentId: string,
-    photoType: PhotoLog["photo_type"],
-  ): Promise<PhotoLog[]> {
-    const { data, error } = await supabase
-      .from("photo_logs")
-      .select("*")
-      .eq("assignment_id", assignmentId)
-      .eq("photo_type", photoType)
-      .order("uploaded_at", { ascending: true });
-
-    if (error) {
-      console.error("[photoService.getByType] Error:", error);
-      throw new Error(`Failed to fetch photos by type: ${error.message}`);
-    }
-
-    return data || [];
-  },
-
-  /**
-   * DELETE PHOTO
-   * Hapus foto dari storage dan database
-   *
-   * @param id - UUID photo log
-   * @returns Promise<void>
-   */
-  async delete(id: string): Promise<void> {
-    // Get photo data first
-    const { data: photo, error: fetchError } = await supabase
-      .from("photo_logs")
-      .select("photo_url")
-      .eq("id", id)
+    // Ambil data foto saat ini
+    const { data: current, error: fetchError } = await supabase
+      .from("invoice_services")
+      .select(column)
+      .eq("id", serviceId)
       .single();
 
     if (fetchError) {
-      console.error("[photoService.delete] Fetch error:", fetchError);
-      throw new Error(`Failed to fetch photo data: ${fetchError.message}`);
+      throw new Error(`Gagal mengambil data service: ${fetchError.message}`);
     }
 
-    // Extract file path from URL
-    const urlParts = photo.photo_url.split("/");
-    const filePath = urlParts.slice(-2).join("/");
+    const existingPhotos: string[] = (current as any)[column] || [];
+    const updatedPhotos = [...existingPhotos, photoUrl];
 
-    // Delete from storage
-    const { error: storageError } = await supabase.storage
-      .from("technician-photos")
-      .remove([filePath]);
+    const { error: updateError } = await supabase
+      .from("invoice_services")
+      .update({ [column]: updatedPhotos })
+      .eq("id", serviceId);
 
-    if (storageError) {
-      console.error("[photoService.delete] Storage error:", storageError);
-      throw new Error(
-        `Failed to delete photo from storage: ${storageError.message}`,
-      );
+    if (updateError) {
+      throw new Error(`Gagal menyimpan foto: ${updateError.message}`);
     }
+  },
 
-    // Delete from database
-    const { error } = await supabase.from("photo_logs").delete().eq("id", id);
+  /**
+   * Upload dan langsung simpan ke service (gabungan upload + addToService)
+   */
+  async uploadAndSave(
+    serviceId: string,
+    file: File,
+    photoType: "before" | "after",
+  ): Promise<string> {
+    const url = await this.upload(serviceId, file, photoType);
+    await this.addToService(serviceId, url, photoType);
+    return url;
+  },
+
+  /**
+   * Ambil semua foto dari service
+   */
+  async getByService(serviceId: string): Promise<{
+    before_photos: string[];
+    after_photos: string[];
+  }> {
+    const { data, error } = await supabase
+      .from("invoice_services")
+      .select("before_photos, after_photos")
+      .eq("id", serviceId)
+      .single();
 
     if (error) {
-      console.error("[photoService.delete] Database error:", error);
-      throw new Error(`Failed to delete photo metadata: ${error.message}`);
+      throw new Error(`Gagal mengambil foto: ${error.message}`);
     }
+
+    return {
+      before_photos: data.before_photos || [],
+      after_photos: data.after_photos || [],
+    };
+  },
+
+  /**
+   * Hapus URL foto dari kolom dan storage
+   */
+  async delete(
+    serviceId: string,
+    photoUrl: string,
+    photoType: "before" | "after",
+  ): Promise<void> {
+    const column = photoType === "before" ? "before_photos" : "after_photos";
+
+    const { data: current, error: fetchError } = await supabase
+      .from("invoice_services")
+      .select(column)
+      .eq("id", serviceId)
+      .single();
+
+    if (fetchError)
+      throw new Error(`Gagal mengambil data: ${fetchError.message}`);
+
+    const existingPhotos: string[] = (current as any)[column] || [];
+    const updatedPhotos = existingPhotos.filter((url) => url !== photoUrl);
+
+    const { error: updateError } = await supabase
+      .from("invoice_services")
+      .update({ [column]: updatedPhotos })
+      .eq("id", serviceId);
+
+    if (updateError)
+      throw new Error(`Gagal hapus foto: ${updateError.message}`);
+
+    // Hapus dari storage
+    const urlParts = photoUrl.split("/");
+    const filePath = urlParts.slice(-2).join("/");
+    await supabase.storage.from("service-photos").remove([filePath]);
   },
 };
 
 // ============================================
 // GPS UTILITIES
-// Helper functions untuk GPS operations
 // ============================================
 
 export const gpsUtils = {
-  /**
-   * GET CURRENT POSITION
-   * Ambil koordinat GPS current dari browser
-   *
-   * @returns Promise<GeolocationPosition>
-   *
-   * @example
-   * ```typescript
-   * try {
-   *   const position = await gpsUtils.getCurrentPosition();
-   *   console.log('Lat:', position.coords.latitude);
-   *   console.log('Lng:', position.coords.longitude);
-   * } catch (error) {
-   *   console.error('GPS error:', error);
-   * }
-   * ```
-   */
   getCurrentPosition(): Promise<GeolocationPosition> {
     return new Promise((resolve, reject) => {
       if (!navigator.geolocation) {
         reject(new Error("Geolocation tidak didukung oleh browser ini"));
         return;
       }
-
       navigator.geolocation.getCurrentPosition(resolve, reject, {
         enableHighAccuracy: true,
         timeout: 10000,
@@ -1038,29 +758,6 @@ export const gpsUtils = {
     });
   },
 
-  /**
-   * WATCH POSITION
-   * Monitor perubahan lokasi secara real-time
-   *
-   * @param onSuccess - Callback saat lokasi update
-   * @param onError - Callback saat error (optional)
-   * @returns Watch ID untuk clearWatch
-   *
-   * @example
-   * ```typescript
-   * const watchId = gpsUtils.watchPosition(
-   *   (position) => {
-   *     console.log('Location updated:', position.coords);
-   *   },
-   *   (error) => {
-   *     console.error('GPS error:', error);
-   *   }
-   * );
-   *
-   * // Stop watching
-   * navigator.geolocation.clearWatch(watchId);
-   * ```
-   */
   watchPosition(
     onSuccess: (position: GeolocationPosition) => void,
     onError?: (error: GeolocationPositionError) => void,
@@ -1068,7 +765,6 @@ export const gpsUtils = {
     if (!navigator.geolocation) {
       throw new Error("Geolocation tidak didukung oleh browser ini");
     }
-
     return navigator.geolocation.watchPosition(onSuccess, onError, {
       enableHighAccuracy: true,
       timeout: 10000,
@@ -1076,32 +772,13 @@ export const gpsUtils = {
     });
   },
 
-  /**
-   * CALCULATE DISTANCE
-   * Hitung jarak antara 2 koordinat GPS (Haversine formula)
-   *
-   * @param lat1 - Latitude point 1
-   * @param lon1 - Longitude point 1
-   * @param lat2 - Latitude point 2
-   * @param lon2 - Longitude point 2
-   * @returns Jarak dalam kilometer
-   *
-   * @example
-   * ```typescript
-   * const distance = gpsUtils.calculateDistance(
-   *   -6.1234, 106.5678,  // Point A
-   *   -6.1244, 106.5688   // Point B
-   * );
-   * console.log(`Jarak: ${distance.toFixed(2)} km`);
-   * ```
-   */
   calculateDistance(
     lat1: number,
     lon1: number,
     lat2: number,
     lon2: number,
   ): number {
-    const R = 6371; // Earth radius in km
+    const R = 6371;
     const dLat = ((lat2 - lat1) * Math.PI) / 180;
     const dLon = ((lon2 - lon1) * Math.PI) / 180;
     const a =
@@ -1110,43 +787,20 @@ export const gpsUtils = {
         Math.cos((lat2 * Math.PI) / 180) *
         Math.sin(dLon / 2) *
         Math.sin(dLon / 2);
-    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-    return R * c;
+    return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
   },
 
-  /**
-   * FORMAT COORDINATES
-   * Format koordinat GPS ke string yang readable
-   *
-   * @param lat - Latitude
-   * @param lng - Longitude
-   * @returns String format "lat, lng"
-   */
   formatCoordinates(lat: number, lng: number): string {
     return `${lat.toFixed(6)}, ${lng.toFixed(6)}`;
   },
 
-  /**
-   * GET GOOGLE MAPS URL
-   * Generate URL untuk buka di Google Maps
-   *
-   * @param lat - Latitude
-   * @param lng - Longitude
-   * @returns Google Maps URL
-   *
-   * @example
-   * ```typescript
-   * const url = gpsUtils.getGoogleMapsUrl(-6.1234, 106.5678);
-   * window.open(url, '_blank');
-   * ```
-   */
   getGoogleMapsUrl(lat: number, lng: number): string {
     return `https://www.google.com/maps?q=${lat},${lng}`;
   },
 };
 
 // ============================================
-// EXPORT ALL SERVICES
+// EXPORT DEFAULT
 // ============================================
 
 export default {
@@ -1155,5 +809,4 @@ export default {
   locationService,
   photoService,
   gpsUtils,
-  supabase,
 };

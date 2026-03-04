@@ -5,6 +5,7 @@
 // ============================================
 
 import { useState, useEffect } from "react";
+import { SortingState } from "@tanstack/react-table";
 import { supabase } from "@/integrations/supabase/client";
 
 interface PaginationState {
@@ -20,24 +21,10 @@ interface ServerPaginationResult<T> {
   totalRows: number;
   pagination: PaginationState;
   setPagination: (pagination: PaginationState) => void;
+  sorting: SortingState;
+  setSorting: (sorting: SortingState) => void;
   refetch: () => Promise<void>;
 }
-
-type AllowedTables =
-  | "audit_logs"
-  | "employees"
-  | "customer_outstanding_history"
-  | "customers"
-  | "invoices"
-  | "customer_users"
-  | "inventory_transactions"
-  | "products"
-  | "invoice_items"
-  | "units"
-  | "user_roles"
-  | "customers_overdue"
-  | "customers_with_outstanding"
-  | "v_service_assignments";
 
 interface UseServerPaginationOptions {
   table: any;
@@ -66,35 +53,52 @@ export function useServerPagination<T>(
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<Error | null>(null);
   const [totalRows, setTotalRows] = useState(0);
-  const [pagination, setPagination] = useState<PaginationState>({
+  const [pagination, setPaginationState] = useState<PaginationState>({
     pageIndex: 0,
     pageSize: initialPageSize,
   });
+  // Sorting state — default dari orderBy prop
+  const [sorting, setSortingState] = useState<SortingState>([
+    { id: orderBy.column, desc: !(orderBy.ascending ?? false) },
+  ]);
+
+  // Reset ke halaman pertama saat sorting berubah
+  const setSorting = (newSorting: SortingState) => {
+    setSortingState(newSorting);
+    setPaginationState((prev) => ({ ...prev, pageIndex: 0 }));
+  };
+
+  // Reset ke halaman pertama saat pagination size berubah
+  const setPagination = (newPagination: PaginationState) => {
+    setPaginationState(newPagination);
+  };
 
   const fetchData = async () => {
     setLoading(true);
     setError(null);
 
     try {
-      // Calculate range
       const from = pagination.pageIndex * pagination.pageSize;
       const to = from + pagination.pageSize - 1;
 
-      // Build query
+      // Resolve sort column & direction dari sorting state
+      const activeSort =
+        sorting.length > 0
+          ? { column: sorting[0].id, ascending: !sorting[0].desc }
+          : orderBy;
+
       let query = supabase
         .from(table)
         .select(select, { count: "exact" })
         .range(from, to)
-        .order(orderBy.column, { ascending: orderBy.ascending });
+        .order(activeSort.column, { ascending: activeSort.ascending });
 
-      // Apply filters
       Object.entries(filters).forEach(([key, value]) => {
         if (value !== undefined && value !== null && value !== "all") {
           query = query.eq(key, value);
         }
       });
 
-      // Apply search
       if (searchColumn && searchValue) {
         query = query.ilike(searchColumn, `%${searchValue}%`);
       }
@@ -118,6 +122,7 @@ export function useServerPagination<T>(
   }, [
     pagination.pageIndex,
     pagination.pageSize,
+    JSON.stringify(sorting),
     JSON.stringify(filters),
     searchValue,
   ]);
@@ -132,6 +137,8 @@ export function useServerPagination<T>(
     totalRows,
     pagination,
     setPagination,
+    sorting,
+    setSorting,
     refetch: fetchData,
   };
 }

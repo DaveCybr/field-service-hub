@@ -1,101 +1,146 @@
-import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
+// supabase/functions/update-user-role/index.ts
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
 const corsHeaders = {
-  'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Headers":
+    "authorization, x-client-info, apikey, content-type",
 };
 
 Deno.serve(async (req) => {
-  if (req.method === 'OPTIONS') {
-    return new Response(null, { headers: corsHeaders });
+  if (req.method === "OPTIONS") {
+    return new Response("ok", { headers: corsHeaders });
   }
 
   try {
-    const authHeader = req.headers.get('Authorization');
+    const authHeader = req.headers.get("Authorization");
     if (!authHeader) {
-      return new Response(JSON.stringify({ error: 'No authorization header' }), {
+      return new Response(
+        JSON.stringify({ error: "Tidak ada token autentikasi" }),
+        {
+          status: 401,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        },
+      );
+    }
+
+    const supabaseAdmin = createClient(
+      Deno.env.get("SUPABASE_URL") ?? "",
+      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "",
+      { auth: { autoRefreshToken: false, persistSession: false } },
+    );
+
+    // Verifikasi caller
+    const supabaseClient = createClient(
+      Deno.env.get("SUPABASE_URL") ?? "",
+      Deno.env.get("SUPABASE_ANON_KEY") ?? "",
+      { global: { headers: { Authorization: authHeader } } },
+    );
+
+    const {
+      data: { user: callerUser },
+      error: callerError,
+    } = await supabaseClient.auth.getUser();
+
+    if (callerError || !callerUser) {
+      return new Response(JSON.stringify({ error: "Token tidak valid" }), {
         status: 401,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
 
-    const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
-    const supabaseAnonKey = Deno.env.get('SUPABASE_ANON_KEY')!;
-    const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
-    
-    const userClient = createClient(supabaseUrl, supabaseAnonKey, {
-      global: { headers: { Authorization: authHeader } },
-    });
+    // Pastikan caller adalah superadmin
+    const { data: callerEmployee } = await supabaseAdmin
+      .from("employees")
+      .select("role")
+      .eq("user_id", callerUser.id)
+      .single();
 
-    const { data: { user: requestingUser }, error: authError } = await userClient.auth.getUser();
-    if (authError || !requestingUser) {
-      return new Response(JSON.stringify({ error: 'Unauthorized' }), {
-        status: 401,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      });
-    }
-
-    // Check if requesting user is superadmin
-    const { data: roleData } = await userClient.rpc('is_superadmin', { _user_id: requestingUser.id });
-    if (!roleData) {
-      return new Response(JSON.stringify({ error: 'Only superadmin can update user roles' }), {
-        status: 403,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      });
+    if (callerEmployee?.role !== "superadmin") {
+      return new Response(
+        JSON.stringify({ error: "Hanya superadmin yang dapat mengubah role" }),
+        {
+          status: 403,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        },
+      );
     }
 
     const { userId, newRole } = await req.json();
-    
+
     if (!userId || !newRole) {
-      return new Response(JSON.stringify({ error: 'userId and newRole are required' }), {
-        status: 400,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      });
+      return new Response(
+        JSON.stringify({ error: "userId dan newRole wajib diisi" }),
+        {
+          status: 400,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        },
+      );
     }
 
-    // Validate role
-    const validRoles = ['admin', 'manager', 'technician', 'cashier', 'superadmin'];
+    // Prevent self role change
+    if (userId === callerUser.id) {
+      return new Response(
+        JSON.stringify({ error: "Tidak dapat mengubah role sendiri" }),
+        {
+          status: 400,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        },
+      );
+    }
+
+    const validRoles = [
+      "admin",
+      "manager",
+      "technician",
+      "cashier",
+      "superadmin",
+    ];
     if (!validRoles.includes(newRole)) {
-      return new Response(JSON.stringify({ error: 'Invalid role' }), {
+      return new Response(JSON.stringify({ error: "Role tidak valid" }), {
         status: 400,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
 
-    // Create admin client
-    const adminClient = createClient(supabaseUrl, supabaseServiceKey, {
-      auth: { autoRefreshToken: false, persistSession: false },
-    });
-
-    // Update user_roles table
-    const { error: updateError } = await adminClient
-      .from('user_roles')
+    // Update employees table
+    const { error: empError } = await supabaseAdmin
+      .from("employees")
       .update({ role: newRole })
-      .eq('user_id', userId);
+      .eq("user_id", userId);
 
-    if (updateError) {
-      return new Response(JSON.stringify({ error: updateError.message }), {
-        status: 400,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      });
+    if (empError) {
+      return new Response(
+        JSON.stringify({
+          error: `Gagal memperbarui role: ${empError.message}`,
+        }),
+        {
+          status: 500,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        },
+      );
     }
 
-    // Also update employees table
-    await adminClient
-      .from('employees')
-      .update({ role: newRole })
-      .eq('user_id', userId);
+    // Update user_roles table (upsert)
+    await supabaseAdmin
+      .from("user_roles")
+      .upsert({ user_id: userId, role: newRole }, { onConflict: "user_id" });
 
-    return new Response(JSON.stringify({ success: true }), {
-      status: 200,
-      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-    });
-
-  } catch (error: any) {
-    console.error('Error updating role:', error);
-    return new Response(JSON.stringify({ error: error.message || 'Internal server error' }), {
-      status: 500,
-      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-    });
+    return new Response(
+      JSON.stringify({ success: true, message: "Role berhasil diperbarui" }),
+      {
+        status: 200,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      },
+    );
+  } catch (error) {
+    console.error("Unexpected error:", error);
+    return new Response(
+      JSON.stringify({ error: "Terjadi kesalahan internal server" }),
+      {
+        status: 500,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      },
+    );
   }
 });
