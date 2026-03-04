@@ -1,3 +1,9 @@
+// ============================================
+// FILE: src/pages/UnitDetail.tsx
+// FIX Bug 2: Teknisi diambil dari service_technician_assignments
+//      jika assigned_technician_id null
+// FIX Bug 4: Stats menggunakan updated_at bukan actual_checkout_at
+// ============================================
 import { useEffect, useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
@@ -10,9 +16,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   ArrowLeft,
   QrCode,
-  Calendar,
   Shield,
-  Wrench,
   Download,
   Edit,
   Trash2,
@@ -64,13 +68,8 @@ interface ServiceHistory {
   actual_checkout_at: string | null;
   service_address: string | null;
   technician_notes: string | null;
-  invoice: {
-    invoice_number: string;
-    invoice_date: string;
-  };
-  assigned_technician: {
-    name: string;
-  } | null;
+  invoice: { invoice_number: string; invoice_date: string };
+  assigned_technician: { name: string } | null;
 }
 
 interface Customer {
@@ -82,15 +81,15 @@ export default function UnitDetail() {
   const { id } = useParams();
   const navigate = useNavigate();
   const { toast } = useToast();
+
   const [unit, setUnit] = useState<UnitDetail | null>(null);
   const [serviceHistory, setServiceHistory] = useState<ServiceHistory[]>([]);
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [loading, setLoading] = useState(true);
   const [showQR, setShowQR] = useState(false);
   const [editModalOpen, setEditModalOpen] = useState(false);
-  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [deleteOpen, setDeleteOpen] = useState(false);
 
-  // Use the new insights hook
   const {
     insights,
     loading: insightsLoading,
@@ -116,20 +115,10 @@ export default function UnitDetail() {
   const fetchUnitDetails = async () => {
     setLoading(true);
     try {
-      // Fetch unit details
+      // ── Unit info ──────────────────────────────────────────────────────────
       const { data: unitData, error: unitError } = await supabase
         .from("units")
-        .select(
-          `
-          *,
-          customer:customers (
-            id,
-            name,
-            phone,
-            email
-          )
-        `,
-        )
+        .select(`*, customer:customers (id, name, phone, email)`)
         .eq("id", id)
         .single();
 
@@ -142,29 +131,17 @@ export default function UnitDetail() {
           : unitData.customer,
       });
 
-      // Fetch service history
+      // ── Service history ────────────────────────────────────────────────────
       const { data: historyData, error: historyError } = await supabase
         .from("invoice_services")
         .select(
           `
-          id,
-          title,
-          description,
-          status,
-          priority,
-          service_cost,
-          parts_cost,
-          total_cost,
-          scheduled_date,
-          actual_checkin_at,
-          actual_checkout_at,
-          service_address,
-          technician_notes,
-          invoice:invoices (
-            invoice_number,
-            invoice_date
-          ),
-          assigned_technician:employees (name)
+          id, title, description, status, priority,
+          service_cost, parts_cost, total_cost,
+          scheduled_date, actual_checkin_at, actual_checkout_at,
+          service_address, technician_notes,
+          invoice:invoices (invoice_number, invoice_date),
+          assigned_technician:employees!invoice_services_assigned_technician_id_fkey (name)
         `,
         )
         .eq("unit_id", id)
@@ -172,89 +149,125 @@ export default function UnitDetail() {
 
       if (historyError) throw historyError;
 
+      // ── FIX Bug 2: Untuk service yang assigned_technician null,
+      //    cari dari service_technician_assignments (lead technician) ──────────
+      const serviceIds = historyData?.map((s) => s.id) || [];
+
+      let assignmentMap: Record<string, string> = {};
+      if (serviceIds.length > 0) {
+        const { data: assignments } = await supabase
+          .from("service_technician_assignments")
+          .select(
+            `
+            service_id,
+            technician:employees!service_technician_assignments_technician_id_fkey (name)
+          `,
+          )
+          .in("service_id", serviceIds)
+          .eq("role", "lead") // Ambil lead technician
+          .order("assigned_at", { ascending: true });
+
+        // Jika tidak ada lead, ambil semua dan ambil yang pertama
+        if (!assignments?.length) {
+          const { data: allAssignments } = await supabase
+            .from("service_technician_assignments")
+            .select(
+              `
+              service_id,
+              technician:employees!service_technician_assignments_technician_id_fkey (name)
+            `,
+            )
+            .in("service_id", serviceIds)
+            .order("assigned_at", { ascending: true });
+
+          for (const a of allAssignments || []) {
+            if (!assignmentMap[a.service_id]) {
+              const tech = Array.isArray(a.technician)
+                ? a.technician[0]
+                : a.technician;
+              if (tech?.name) assignmentMap[a.service_id] = tech.name;
+            }
+          }
+        } else {
+          for (const a of assignments) {
+            const tech = Array.isArray(a.technician)
+              ? a.technician[0]
+              : a.technician;
+            if (tech?.name) assignmentMap[a.service_id] = tech.name;
+          }
+        }
+      }
+
       setServiceHistory(
-        historyData?.map((item) => ({
-          ...item,
-          invoice: Array.isArray(item.invoice) ? item.invoice[0] : item.invoice,
-          assigned_technician: Array.isArray(item.assigned_technician)
+        historyData?.map((item) => {
+          const directTech = Array.isArray(item.assigned_technician)
             ? item.assigned_technician[0]
-            : item.assigned_technician,
-        })) || [],
+            : item.assigned_technician;
+
+          // Gunakan assigned_technician_id jika ada,
+          // fallback ke service_technician_assignments
+          const techName = directTech?.name || assignmentMap[item.id] || null;
+
+          return {
+            ...item,
+            invoice: Array.isArray(item.invoice)
+              ? item.invoice[0]
+              : item.invoice,
+            assigned_technician: techName ? { name: techName } : null,
+          };
+        }) || [],
       );
     } catch (error: any) {
       console.error("Error fetching unit details:", error);
       toast({
         variant: "destructive",
         title: "Error",
-        description: "Failed to load unit details",
+        description: "Gagal memuat detail unit",
       });
     } finally {
       setLoading(false);
     }
   };
 
-  const handleEditSuccess = () => {
-    fetchUnitDetails();
-  };
-
-  const handleDeleteSuccess = () => {
-    toast({
-      title: "Success",
-      description: "Navigating back to units list",
-    });
-    navigate("/units");
-  };
-
-  const handleIssueResolved = () => {
-    refetchInsights();
-  };
-
-  const isWarrantyActive = () => {
-    if (!unit?.warranty_expiry_date) return false;
-    return new Date(unit.warranty_expiry_date) > new Date();
-  };
+  const isWarrantyActive = () =>
+    unit?.warranty_expiry_date
+      ? new Date(unit.warranty_expiry_date) > new Date()
+      : false;
 
   const handleDownloadQR = () => {
     if (!unit) return;
-
     const svg = document.getElementById("unit-qr-code");
     if (!svg) return;
-
     const svgData = new XMLSerializer().serializeToString(svg);
     const canvas = document.createElement("canvas");
     const ctx = canvas.getContext("2d");
     const img = new Image();
-
     img.onload = () => {
       canvas.width = 300;
       canvas.height = 350;
       if (ctx) {
         ctx.fillStyle = "white";
-        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        ctx.fillRect(0, 0, 300, 350);
         ctx.drawImage(img, 50, 20, 200, 200);
-
         ctx.fillStyle = "black";
         ctx.font = "bold 14px Arial";
         ctx.textAlign = "center";
         ctx.fillText(unit.qr_code, 150, 250);
         ctx.font = "12px Arial";
         ctx.fillText(unit.unit_type, 150, 275);
-        if (unit.brand || unit.model) {
+        if (unit.brand || unit.model)
           ctx.fillText(
             `${unit.brand || ""} ${unit.model || ""}`.trim(),
             150,
             295,
           );
-        }
         ctx.fillText(unit.customer.name, 150, 315);
-
         const link = document.createElement("a");
         link.download = `QR-${unit.qr_code}.png`;
         link.href = canvas.toDataURL("image/png");
         link.click();
       }
     };
-
     img.src =
       "data:image/svg+xml;base64," +
       btoa(unescape(encodeURIComponent(svgData)));
@@ -274,9 +287,9 @@ export default function UnitDetail() {
     return (
       <DashboardLayout>
         <div className="text-center py-12">
-          <h3 className="text-lg font-medium">Unit not found</h3>
+          <h3 className="text-lg font-medium">Unit tidak ditemukan</h3>
           <Button onClick={() => navigate("/units")} className="mt-4">
-            Back to Units
+            Kembali ke Daftar Unit
           </Button>
         </div>
       </DashboardLayout>
@@ -302,37 +315,36 @@ export default function UnitDetail() {
               </h1>
               <p className="text-muted-foreground">
                 {[unit.brand, unit.model].filter(Boolean).join(" ") ||
-                  "No brand/model"}
+                  "Tidak ada merk/model"}
               </p>
             </div>
           </div>
           <div className="flex gap-2">
             <Button variant="outline" onClick={() => setShowQR(!showQR)}>
               <QrCode className="mr-2 h-4 w-4" />
-              {showQR ? "Hide" : "Show"} QR
+              {showQR ? "Sembunyikan" : "Tampilkan"} QR
             </Button>
             <Button variant="outline" onClick={() => setEditModalOpen(true)}>
-              <Edit className="mr-2 h-4 w-4" />
+              <Edit className="h-4 w-4 mr-2" />
               Edit
             </Button>
             <Button
               variant="outline"
-              onClick={() => setDeleteDialogOpen(true)}
+              onClick={() => setDeleteOpen(true)}
               className="text-destructive hover:bg-destructive/10"
             >
-              <Trash2 className="mr-2 h-4 w-4" />
-              Delete
+              <Trash2 className="h-4 w-4 mr-2" />
+              Hapus
             </Button>
           </div>
         </div>
 
-        {/* Alert Badges if there are issues */}
+        {/* Issues alert */}
         {!insightsLoading && insights.criticalIssuesCount > 0 && (
           <div className="flex gap-2">
             <Badge variant="destructive" className="animate-pulse">
               <AlertTriangle className="h-3 w-3 mr-1" />
-              {insights.criticalIssuesCount} Critical Issue
-              {insights.criticalIssuesCount > 1 ? "s" : ""}
+              {insights.criticalIssuesCount} Masalah Kritis
             </Badge>
             {insights.activeIssuesCount > insights.criticalIssuesCount && (
               <Badge
@@ -341,53 +353,40 @@ export default function UnitDetail() {
               >
                 <AlertTriangle className="h-3 w-3 mr-1" />
                 {insights.activeIssuesCount - insights.criticalIssuesCount}{" "}
-                Other Active Issue
-                {insights.activeIssuesCount - insights.criticalIssuesCount > 1
-                  ? "s"
-                  : ""}
+                Masalah Aktif Lainnya
               </Badge>
             )}
           </div>
         )}
 
         <div className="grid gap-6 lg:grid-cols-3">
-          {/* Main Content - 2/3 width */}
+          {/* Main Content */}
           <div className="lg:col-span-2 space-y-6">
-            {/* Unit Information */}
             <Card>
               <CardHeader>
-                <CardTitle className="text-base">Unit Information</CardTitle>
+                <CardTitle className="text-base">Informasi Unit</CardTitle>
               </CardHeader>
               <CardContent className="space-y-4">
                 <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <p className="text-sm text-muted-foreground">QR Code</p>
-                    <p className="font-mono font-medium">{unit.qr_code}</p>
-                  </div>
-                  <div>
-                    <p className="text-sm text-muted-foreground">Unit Type</p>
-                    <p className="font-medium">{unit.unit_type}</p>
-                  </div>
-                  <div>
-                    <p className="text-sm text-muted-foreground">Brand</p>
-                    <p className="font-medium">{unit.brand || "-"}</p>
-                  </div>
-                  <div>
-                    <p className="text-sm text-muted-foreground">Model</p>
-                    <p className="font-medium">{unit.model || "-"}</p>
-                  </div>
-                  <div>
-                    <p className="text-sm text-muted-foreground">
-                      Serial Number
-                    </p>
-                    <p className="font-mono text-sm">
-                      {unit.serial_number || "-"}
-                    </p>
-                  </div>
-                  <div>
-                    <p className="text-sm text-muted-foreground">Capacity</p>
-                    <p className="font-medium">{unit.capacity || "-"}</p>
-                  </div>
+                  {[
+                    { label: "QR Code", value: unit.qr_code, mono: true },
+                    { label: "Tipe Unit", value: unit.unit_type },
+                    { label: "Merk", value: unit.brand || "-" },
+                    { label: "Model", value: unit.model || "-" },
+                    {
+                      label: "No. Seri",
+                      value: unit.serial_number || "-",
+                      mono: true,
+                    },
+                    { label: "Kapasitas", value: unit.capacity || "-" },
+                  ].map((f) => (
+                    <div key={f.label}>
+                      <p className="text-sm text-muted-foreground">{f.label}</p>
+                      <p className={`font-medium ${f.mono ? "font-mono" : ""}`}>
+                        {f.value}
+                      </p>
+                    </div>
+                  ))}
                 </div>
 
                 {unit.warranty_expiry_date && (
@@ -396,33 +395,27 @@ export default function UnitDetail() {
                     <div className="flex items-center justify-between">
                       <div className="flex items-center gap-2">
                         <Shield
-                          className={`h-5 w-5 ${
-                            isWarrantyActive()
-                              ? "text-green-600"
-                              : "text-muted-foreground"
-                          }`}
+                          className={`h-5 w-5 ${isWarrantyActive() ? "text-green-600" : "text-muted-foreground"}`}
                         />
                         <div>
                           <p className="text-sm text-muted-foreground">
-                            Warranty Status
+                            Status Garansi
                           </p>
                           <p
-                            className={`font-medium ${
-                              isWarrantyActive()
-                                ? "text-green-600"
-                                : "text-muted-foreground"
-                            }`}
+                            className={`font-medium ${isWarrantyActive() ? "text-green-600" : "text-muted-foreground"}`}
                           >
-                            {isWarrantyActive() ? "Active" : "Expired"}
+                            {isWarrantyActive() ? "Aktif" : "Kadaluarsa"}
                           </p>
                         </div>
                       </div>
                       <div className="text-right">
-                        <p className="text-sm text-muted-foreground">Expires</p>
+                        <p className="text-sm text-muted-foreground">
+                          Berlaku sampai
+                        </p>
                         <p className="font-medium">
                           {format(
                             new Date(unit.warranty_expiry_date),
-                            "MMM d, yyyy",
+                            "d MMM yyyy",
                           )}
                         </p>
                       </div>
@@ -432,35 +425,33 @@ export default function UnitDetail() {
 
                 <Separator />
                 <div>
-                  <p className="text-sm text-muted-foreground">Registered</p>
+                  <p className="text-sm text-muted-foreground">
+                    Tanggal Registrasi
+                  </p>
                   <p className="font-medium">
-                    {format(new Date(unit.created_at), "MMMM d, yyyy")}
+                    {format(new Date(unit.created_at), "d MMMM yyyy")}
                   </p>
                 </div>
               </CardContent>
             </Card>
 
-            {/* Recurring Issues Alert */}
             {!insightsLoading && insights.recurringIssues.length > 0 && (
               <RecurringIssuesAlert
                 issues={insights.recurringIssues}
-                onIssueResolved={handleIssueResolved}
+                onIssueResolved={refetchInsights}
               />
             )}
 
-            {/* Tabs for Service History & Parts */}
             <Tabs defaultValue="services" className="w-full">
               <TabsList className="grid w-full grid-cols-2">
                 <TabsTrigger
                   value="services"
                   className="flex items-center gap-2"
                 >
-                  <History className="h-4 w-4" />
-                  Service History
+                  <History className="h-4 w-4" /> Riwayat Service
                 </TabsTrigger>
                 <TabsTrigger value="parts" className="flex items-center gap-2">
-                  <Package className="h-4 w-4" />
-                  Parts History
+                  <Package className="h-4 w-4" /> Riwayat Sparepart
                   {insights.partsHistory.length > 0 && (
                     <Badge variant="secondary" className="ml-1">
                       {insights.partsHistory.length}
@@ -481,7 +472,7 @@ export default function UnitDetail() {
             </Tabs>
           </div>
 
-          {/* Sidebar - 1/3 width */}
+          {/* Sidebar */}
           <div className="space-y-6">
             {showQR && (
               <Card>
@@ -512,16 +503,16 @@ export default function UnitDetail() {
 
             <Card>
               <CardHeader>
-                <CardTitle className="text-base">Customer</CardTitle>
+                <CardTitle className="text-base">Pelanggan</CardTitle>
               </CardHeader>
               <CardContent className="space-y-3">
                 <div>
-                  <p className="text-sm text-muted-foreground">Name</p>
+                  <p className="text-sm text-muted-foreground">Nama</p>
                   <p className="font-medium">{unit.customer.name}</p>
                 </div>
                 {unit.customer.phone && (
                   <div>
-                    <p className="text-sm text-muted-foreground">Phone</p>
+                    <p className="text-sm text-muted-foreground">Telepon</p>
                     <p className="font-medium">{unit.customer.phone}</p>
                   </div>
                 )}
@@ -536,100 +527,99 @@ export default function UnitDetail() {
                   className="w-full"
                   onClick={() => navigate(`/customers/${unit.customer.id}`)}
                 >
-                  View Customer
+                  Lihat Pelanggan
                 </Button>
               </CardContent>
             </Card>
 
             <Card>
               <CardHeader>
-                <CardTitle className="text-base">Statistics</CardTitle>
+                <CardTitle className="text-base">Statistik</CardTitle>
               </CardHeader>
               <CardContent className="space-y-3">
-                <div className="flex items-center justify-between">
-                  <span className="text-sm text-muted-foreground">
-                    Total Services
-                  </span>
-                  <span className="font-bold text-lg">
-                    {serviceHistory.length}
-                  </span>
-                </div>
-                <div className="flex items-center justify-between">
-                  <span className="text-sm text-muted-foreground">
-                    Completed
-                  </span>
-                  <span className="font-medium">
-                    {
-                      serviceHistory.filter((s) => s.status === "completed")
-                        .length
-                    }
-                  </span>
-                </div>
-                <div className="flex items-center justify-between">
-                  <span className="text-sm text-muted-foreground">
-                    In Progress
-                  </span>
-                  <span className="font-medium">
-                    {
-                      serviceHistory.filter((s) => s.status === "in_progress")
-                        .length
-                    }
-                  </span>
-                </div>
+                {[
+                  { label: "Total Service", value: serviceHistory.length },
+                  {
+                    label: "Selesai",
+                    value: serviceHistory.filter(
+                      (s) => s.status === "completed",
+                    ).length,
+                  },
+                  {
+                    label: "Sedang Berjalan",
+                    value: serviceHistory.filter(
+                      (s) => s.status === "in_progress",
+                    ).length,
+                  },
+                ].map((s) => (
+                  <div
+                    key={s.label}
+                    className="flex items-center justify-between"
+                  >
+                    <span className="text-sm text-muted-foreground">
+                      {s.label}
+                    </span>
+                    <span className="font-bold text-lg">{s.value}</span>
+                  </div>
+                ))}
                 <Separator />
-                <div className="flex items-center justify-between">
-                  <span className="text-sm text-muted-foreground">
-                    Service Cost
-                  </span>
-                  <span className="font-bold">
-                    {formatCurrency(
+                {[
+                  {
+                    label: "Biaya Service",
+                    value: formatCurrency(
                       serviceHistory.reduce(
                         (sum, s) => sum + s.service_cost,
                         0,
                       ),
-                    )}
-                  </span>
-                </div>
-                <div className="flex items-center justify-between">
-                  <span className="text-sm text-muted-foreground">
-                    Parts Cost
-                  </span>
-                  <span className="font-bold">
-                    {formatCurrency(insights.totalPartsCost)}
-                  </span>
-                </div>
-                <div className="flex items-center justify-between">
-                  <span className="text-sm text-muted-foreground">
-                    Total Spent
-                  </span>
-                  <span className="font-bold text-primary">
-                    {formatCurrency(
+                    ),
+                  },
+                  {
+                    label: "Biaya Sparepart",
+                    value: formatCurrency(insights.totalPartsCost),
+                  },
+                  {
+                    label: "Total Biaya",
+                    value: formatCurrency(
                       serviceHistory.reduce((sum, s) => sum + s.total_cost, 0),
-                    )}
-                  </span>
-                </div>
+                    ),
+                    bold: true,
+                  },
+                ].map((s) => (
+                  <div
+                    key={s.label}
+                    className="flex items-center justify-between"
+                  >
+                    <span className="text-sm text-muted-foreground">
+                      {s.label}
+                    </span>
+                    <span
+                      className={
+                        s.bold ? "font-bold text-primary" : "font-bold"
+                      }
+                    >
+                      {s.value}
+                    </span>
+                  </div>
+                ))}
               </CardContent>
             </Card>
           </div>
         </div>
       </div>
 
-      {/* Edit Modal */}
       <EditUnitModal
         open={editModalOpen}
         onOpenChange={setEditModalOpen}
         unit={unit}
         customers={customers}
-        onSuccess={handleEditSuccess}
+        onSuccess={fetchUnitDetails}
       />
-
-      {/* Delete Dialog */}
       <DeleteUnitDialog
-        open={deleteDialogOpen}
-        onOpenChange={setDeleteDialogOpen}
+        open={deleteOpen}
+        onOpenChange={setDeleteOpen}
         unit={unit}
         serviceCount={serviceHistory.length}
-        onSuccess={handleDeleteSuccess}
+        onSuccess={() => navigate("/units")}
       />
     </DashboardLayout>
   );

@@ -1,20 +1,24 @@
-// NewInvoice.tsx - Layout 2 kolom: kiri konten utama, kanan sticky sidebar
+// NewInvoice.tsx
 import { useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, Link } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import { useAuditLog } from "@/hooks/useAuditLog";
 import { useToast } from "@/hooks/use-toast";
 import DashboardLayout from "@/components/layout/DashboardLayout";
-import { Button } from "@/components/ui/button";
-import { Card, CardContent } from "@/components/ui/card";
-import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Separator } from "@/components/ui/separator";
-import { Loader2, ArrowLeft } from "lucide-react";
-import { Link } from "react-router-dom";
+import {
+  Loader2,
+  ArrowLeft,
+  ChevronRight,
+  FileText,
+  CheckCircle2,
+  AlertCircle,
+} from "lucide-react";
 import { CurrencyInput } from "@/components/ui/currency-input";
 import { formatCurrency } from "@/lib/utils/currency";
+import { cn } from "@/lib/utils";
 
 import { CustomerSection } from "@/components/invoices/create/CustomerSection";
 import { ServicesSection } from "@/components/invoices/create/ServiceSection";
@@ -38,7 +42,6 @@ export default function NewInvoice() {
     loading: dataLoading,
     refetch,
   } = useInvoiceData();
-
   const [customerId, setCustomerId] = useState("");
   const [invoiceNotes, setInvoiceNotes] = useState("");
   const [discount, setDiscount] = useState(0);
@@ -80,6 +83,15 @@ export default function NewInvoice() {
   const canSubmit =
     customerId && (services.length > 0 || items.length > 0) && !submitting;
 
+  // Checklist steps
+  const steps = [
+    { label: "Pilih pelanggan", done: !!customerId },
+    {
+      label: "Tambah layanan / produk",
+      done: services.length > 0 || items.length > 0,
+    },
+  ];
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!canSubmit) {
@@ -115,46 +127,46 @@ export default function NewInvoice() {
       if (invoiceError) throw invoiceError;
 
       if (services.length > 0) {
-        const servicesData = services.map((s) => ({
-          invoice_id: invoice.id,
-          title: s.title,
-          description: s.description || null,
-          unit_id: s.unit_id || null,
-          assigned_technician_id: s.technician_id || null,
-          scheduled_date: s.scheduled_date || null,
-          service_address: s.service_address || null,
-          service_latitude: s.service_latitude || null,
-          service_longitude: s.service_longitude || null,
-          estimated_duration_minutes: s.estimated_duration || 60,
-          service_cost: s.service_cost || 0,
-          parts_cost: 0,
-          total_cost: s.service_cost || 0,
-          priority: s.priority || "normal",
-          status: "pending",
-        }));
         const { error: svcErr } = await supabase
           .from("invoice_services")
-          .insert(servicesData);
+          .insert(
+            services.map((s) => ({
+              invoice_id: invoice.id,
+              title: s.title,
+              description: s.description || null,
+              unit_id: s.unit_id || null,
+              assigned_technician_id: s.technician_id || null,
+              scheduled_date: s.scheduled_date || null,
+              service_address: s.service_address || null,
+              service_latitude: s.service_latitude || null,
+              service_longitude: s.service_longitude || null,
+              estimated_duration_minutes: s.estimated_duration || 60,
+              service_cost: s.service_cost || 0,
+              parts_cost: 0,
+              total_cost: s.service_cost || 0,
+              priority: s.priority || "normal",
+              status: "pending",
+            })),
+          );
         if (svcErr) throw svcErr;
       }
 
       if (items.length > 0) {
-        const itemsData = items.map((item) => {
-          const product = products.find((p) => p.id === item.product_id);
-          return {
-            invoice_id: invoice.id,
-            product_id: item.product_id,
-            product_name: product?.name,
-            product_sku: product?.sku,
-            quantity: item.quantity,
-            unit_price: item.unit_price,
-            discount: item.discount,
-            total_price: item.unit_price * item.quantity - item.discount,
-          };
-        });
-        const { error: itemErr } = await supabase
-          .from("invoice_items")
-          .insert(itemsData);
+        const { error: itemErr } = await supabase.from("invoice_items").insert(
+          items.map((item) => {
+            const product = products.find((p) => p.id === item.product_id);
+            return {
+              invoice_id: invoice.id,
+              product_id: item.product_id,
+              product_name: product?.name,
+              product_sku: product?.sku,
+              quantity: item.quantity,
+              unit_price: item.unit_price,
+              discount: item.discount,
+              total_price: item.unit_price * item.quantity - item.discount,
+            };
+          }),
+        );
         if (itemErr) throw itemErr;
       }
 
@@ -187,43 +199,65 @@ export default function NewInvoice() {
     }
   };
 
-  if (dataLoading) {
+  if (dataLoading)
     return (
       <DashboardLayout>
-        <div className="flex items-center justify-center py-24">
-          <Loader2 className="h-8 w-8 animate-spin text-primary" />
+        <div className="flex flex-col items-center justify-center min-h-[60vh] gap-3">
+          <Loader2 className="h-7 w-7 animate-spin text-slate-400" />
+          <p className="text-sm text-slate-400 font-medium">Memuat data...</p>
         </div>
       </DashboardLayout>
     );
-  }
 
   return (
     <DashboardLayout>
-      <form onSubmit={handleSubmit}>
-        {/* Page header — ringkas */}
-        <div className="flex items-center gap-3 mb-6">
-          <Button
-            type="button"
-            variant="ghost"
-            size="icon"
-            asChild
-            className="-ml-2"
-          >
-            <Link to="/invoices">
-              <ArrowLeft className="h-4 w-4" />
+      <style>{`
+        @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap');
+        .ni-root { font-family: 'Plus Jakarta Sans', system-ui, sans-serif; }
+        .ni-fade { animation: niFade 0.22s ease both; }
+        @keyframes niFade { from{opacity:0;transform:translateY(6px)} to{opacity:1;transform:none} }
+        .ni-card { background: white; border-radius: 14px; border: 1px solid #e2e8f0; }
+        .ni-section-label { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.07em; color: #94a3b8; margin-bottom: 12px; }
+        .summary-row { display:flex; align-items:center; justify-content:space-between; padding: 6px 0; }
+        .summary-row:not(:last-child) { border-bottom: 1px solid #f1f5f9; }
+      `}</style>
+
+      <form onSubmit={handleSubmit} className="ni-root ni-fade">
+        {/* ── Breadcrumb + Header ── */}
+        <div className="mb-6">
+          <div className="flex items-center gap-1.5 text-xs text-slate-400 mb-3">
+            <Link
+              to="/invoices"
+              className="hover:text-slate-600 transition-colors font-medium"
+            >
+              Faktur
             </Link>
-          </Button>
-          <div>
-            <h1 className="text-xl font-semibold">Buat Faktur Baru</h1>
-            <p className="text-sm text-muted-foreground">
-              Tambahkan layanan dan produk ke faktur
-            </p>
+            <ChevronRight className="h-3.5 w-3.5" />
+            <span className="text-slate-600 font-semibold">
+              Buat Faktur Baru
+            </span>
+          </div>
+          <div className="flex items-center gap-3">
+            <Link
+              to="/invoices"
+              className="h-9 w-9 rounded-xl bg-white border border-slate-200 flex items-center justify-center hover:bg-slate-50 transition-colors flex-shrink-0"
+            >
+              <ArrowLeft className="h-4 w-4 text-slate-600" />
+            </Link>
+            <div>
+              <h1 className="text-xl font-bold text-slate-900 tracking-tight">
+                Buat Faktur Baru
+              </h1>
+              <p className="text-sm text-slate-500 mt-0.5">
+                Tambahkan layanan dan produk ke faktur
+              </p>
+            </div>
           </div>
         </div>
 
-        {/* Layout 2 kolom */}
-        <div className="grid grid-cols-1 lg:grid-cols-[1fr_300px] gap-6 items-start">
-          {/* === KOLOM KIRI: Konten utama === */}
+        {/* ── Two Column Layout ── */}
+        <div className="grid grid-cols-1 lg:grid-cols-[1fr_300px] gap-5 items-start">
+          {/* ── Left: Main Content ── */}
           <div className="space-y-4">
             <CustomerSection
               customers={customers}
@@ -231,7 +265,6 @@ export default function NewInvoice() {
               onCustomerChange={setCustomerId}
               onRefreshCustomers={refetch}
             />
-
             <ServicesSection
               services={services}
               units={units}
@@ -244,7 +277,6 @@ export default function NewInvoice() {
               onRemoveService={removeService}
               onRefreshUnits={refetch}
             />
-
             <ProductsSection
               items={items}
               products={products}
@@ -253,103 +285,134 @@ export default function NewInvoice() {
             />
           </div>
 
-          {/* === KOLOM KANAN: Sticky sidebar === */}
+          {/* ── Right: Sticky Sidebar ── */}
           <div className="lg:sticky lg:top-6 space-y-4">
-            {/* Ringkasan harga */}
-            <Card>
-              <CardContent className="pt-4 space-y-2.5">
-                <p className="text-sm font-medium mb-3">Ringkasan</p>
+            {/* Progress Checklist */}
+            <div className="ni-card p-4">
+              <p className="ni-section-label">Progress</p>
+              <div className="space-y-2.5">
+                {steps.map((step, i) => (
+                  <div key={i} className="flex items-center gap-2.5">
+                    {step.done ? (
+                      <CheckCircle2 className="h-4 w-4 text-emerald-500 flex-shrink-0" />
+                    ) : (
+                      <div className="h-4 w-4 rounded-full border-2 border-slate-300 flex-shrink-0" />
+                    )}
+                    <span
+                      className={cn(
+                        "text-xs font-semibold",
+                        step.done ? "text-slate-700" : "text-slate-400",
+                      )}
+                    >
+                      {step.label}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </div>
 
-                <div className="flex justify-between text-sm">
-                  <span className="text-muted-foreground">
-                    Layanan ({services.length})
-                  </span>
-                  <span>{formatCurrency(calcServices())}</span>
-                </div>
-                <div className="flex justify-between text-sm">
-                  <span className="text-muted-foreground">
-                    Produk ({items.length})
-                  </span>
-                  <span>{formatCurrency(calcItems())}</span>
-                </div>
+            {/* Price Summary */}
+            <div className="ni-card p-4">
+              <p className="ni-section-label">Ringkasan Harga</p>
 
-                <Separator />
+              <div className="summary-row">
+                <span className="text-xs text-slate-500">
+                  Layanan ({services.length})
+                </span>
+                <span className="text-xs font-semibold text-slate-700">
+                  {formatCurrency(calcServices())}
+                </span>
+              </div>
+              <div className="summary-row">
+                <span className="text-xs text-slate-500">
+                  Produk ({items.length})
+                </span>
+                <span className="text-xs font-semibold text-slate-700">
+                  {formatCurrency(calcItems())}
+                </span>
+              </div>
+              <div className="summary-row">
+                <span className="text-xs text-slate-500">Subtotal</span>
+                <span className="text-xs font-semibold text-slate-700">
+                  {formatCurrency(subtotal)}
+                </span>
+              </div>
 
-                {/* Diskon */}
+              <div className="mt-3 space-y-2.5">
                 <CurrencyInput
                   label="Diskon"
                   value={discount}
                   onValueChange={(v) => setDiscount(v || 0)}
                   min={0}
                 />
-
-                {/* Pajak */}
                 <CurrencyInput
                   label="Pajak (PPN)"
                   value={tax}
                   onValueChange={(v) => setTax(v || 0)}
                   min={0}
                 />
+              </div>
 
-                <Separator />
-
-                <div className="flex justify-between font-semibold">
-                  <span>Total</span>
-                  <span className="text-primary text-lg">
-                    {formatCurrency(grandTotal)}
-                  </span>
-                </div>
-              </CardContent>
-            </Card>
-
-            {/* Catatan */}
-            <Card>
-              <CardContent className="pt-4 space-y-2">
-                <Label className="text-sm">
-                  Catatan{" "}
-                  <span className="text-muted-foreground font-normal">
-                    (Opsional)
-                  </span>
-                </Label>
-                <Textarea
-                  placeholder="Catatan untuk pelanggan..."
-                  value={invoiceNotes}
-                  onChange={(e) => setInvoiceNotes(e.target.value)}
-                  rows={3}
-                  className="resize-none text-sm"
-                />
-              </CardContent>
-            </Card>
-
-            {/* Tombol aksi */}
-            <div className="flex flex-col gap-2">
-              <Button type="submit" disabled={!canSubmit} className="w-full">
-                {submitting ? (
-                  <>
-                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                    Menyimpan...
-                  </>
-                ) : (
-                  "Buat Faktur"
-                )}
-              </Button>
-              <Button
-                type="button"
-                variant="outline"
-                className="w-full"
-                asChild
-              >
-                <Link to="/invoices">Batal</Link>
-              </Button>
+              <div className="mt-3 pt-3 border-t-2 border-slate-200 flex items-center justify-between">
+                <span className="text-sm font-bold text-slate-900">Total</span>
+                <span className="text-lg font-bold text-slate-900 tabular-nums">
+                  {formatCurrency(grandTotal)}
+                </span>
+              </div>
             </div>
 
-            {/* Hint validasi */}
-            {!canSubmit && !submitting && (
-              <p className="text-xs text-muted-foreground text-center">
-                {!customerId
-                  ? "Pilih pelanggan terlebih dahulu"
-                  : "Tambahkan minimal 1 layanan atau produk"}
+            {/* Notes */}
+            <div className="ni-card p-4">
+              <p className="ni-section-label">
+                Catatan{" "}
+                <span className="text-slate-400 font-normal normal-case">
+                  (Opsional)
+                </span>
               </p>
+              <Textarea
+                placeholder="Catatan untuk pelanggan..."
+                value={invoiceNotes}
+                onChange={(e) => setInvoiceNotes(e.target.value)}
+                rows={3}
+                className="resize-none text-sm rounded-xl border-slate-200"
+              />
+            </div>
+
+            {/* Submit */}
+            <div className="space-y-2.5">
+              <button
+                type="submit"
+                disabled={!canSubmit}
+                className="w-full h-11 rounded-xl bg-slate-900 text-white text-sm font-bold hover:bg-slate-800 transition-colors disabled:opacity-40 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+              >
+                {submitting ? (
+                  <>
+                    <Loader2 className="h-4 w-4 animate-spin" /> Menyimpan...
+                  </>
+                ) : (
+                  <>
+                    <FileText className="h-4 w-4" /> Buat Faktur
+                  </>
+                )}
+              </button>
+              <Link
+                to="/invoices"
+                className="w-full h-9 rounded-xl border border-slate-200 text-sm font-semibold text-slate-600 hover:bg-slate-50 transition-colors flex items-center justify-center"
+              >
+                Batal
+              </Link>
+            </div>
+
+            {/* Validation hint */}
+            {!canSubmit && !submitting && (
+              <div className="flex items-start gap-2 p-3 bg-amber-50 border border-amber-200 rounded-xl">
+                <AlertCircle className="h-3.5 w-3.5 text-amber-500 flex-shrink-0 mt-0.5" />
+                <p className="text-[11px] text-amber-700 font-medium leading-relaxed">
+                  {!customerId
+                    ? "Pilih pelanggan terlebih dahulu"
+                    : "Tambahkan minimal 1 layanan atau produk"}
+                </p>
+              </div>
             )}
           </div>
         </div>

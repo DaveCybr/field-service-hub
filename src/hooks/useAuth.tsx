@@ -1,7 +1,6 @@
 // ============================================
-// FILE: src/hooks/useAuth.tsx (FIXED)
-// Removed fetchUserRole() yang query ke user_roles (tabel sudah dihapus)
-// Role sekarang diambil langsung dari employees table
+// FILE: src/hooks/useAuth.tsx
+// Hanya superadmin yang boleh login ke web admin
 // ============================================
 import {
   createContext,
@@ -35,19 +34,16 @@ interface AuthContextType {
   employee: Employee | null;
   userRole: EmployeeRole | null;
   loading: boolean;
+  accessDenied: boolean; // ← true jika login berhasil tapi bukan superadmin
   isSuperadmin: boolean;
   isAdmin: boolean;
   signIn: (email: string, password: string) => Promise<{ error: Error | null }>;
-  signUp: (
-    email: string,
-    password: string,
-    name: string,
-    role?: string,
-  ) => Promise<{ error: Error | null }>;
   signOut: () => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
+
+const ALLOWED_ROLE: EmployeeRole = "superadmin";
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
@@ -55,6 +51,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [employee, setEmployee] = useState<Employee | null>(null);
   const [userRole, setUserRole] = useState<EmployeeRole | null>(null);
   const [loading, setLoading] = useState(true);
+  const [accessDenied, setAccessDenied] = useState(false);
 
   const fetchEmployee = async (userId: string) => {
     try {
@@ -64,16 +61,40 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         .eq("user_id", userId)
         .maybeSingle();
 
-      if (!error && data) {
-        setEmployee(data as Employee);
-        // Role diambil dari employees, bukan user_roles
-        setUserRole(data.role as EmployeeRole);
-      } else if (error) {
-        console.log("No employee record found:", error.message);
+      if (error || !data) {
+        // Tidak ada record employee → tolak akses
+        console.log("No employee record found:", error?.message);
+        await forceSignOut();
+        setAccessDenied(true);
+        return;
       }
+
+      if (data.role !== ALLOWED_ROLE) {
+        // Role bukan superadmin → tolak akses, sign out
+        await forceSignOut();
+        setAccessDenied(true);
+        return;
+      }
+
+      // Akses diterima
+      setEmployee(data as Employee);
+      setUserRole(data.role as EmployeeRole);
+      setAccessDenied(false);
     } catch (err) {
       console.error("Error fetching employee:", err);
+      await forceSignOut();
+      setAccessDenied(true);
     }
+  };
+
+  const forceSignOut = async () => {
+    try {
+      await supabase.auth.signOut();
+    } catch {}
+    setUser(null);
+    setSession(null);
+    setEmployee(null);
+    setUserRole(null);
   };
 
   useEffect(() => {
@@ -84,12 +105,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setUser(session?.user ?? null);
 
       if (session?.user) {
-        setTimeout(() => {
-          fetchEmployee(session.user.id);
-        }, 0);
+        setTimeout(() => fetchEmployee(session.user.id), 0);
       } else {
         setEmployee(null);
         setUserRole(null);
+        if (event !== "SIGNED_OUT") setAccessDenied(false);
       }
 
       setLoading(false);
@@ -98,11 +118,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     supabase.auth.getSession().then(({ data: { session } }) => {
       setSession(session);
       setUser(session?.user ?? null);
-
       if (session?.user) {
         fetchEmployee(session.user.id);
       }
-
       setLoading(false);
     });
 
@@ -110,31 +128,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const signIn = async (email: string, password: string) => {
+    setAccessDenied(false);
     const { error } = await supabase.auth.signInWithPassword({
       email,
       password,
-    });
-    return { error: error as Error | null };
-  };
-
-  const signUp = async (
-    email: string,
-    password: string,
-    name: string,
-    role: string = "technician",
-  ) => {
-    const redirectUrl = `${window.location.origin}/`;
-
-    const { error } = await supabase.auth.signUp({
-      email,
-      password,
-      options: {
-        emailRedirectTo: redirectUrl,
-        data: {
-          name,
-          role,
-        },
-      },
     });
     return { error: error as Error | null };
   };
@@ -147,7 +144,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   const isSuperadmin = userRole === "superadmin";
-  const isAdmin = userRole === "superadmin" || userRole === "admin";
+  const isAdmin = userRole === "superadmin";
 
   return (
     <AuthContext.Provider
@@ -157,10 +154,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         employee,
         userRole,
         loading,
+        accessDenied,
         isSuperadmin,
         isAdmin,
         signIn,
-        signUp,
         signOut,
       }}
     >
@@ -171,8 +168,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
 export function useAuth() {
   const context = useContext(AuthContext);
-  if (context === undefined) {
+  if (context === undefined)
     throw new Error("useAuth must be used within an AuthProvider");
-  }
   return context;
 }

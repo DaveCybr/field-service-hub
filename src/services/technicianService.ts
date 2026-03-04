@@ -51,8 +51,9 @@ import type {
  * ```
  */
 
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
-const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
+const supabaseUrl = "https://phaqqnqticnmcabjgzui.supabase.co";
+const supabaseAnonKey =
+  "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InBoYXFxbnF0aWNubWNhYmpnenVpIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Njg0NTc4NzIsImV4cCI6MjA4NDAzMzg3Mn0.xbEN7PdjhKYopJzP6yaggqfdH1uzZFVJ9-6K7u55BN0";
 
 if (!supabaseUrl || !supabaseAnonKey) {
   throw new Error("Missing Supabase environment variables!");
@@ -60,7 +61,7 @@ if (!supabaseUrl || !supabaseAnonKey) {
 
 export const supabase: SupabaseClient = createClient(
   supabaseUrl,
-  supabaseAnonKey
+  supabaseAnonKey,
 );
 
 // ============================================
@@ -88,7 +89,7 @@ export const technicianService = {
         `
         *,
         assignments:technician_assignments(count)
-      `
+      `,
       )
       .order("created_at", { ascending: false });
 
@@ -130,7 +131,7 @@ export const technicianService = {
             status
           )
         )
-      `
+      `,
       )
       .eq("id", id)
       .single();
@@ -165,7 +166,7 @@ export const technicianService = {
     if (error) {
       console.error("[technicianService.getAvailable] Error:", error);
       throw new Error(
-        `Failed to fetch available technicians: ${error.message}`
+        `Failed to fetch available technicians: ${error.message}`,
       );
     }
 
@@ -223,7 +224,7 @@ export const technicianService = {
    */
   async update(
     id: string,
-    updates: UpdateTechnicianInput
+    updates: UpdateTechnicianInput,
   ): Promise<Technician> {
     const { data, error } = await supabase
       .from("technicians")
@@ -259,7 +260,7 @@ export const technicianService = {
    */
   async updateStatus(
     id: string,
-    status: Technician["status"]
+    status: Technician["status"],
   ): Promise<Technician> {
     return this.update(id, { status });
   },
@@ -286,7 +287,7 @@ export const technicianService = {
   async updateLocation(
     id: string,
     latitude: number,
-    longitude: number
+    longitude: number,
   ): Promise<Technician> {
     return this.update(id, {
       current_location: {
@@ -354,7 +355,7 @@ export const technicianService = {
     // Search by name or email
     if (filters.search) {
       query = query.or(
-        `name.ilike.%${filters.search}%,email.ilike.%${filters.search}%`
+        `name.ilike.%${filters.search}%,email.ilike.%${filters.search}%`,
       );
     }
 
@@ -399,7 +400,7 @@ export const assignmentService = {
           problem_description,
           status
         )
-      `
+      `,
       )
       .order("assigned_at", { ascending: false });
 
@@ -429,7 +430,7 @@ export const assignmentService = {
         invoice:invoices(*),
         location_logs(*),
         photo_logs(*)
-      `
+      `,
       )
       .eq("id", id)
       .single();
@@ -450,7 +451,7 @@ export const assignmentService = {
    * @returns Promise<AssignmentWithDetails[]>
    */
   async getByTechnician(
-    technicianId: string
+    technicianId: string,
   ): Promise<AssignmentWithDetails[]> {
     const { data, error } = await supabase
       .from("technician_assignments")
@@ -463,7 +464,7 @@ export const assignmentService = {
           service_type,
           status
         )
-      `
+      `,
       )
       .eq("technician_id", technicianId)
       .order("assigned_at", { ascending: false });
@@ -471,7 +472,7 @@ export const assignmentService = {
     if (error) {
       console.error("[assignmentService.getByTechnician] Error:", error);
       throw new Error(
-        `Failed to fetch technician assignments: ${error.message}`
+        `Failed to fetch technician assignments: ${error.message}`,
       );
     }
 
@@ -486,7 +487,7 @@ export const assignmentService = {
    * @returns Promise<AssignmentWithDetails[]>
    */
   async getActiveByTechnician(
-    technicianId: string
+    technicianId: string,
   ): Promise<AssignmentWithDetails[]> {
     const { data, error } = await supabase
       .from("technician_assignments")
@@ -494,7 +495,7 @@ export const assignmentService = {
         `
         *,
         invoice:invoices(*)
-      `
+      `,
       )
       .eq("technician_id", technicianId)
       .in("status", ["assigned", "in_progress"])
@@ -566,7 +567,7 @@ export const assignmentService = {
    */
   async update(
     id: string,
-    updates: UpdateAssignmentInput
+    updates: UpdateAssignmentInput,
   ): Promise<TechnicianAssignment> {
     const { data, error } = await supabase
       .from("technician_assignments")
@@ -775,7 +776,7 @@ export const locationService = {
     await technicianService.updateLocation(
       assignment.technician_id,
       input.latitude,
-      input.longitude
+      input.longitude,
     );
 
     return data;
@@ -936,7 +937,7 @@ export const photoService = {
    */
   async getByType(
     assignmentId: string,
-    photoType: PhotoLog["photo_type"]
+    photoType: PhotoLog["photo_type"],
   ): Promise<PhotoLog[]> {
     const { data, error } = await supabase
       .from("photo_logs")
@@ -985,7 +986,7 @@ export const photoService = {
     if (storageError) {
       console.error("[photoService.delete] Storage error:", storageError);
       throw new Error(
-        `Failed to delete photo from storage: ${storageError.message}`
+        `Failed to delete photo from storage: ${storageError.message}`,
       );
     }
 
@@ -1062,7 +1063,7 @@ export const gpsUtils = {
    */
   watchPosition(
     onSuccess: (position: GeolocationPosition) => void,
-    onError?: (error: GeolocationPositionError) => void
+    onError?: (error: GeolocationPositionError) => void,
   ): number {
     if (!navigator.geolocation) {
       throw new Error("Geolocation tidak didukung oleh browser ini");
@@ -1098,7 +1099,7 @@ export const gpsUtils = {
     lat1: number,
     lon1: number,
     lat2: number,
-    lon2: number
+    lon2: number,
   ): number {
     const R = 6371; // Earth radius in km
     const dLat = ((lat2 - lat1) * Math.PI) / 180;

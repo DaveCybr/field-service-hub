@@ -1,13 +1,12 @@
 // ============================================
 // FILE: src/pages/Dashboard.tsx
-// Enterprise-grade dashboard — clean, data-first
+// FIX Bug 4: completedJobsToday pakai updated_at bukan actual_checkout_at
+//            (kolom actual_checkout_at sudah dihapus saat cleanup)
 // ============================================
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
-import DashboardLayout, {
-  PageHeader,
-} from "@/components/layout/DashboardLayout";
+import DashboardLayout from "@/components/layout/DashboardLayout";
 import { formatCurrency } from "@/lib/utils/currency";
 import { format } from "date-fns";
 import { id as localeId } from "date-fns/locale";
@@ -18,18 +17,13 @@ import {
   Wrench,
   Users,
   AlertTriangle,
-  Clock,
   CheckCircle2,
   Plus,
   Package,
-  UserCheck,
   ArrowRight,
-  ChevronRight,
   Activity,
-  Circle,
 } from "lucide-react";
 
-// ── Types ────────────────────────────────────────────────────────────────────
 interface DashboardStats {
   todayRevenue: number;
   monthlyRevenue: number;
@@ -44,7 +38,6 @@ interface RecentInvoice {
   customer: { name: string };
   grand_total: number;
   payment_status: string;
-  created_at: string;
 }
 interface PendingJob {
   id: string;
@@ -63,7 +56,6 @@ interface TechnicianStatus {
   active_jobs_count: number;
 }
 
-// ── Helpers ───────────────────────────────────────────────────────────────────
 const PAYMENT_STATUS: Record<
   string,
   { label: string; color: string; bg: string }
@@ -103,7 +95,6 @@ function StatusBadge({
   );
 }
 
-// ── Stat Card ─────────────────────────────────────────────────────────────────
 function StatCard({
   label,
   value,
@@ -111,7 +102,6 @@ function StatCard({
   icon: Icon,
   iconColor,
   iconBg,
-  trend,
 }: {
   label: string;
   value: string;
@@ -119,7 +109,6 @@ function StatCard({
   icon: React.ElementType;
   iconColor: string;
   iconBg: string;
-  trend?: { value: string; up: boolean };
 }) {
   return (
     <div
@@ -174,19 +163,16 @@ function StatCard({
   );
 }
 
-// ── Section Card ──────────────────────────────────────────────────────────────
 function SectionCard({
   title,
   badge,
   onViewAll,
   children,
-  viewAllHref,
 }: {
   title: string;
   badge?: number;
   onViewAll?: () => void;
   children: React.ReactNode;
-  viewAllHref?: string;
 }) {
   return (
     <div
@@ -241,7 +227,6 @@ function SectionCard({
               cursor: "pointer",
               padding: "4px 8px",
               borderRadius: "6px",
-              transition: "background 0.15s",
             }}
             onMouseEnter={(e) => (e.currentTarget.style.background = "#eff6ff")}
             onMouseLeave={(e) => (e.currentTarget.style.background = "none")}
@@ -255,7 +240,6 @@ function SectionCard({
   );
 }
 
-// ── Row Item ──────────────────────────────────────────────────────────────────
 function RowItem({
   onClick,
   children,
@@ -287,7 +271,6 @@ function RowItem({
   );
 }
 
-// ── Skeleton ──────────────────────────────────────────────────────────────────
 function Skeleton({ w = "100%", h = "16px" }: { w?: string; h?: string }) {
   return (
     <div
@@ -304,7 +287,40 @@ function Skeleton({ w = "100%", h = "16px" }: { w?: string; h?: string }) {
   );
 }
 
-// ── Main Component ────────────────────────────────────────────────────────────
+function EmptyState({
+  icon,
+  message,
+  positive,
+}: {
+  icon: React.ReactNode;
+  message: string;
+  positive?: boolean;
+}) {
+  return (
+    <div style={{ padding: "32px 20px", textAlign: "center" }}>
+      <div
+        style={{
+          marginBottom: "8px",
+          display: "flex",
+          justifyContent: "center",
+        }}
+      >
+        {icon}
+      </div>
+      <p
+        style={{
+          fontSize: "13px",
+          color: positive ? "#16a34a" : "#9ca3af",
+          fontWeight: 500,
+          margin: 0,
+        }}
+      >
+        {message}
+      </p>
+    </div>
+  );
+}
+
 export default function Dashboard() {
   const navigate = useNavigate();
   const { employee } = useAuth();
@@ -342,6 +358,7 @@ export default function Dashboard() {
     const today = new Date();
     today.setHours(0, 0, 0, 0);
     const startOfMonth = new Date(today.getFullYear(), today.getMonth(), 1);
+
     const [
       todayInv,
       monthInv,
@@ -369,12 +386,15 @@ export default function Dashboard() {
         .from("invoice_services")
         .select("*", { count: "exact", head: true })
         .eq("status", "pending"),
+      // ✅ FIX Bug 4: Ganti actual_checkout_at → updated_at
+      // actual_checkout_at sudah dihapus dari tabel invoice_services
       supabase
         .from("invoice_services")
         .select("*", { count: "exact", head: true })
         .eq("status", "completed")
-        .gte("actual_checkout_at", today.toISOString()),
+        .gte("updated_at", today.toISOString()),
     ]);
+
     setStats({
       todayRevenue:
         todayInv.data?.reduce((s, i) => s + (i.grand_total || 0), 0) || 0,
@@ -391,7 +411,7 @@ export default function Dashboard() {
     const { data } = await supabase
       .from("invoices")
       .select(
-        "id,invoice_number,grand_total,payment_status,created_at,customer:customers(name)",
+        "id,invoice_number,grand_total,payment_status,customer:customers(name)",
       )
       .order("created_at", { ascending: false })
       .limit(5);
@@ -450,7 +470,7 @@ export default function Dashboard() {
         className="dash-fade"
         style={{ display: "flex", flexDirection: "column", gap: "24px" }}
       >
-        {/* ── Header ── */}
+        {/* Header */}
         <div
           style={{
             display: "flex",
@@ -500,7 +520,7 @@ export default function Dashboard() {
           </button>
         </div>
 
-        {/* ── Stats Grid ── */}
+        {/* Stats */}
         {loading ? (
           <div
             style={{
@@ -547,18 +567,18 @@ export default function Dashboard() {
             <StatCard
               label="Pendapatan Bulan Ini"
               value={formatCurrency(stats.monthlyRevenue)}
-              sub={`Periode ${format(today, "MMMM yyyy", { locale: localeId })}`}
               icon={TrendingUp}
               iconColor="#2563eb"
               iconBg="#dbeafe"
+              sub={`Periode ${format(today, "MMMM yyyy", { locale: localeId })}`}
             />
             <StatCard
               label="Pekerjaan Aktif"
               value={String(stats.activeJobs)}
-              sub={`${stats.pendingJobs} menunggu penugasan · ${stats.completedJobsToday} selesai hari ini`}
               icon={Wrench}
               iconColor="#7c3aed"
               iconBg="#ede9fe"
+              sub={`${stats.pendingJobs} menunggu · ${stats.completedJobsToday} selesai hari ini`}
             />
             <StatCard
               label="Total Pelanggan"
@@ -570,7 +590,7 @@ export default function Dashboard() {
           </div>
         )}
 
-        {/* ── Two column ── */}
+        {/* Two column */}
         <div
           style={{
             display: "grid",
@@ -578,7 +598,6 @@ export default function Dashboard() {
             gap: "16px",
           }}
         >
-          {/* Faktur Terbaru */}
           <SectionCard
             title="Faktur Terbaru"
             onViewAll={() => navigate("/invoices")}
@@ -685,7 +704,6 @@ export default function Dashboard() {
             )}
           </SectionCard>
 
-          {/* Pekerjaan Tertunda */}
           <SectionCard
             title="Pekerjaan Tertunda"
             badge={stats.pendingJobs}
@@ -775,7 +793,7 @@ export default function Dashboard() {
           </SectionCard>
         </div>
 
-        {/* ── Bottom row ── */}
+        {/* Bottom row */}
         <div
           style={{
             display: "grid",
@@ -783,7 +801,6 @@ export default function Dashboard() {
             gap: "16px",
           }}
         >
-          {/* Stok Menipis */}
           <SectionCard
             title="Peringatan Stok"
             badge={stockAlerts.length}
@@ -870,7 +887,6 @@ export default function Dashboard() {
             )}
           </SectionCard>
 
-          {/* Status Teknisi */}
           <SectionCard
             title="Status Teknisi"
             onViewAll={() => navigate("/technicians")}
@@ -929,7 +945,6 @@ export default function Dashboard() {
                         flex: 1,
                       }}
                     >
-                      {/* Avatar initial */}
                       <div
                         style={{
                           width: "28px",
@@ -996,40 +1011,5 @@ export default function Dashboard() {
         </div>
       </div>
     </DashboardLayout>
-  );
-}
-
-// ── Empty State ───────────────────────────────────────────────────────────────
-function EmptyState({
-  icon,
-  message,
-  positive,
-}: {
-  icon: React.ReactNode;
-  message: string;
-  positive?: boolean;
-}) {
-  return (
-    <div style={{ padding: "32px 20px", textAlign: "center" }}>
-      <div
-        style={{
-          marginBottom: "8px",
-          display: "flex",
-          justifyContent: "center",
-        }}
-      >
-        {icon}
-      </div>
-      <p
-        style={{
-          fontSize: "13px",
-          color: positive ? "#16a34a" : "#9ca3af",
-          fontWeight: 500,
-          margin: 0,
-        }}
-      >
-        {message}
-      </p>
-    </div>
   );
 }

@@ -76,15 +76,6 @@ function RoleProtectedRoute({
   return <>{children}</>;
 }
 
-function CustomerProtectedRoute({ children }: { children: React.ReactNode }) {
-  const customerAuth = useCustomerAuth();
-  if (customerAuth.loading) return <LoadingSpinner />;
-  if (!customerAuth.user || !customerAuth.isCustomer) {
-    return <Navigate to="/portal/login" replace />;
-  }
-  return <>{children}</>;
-}
-
 function SetupRoute({ children }: { children: React.ReactNode }) {
   const setup = useInitialSetup();
   if (setup.loading) return <LoadingSpinner />;
@@ -110,8 +101,6 @@ function StaffRoutes() {
   return (
     <Routes>
       <Route path="/setup" element={<SetupPage />} />
-      <Route path="/forgot-password" element={<ForgotPassword />} />
-      <Route path="/reset-password" element={<ResetPassword />} />
       <Route path="/auth" element={<AuthRoute />} />
       <Route
         path="/"
@@ -252,7 +241,7 @@ function StaffRoutes() {
         element={
           <SetupRoute>
             <RoleProtectedRoute
-              allowedRoles={["superadmin", "admin", "manager", "technician"]}
+              allowedRoles={["superadmin", "admin", "manager"]}
             >
               <Units />
             </RoleProtectedRoute>
@@ -276,7 +265,7 @@ function StaffRoutes() {
         element={
           <SetupRoute>
             <RoleProtectedRoute
-              allowedRoles={["superadmin", "admin", "manager", "technician"]}
+              allowedRoles={["superadmin", "admin", "manager"]}
             >
               <ScanUnit />
             </RoleProtectedRoute>
@@ -342,47 +331,6 @@ function StaffRoutes() {
   );
 }
 
-function CustomerRoutes() {
-  return (
-    <Routes>
-      <Route path="/login" element={<CustomerLogin />} />
-      <Route
-        path="/"
-        element={
-          <CustomerProtectedRoute>
-            <CustomerDashboard />
-          </CustomerProtectedRoute>
-        }
-      />
-      <Route
-        path="/jobs"
-        element={
-          <CustomerProtectedRoute>
-            <CustomerJobs />
-          </CustomerProtectedRoute>
-        }
-      />
-      <Route
-        path="/jobs/:id"
-        element={
-          <CustomerProtectedRoute>
-            <CustomerJobDetail />
-          </CustomerProtectedRoute>
-        }
-      />
-      <Route
-        path="/history"
-        element={
-          <CustomerProtectedRoute>
-            <CustomerHistory />
-          </CustomerProtectedRoute>
-        }
-      />
-      <Route path="*" element={<Navigate to="/portal" replace />} />
-    </Routes>
-  );
-}
-
 const App = () => (
   <QueryClientProvider client={queryClient}>
     <TooltipProvider>
@@ -395,14 +343,6 @@ const App = () => (
             element={
               <AuthProviders isCustomerPortal={false}>
                 <StaffRoutes />
-              </AuthProviders>
-            }
-          />
-          <Route
-            path="/portal/*"
-            element={
-              <AuthProviders isCustomerPortal={true}>
-                <CustomerRoutes />
               </AuthProviders>
             }
           />

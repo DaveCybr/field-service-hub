@@ -1,56 +1,74 @@
-// Invoices.tsx - Halaman Daftar Faktur
+// Invoices.tsx
 import { useState } from "react";
 import { Link } from "react-router-dom";
 import DashboardLayout from "@/components/layout/DashboardLayout";
-import { Button } from "@/components/ui/button";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Plus, FileText, Map } from "lucide-react";
 import { InvoiceMapView } from "@/components/invoices/InvoiceMapView";
 import { InvoiceList } from "@/components/invoices/InvoiceList";
+import { cn } from "@/lib/utils";
 
 export default function Invoices() {
-  const [activeTab, setActiveTab] = useState("list");
+  const [activeTab, setActiveTab] = useState<"list" | "map">("list");
 
   return (
     <DashboardLayout>
-      <div className="space-y-6">
-        {/* Header */}
-        <div className="flex items-center justify-between">
+      <style>{`
+        @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap');
+        .inv-root { font-family: 'Plus Jakarta Sans', system-ui, sans-serif; }
+        .inv-fade { animation: invFade 0.22s ease both; }
+        @keyframes invFade { from{opacity:0;transform:translateY(6px)} to{opacity:1;transform:none} }
+        .view-tab { border-radius: 8px; padding: 6px 14px; font-size: 13px; font-weight: 600; display:flex; align-items:center; gap:6px; transition: all 0.15s; border: none; cursor: pointer; }
+        .view-tab.active { background: #0f172a; color: white; }
+        .view-tab:not(.active) { background: transparent; color: #64748b; }
+        .view-tab:not(.active):hover { background: #f1f5f9; color: #0f172a; }
+      `}</style>
+
+      <div className="inv-root inv-fade space-y-5">
+        {/* ── Header ── */}
+        <div className="flex items-start justify-between">
           <div>
-            <h1 className="text-3xl font-bold tracking-tight">Faktur</h1>
-            <p className="text-muted-foreground">
+            <div className="flex items-center gap-2 mb-1">
+              <span className="text-xs font-bold uppercase tracking-widest text-slate-400">
+                Keuangan
+              </span>
+            </div>
+            <h1 className="text-2xl font-bold text-slate-900 tracking-tight">
+              Faktur
+            </h1>
+            <p className="text-sm text-slate-500 mt-0.5">
               Kelola faktur, layanan, dan pembayaran
             </p>
           </div>
-          <Button asChild>
-            <Link to="/invoices/new">
-              <Plus className="mr-2 h-4 w-4" />
-              Buat Faktur
-            </Link>
-          </Button>
+
+          <Link
+            to="/invoices/new"
+            className="flex items-center gap-2 h-9 px-4 rounded-lg bg-slate-900 text-white text-sm font-bold hover:bg-slate-800 transition-colors"
+          >
+            <Plus className="h-3.5 w-3.5" />
+            Buat Faktur
+          </Link>
         </div>
 
-        {/* Tab Tampilan */}
-        <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-          <TabsList className="grid w-full max-w-md grid-cols-2">
-            <TabsTrigger value="list" className="flex items-center gap-2">
-              <FileText className="h-4 w-4" />
-              List View
-            </TabsTrigger>
-            <TabsTrigger value="map" className="flex items-center gap-2">
-              <Map className="h-4 w-4" />
-              Map View
-            </TabsTrigger>
-          </TabsList>
+        {/* ── View Toggle ── */}
+        <div className="flex items-center gap-1 bg-slate-100 rounded-lg p-1 w-fit">
+          <button
+            className={cn("view-tab", activeTab === "list" && "active")}
+            onClick={() => setActiveTab("list")}
+          >
+            <FileText className="h-3.5 w-3.5" />
+            Daftar
+          </button>
+          <button
+            className={cn("view-tab", activeTab === "map" && "active")}
+            onClick={() => setActiveTab("map")}
+          >
+            <Map className="h-3.5 w-3.5" />
+            Peta
+          </button>
+        </div>
 
-          <TabsContent value="list" className="mt-6">
-            <InvoiceList />
-          </TabsContent>
-
-          <TabsContent value="map" className="mt-6">
-            <InvoiceMapView />
-          </TabsContent>
-        </Tabs>
+        {/* ── Content ── */}
+        <div>{activeTab === "list" ? <InvoiceList /> : <InvoiceMapView />}</div>
       </div>
     </DashboardLayout>
   );

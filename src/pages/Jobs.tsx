@@ -1,25 +1,3 @@
-// ============================================
-// FILE: src/pages/Jobs.tsx
-// Enterprise-grade Jobs management page
-// ============================================
-import { useState, useEffect, useMemo } from "react";
-import { useNavigate } from "react-router-dom";
-import { supabase } from "@/integrations/supabase/client";
-import DashboardLayout from "@/components/layout/DashboardLayout";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
 import { ServiceTeamManager } from "@/components/technician/ServiceTeamManager";
 import { DataTableServer } from "@/components/ui/data-table";
@@ -37,132 +15,67 @@ import {
   MapPin,
   Users,
   RefreshCw,
-  Filter,
   Wrench,
+  TrendingUp,
+  Calendar,
 } from "lucide-react";
+import { cn } from "@/lib/utils";
+import DashboardLayout from "@/components/layout/DashboardLayout";
+import { DialogHeader } from "@/components/ui/dialog";
+import { supabase } from "@/services/technicianService";
+import {
+  Dialog,
+  DialogContent,
+  DialogTitle,
+  DialogDescription,
+} from "@radix-ui/react-dialog";
+import { useState, useEffect, useMemo } from "react";
+import { useNavigate } from "react-router-dom";
 
-// ── Stat Card ────────────────────────────────────────────────────────────────
-function StatCard({
-  label,
-  value,
-  icon: Icon,
-  iconColor,
-  iconBg,
-  active,
-  onClick,
-}: {
-  label: string;
-  value: number;
-  icon: React.ElementType;
-  iconColor: string;
-  iconBg: string;
-  active?: boolean;
-  onClick?: () => void;
-}) {
-  return (
-    <div
-      onClick={onClick}
-      style={{
-        background: active ? "#eff6ff" : "white",
-        borderRadius: "12px",
-        border: active ? "1.5px solid #bfdbfe" : "1px solid #e5e7eb",
-        padding: "20px",
-        cursor: onClick ? "pointer" : "default",
-        boxShadow: active
-          ? "0 0 0 3px rgba(37,99,235,0.08)"
-          : "0 1px 2px rgba(0,0,0,0.04)",
-        transition: "all 0.15s ease",
-      }}
-    >
-      <div
-        style={{
-          display: "flex",
-          alignItems: "flex-start",
-          justifyContent: "space-between",
-          marginBottom: "14px",
-        }}
-      >
-        <p
-          style={{
-            fontSize: "11px",
-            fontWeight: 600,
-            color: active ? "#2563eb" : "#6b7280",
-            textTransform: "uppercase",
-            letterSpacing: "0.06em",
-            margin: 0,
-          }}
-        >
-          {label}
-        </p>
-        <div
-          style={{ background: iconBg, borderRadius: "8px", padding: "7px" }}
-        >
-          <Icon style={{ width: "15px", height: "15px", color: iconColor }} />
-        </div>
-      </div>
-      <p
-        style={{
-          fontSize: "30px",
-          fontWeight: 700,
-          color: active ? "#1d4ed8" : "#111827",
-          margin: 0,
-          lineHeight: 1,
-        }}
-      >
-        {value}
-      </p>
-    </div>
-  );
-}
-
-// ── Status Badge ─────────────────────────────────────────────────────────────
-const STATUS_CONFIG: Record<
-  string,
-  { label: string; color: string; bg: string; dot: string }
-> = {
-  pending: {
-    label: "Menunggu",
-    color: "#92400e",
-    bg: "#fef9c3",
-    dot: "#d97706",
-  },
-  assigned: {
-    label: "Ditugaskan",
-    color: "#1e40af",
-    bg: "#dbeafe",
-    dot: "#2563eb",
-  },
-  in_progress: {
-    label: "Dikerjakan",
-    color: "#5b21b6",
-    bg: "#ede9fe",
-    dot: "#7c3aed",
-  },
-  completed: {
-    label: "Selesai",
-    color: "#14532d",
-    bg: "#dcfce7",
-    dot: "#16a34a",
-  },
-  cancelled: {
-    label: "Dibatalkan",
-    color: "#374151",
-    bg: "#f3f4f6",
-    dot: "#9ca3af",
-  },
-};
-
-// ── Tab Filter ────────────────────────────────────────────────────────────────
 const STATUS_TABS = [
-  { value: "all", label: "Semua" },
-  { value: "pending", label: "Menunggu" },
-  { value: "assigned", label: "Ditugaskan" },
-  { value: "in_progress", label: "Dikerjakan" },
-  { value: "completed", label: "Selesai" },
-  { value: "cancelled", label: "Dibatalkan" },
+  { value: "all", label: "Semua", count: null },
+  { value: "pending", label: "Menunggu", color: "#d97706" },
+  { value: "assigned", label: "Ditugaskan", color: "#2563eb" },
+  { value: "in_progress", label: "Dikerjakan", color: "#7c3aed" },
+  { value: "completed", label: "Selesai", color: "#16a34a" },
+  { value: "cancelled", label: "Dibatalkan", color: "#9ca3af" },
 ];
 
-// ── Main Component ────────────────────────────────────────────────────────────
+const STAT_CARDS = [
+  {
+    key: "pending",
+    label: "Menunggu",
+    icon: AlertCircle,
+    color: "text-amber-600",
+    bg: "bg-amber-50",
+    border: "border-amber-100",
+  },
+  {
+    key: "assigned",
+    label: "Ditugaskan",
+    icon: User,
+    color: "text-blue-600",
+    bg: "bg-blue-50",
+    border: "border-blue-100",
+  },
+  {
+    key: "in_progress",
+    label: "Dikerjakan",
+    icon: Wrench,
+    color: "text-violet-600",
+    bg: "bg-violet-50",
+    border: "border-violet-100",
+  },
+  {
+    key: "completed",
+    label: "Selesai",
+    icon: CheckCircle2,
+    color: "text-emerald-600",
+    bg: "bg-emerald-50",
+    border: "border-emerald-100",
+  },
+];
+
 export default function Jobs() {
   const navigate = useNavigate();
   const { toast } = useToast();
@@ -190,9 +103,7 @@ export default function Jobs() {
     refetch,
   } = useServerPagination<Job>({
     table: "invoice_services",
-    select: `*,
-      invoice:invoices!inner(id,invoice_number,customer:customers(name,phone)),
-      unit:units(unit_type,brand)`,
+    select: `*, invoice:invoices!inner(id,invoice_number,customer:customers(name,phone)), unit:units(unit_type,brand)`,
     orderBy: { column: "created_at", ascending: false },
     filters: { status: statusFilter },
     searchColumn: "title",
@@ -203,7 +114,6 @@ export default function Jobs() {
   useEffect(() => {
     fetchStats();
   }, []);
-
   useEffect(() => {
     if (jobs.length > 0) fetchTeamCounts();
   }, [jobs]);
@@ -268,250 +178,162 @@ export default function Jobs() {
 
   const columns = createJobColumns(columnActions);
 
+  const statsData = stats as Record<string, number>;
+
   return (
     <DashboardLayout>
       <style>{`
-        @keyframes fadeIn { from{opacity:0;transform:translateY(5px)} to{opacity:1;transform:none} }
-        .jobs-fade { animation: fadeIn 0.2s ease; }
-        .tab-btn { background:none; border:none; cursor:pointer; transition:all 0.15s; }
-        .tab-btn:hover { background: #f3f4f6; }
+        @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap');
+        .jobs-root { font-family: 'Plus Jakarta Sans', system-ui, sans-serif; }
+        .stat-card { transition: box-shadow 0.18s, transform 0.18s; cursor: pointer; }
+        .stat-card:hover { box-shadow: 0 8px 32px -4px rgba(15,23,42,0.10); transform: translateY(-1px); }
+        .stat-card.active { ring: 2px; }
+        .tab-pill { border-radius: 99px; transition: all 0.15s; white-space: nowrap; }
+        .tab-pill.active { background: #0f172a; color: #fff; border-color: #0f172a; }
+        .tab-pill:not(.active):hover { background: #f1f5f9; }
+        .shimmer { background: linear-gradient(90deg,#f1f5f9 25%,#e2e8f0 50%,#f1f5f9 75%); background-size:200% 100%; animation: shimmer 1.4s infinite; }
+        @keyframes shimmer { 0%{background-position:200% 0} 100%{background-position:-200% 0} }
+        .jobs-fade { animation: fadeUp 0.2s ease; }
+        @keyframes fadeUp { from{opacity:0;transform:translateY(6px)} to{opacity:1;transform:none} }
+        .bulk-bar { animation: slideDown 0.2s ease; }
+        @keyframes slideDown { from{opacity:0;transform:translateY(-8px)} to{opacity:1;transform:none} }
       `}</style>
 
-      <div
-        className="jobs-fade"
-        style={{ display: "flex", flexDirection: "column", gap: "20px" }}
-      >
-        {/* ── Page Header ── */}
-        <div
-          style={{
-            display: "flex",
-            alignItems: "flex-start",
-            justifyContent: "space-between",
-          }}
-        >
+      <div className="jobs-root jobs-fade space-y-5">
+        {/* ── Header ── */}
+        <div className="flex items-start justify-between">
           <div>
-            <h1
-              style={{
-                fontSize: "20px",
-                fontWeight: 700,
-                color: "#111827",
-                margin: "0 0 4px",
-                letterSpacing: "-0.01em",
-              }}
-            >
+            <div className="flex items-center gap-2 mb-1">
+              <span className="text-xs font-bold uppercase tracking-widest text-slate-400">
+                Operasional
+              </span>
+            </div>
+            <h1 className="text-2xl font-bold text-slate-900 tracking-tight">
               Manajemen Pekerjaan
             </h1>
-            <p style={{ fontSize: "13px", color: "#6b7280", margin: 0 }}>
+            <p className="text-sm text-slate-500 mt-0.5">
               Kelola dan tugaskan pekerjaan service ke tim teknisi
             </p>
           </div>
           <button
             onClick={refetch}
             disabled={loading}
-            style={{
-              display: "flex",
-              alignItems: "center",
-              gap: "6px",
-              padding: "8px 14px",
-              borderRadius: "8px",
-              background: "white",
-              border: "1px solid #e5e7eb",
-              color: "#374151",
-              fontSize: "13px",
-              fontWeight: 500,
-              cursor: loading ? "not-allowed" : "pointer",
-              opacity: loading ? 0.6 : 1,
-              transition: "all 0.15s",
-            }}
+            className="flex items-center gap-2 h-9 px-4 rounded-lg bg-white border border-slate-200 text-slate-600 text-sm font-semibold hover:bg-slate-50 hover:border-slate-300 transition-all disabled:opacity-50"
           >
             <RefreshCw
-              style={{ width: "14px", height: "14px" }}
-              className={loading ? "animate-spin" : ""}
+              className={cn("h-3.5 w-3.5", loading && "animate-spin")}
             />
             Refresh
           </button>
         </div>
 
-        {/* ── Stats ── */}
-        <div
-          style={{
-            display: "grid",
-            gridTemplateColumns: "repeat(4,1fr)",
-            gap: "14px",
-          }}
-        >
-          <StatCard
-            label="Menunggu"
-            value={stats.pending}
-            icon={AlertCircle}
-            iconColor="#d97706"
-            iconBg="#fef9c3"
-            active={statusFilter === "pending"}
-            onClick={() =>
-              setStatusFilter((f) => (f === "pending" ? "all" : "pending"))
-            }
-          />
-          <StatCard
-            label="Ditugaskan"
-            value={stats.assigned}
-            icon={User}
-            iconColor="#2563eb"
-            iconBg="#dbeafe"
-            active={statusFilter === "assigned"}
-            onClick={() =>
-              setStatusFilter((f) => (f === "assigned" ? "all" : "assigned"))
-            }
-          />
-          <StatCard
-            label="Dikerjakan"
-            value={stats.in_progress}
-            icon={Clock}
-            iconColor="#7c3aed"
-            iconBg="#ede9fe"
-            active={statusFilter === "in_progress"}
-            onClick={() =>
-              setStatusFilter((f) =>
-                f === "in_progress" ? "all" : "in_progress",
-              )
-            }
-          />
-          <StatCard
-            label="Selesai"
-            value={stats.completed}
-            icon={CheckCircle2}
-            iconColor="#16a34a"
-            iconBg="#dcfce7"
-            active={statusFilter === "completed"}
-            onClick={() =>
-              setStatusFilter((f) => (f === "completed" ? "all" : "completed"))
-            }
-          />
+        {/* ── Stat Cards ── */}
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+          {STAT_CARDS.map(({ key, label, icon: Icon, color, bg, border }) => {
+            const isActive = statusFilter === key;
+            return (
+              <div
+                key={key}
+                className={cn(
+                  "stat-card bg-white rounded-xl border p-5",
+                  border,
+                  isActive && "ring-2 ring-slate-900 ring-offset-1",
+                )}
+                onClick={() =>
+                  setStatusFilter((f) => (f === key ? "all" : key))
+                }
+              >
+                <div className="flex items-start justify-between">
+                  <div>
+                    <p
+                      className={cn(
+                        "text-[11px] font-bold uppercase tracking-wide",
+                        isActive ? "text-slate-700" : "text-slate-400",
+                      )}
+                    >
+                      {label}
+                    </p>
+                    <p className="text-3xl font-bold text-slate-900 mt-2 leading-none tabular-nums">
+                      {statsData[key] ?? 0}
+                    </p>
+                    <p className="text-xs text-slate-400 mt-1.5">pekerjaan</p>
+                  </div>
+                  <div className={cn("rounded-lg p-2.5", bg)}>
+                    <Icon className={cn("h-5 w-5", color)} />
+                  </div>
+                </div>
+              </div>
+            );
+          })}
         </div>
 
-        {/* ── Table Card ── */}
-        <div
-          style={{
-            background: "white",
-            borderRadius: "12px",
-            border: "1px solid #e5e7eb",
-            boxShadow: "0 1px 2px rgba(0,0,0,0.04)",
-            overflow: "hidden",
-          }}
-        >
-          {/* Table toolbar */}
-          <div
-            style={{
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "space-between",
-              padding: "14px 20px",
-              borderBottom: "1px solid #f3f4f6",
-              gap: "12px",
-              flexWrap: "wrap",
-            }}
-          >
-            {/* Status tabs */}
-            <div
-              style={{
-                display: "flex",
-                alignItems: "center",
-                gap: "2px",
-                background: "#f3f4f6",
-                borderRadius: "8px",
-                padding: "3px",
-              }}
+        {/* ── Bulk Action Bar ── */}
+        {selectedJobs.length > 0 && (
+          <div className="bulk-bar flex items-center gap-3 bg-slate-900 text-white px-5 py-3 rounded-xl">
+            <span className="text-sm font-semibold">
+              {selectedJobs.length} pekerjaan dipilih
+            </span>
+            <div className="h-4 w-px bg-white/20" />
+            <button
+              onClick={() =>
+                toast({
+                  title: "Tugaskan Massal",
+                  description: `${selectedJobs.length} pekerjaan akan diproses`,
+                })
+              }
+              className="flex items-center gap-2 text-sm font-semibold bg-white/10 hover:bg-white/20 px-3 py-1.5 rounded-lg transition-colors"
             >
-              {STATUS_TABS.map((tab) => (
+              <Users className="h-3.5 w-3.5" />
+              Tugaskan Massal
+            </button>
+            <button
+              onClick={() => setSelectedJobs([])}
+              className="ml-auto text-xs text-white/60 hover:text-white transition-colors"
+            >
+              Batalkan pilihan
+            </button>
+          </div>
+        )}
+
+        {/* ── Table Card ── */}
+        <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
+          {/* Toolbar: Tab Filters */}
+          <div className="flex items-center gap-2 px-5 py-4 border-b border-slate-100 overflow-x-auto">
+            {STATUS_TABS.map((tab) => {
+              const count =
+                tab.value !== "all" ? (statsData[tab.value] ?? 0) : null;
+              const isActive = statusFilter === tab.value;
+              return (
                 <button
                   key={tab.value}
-                  className="tab-btn"
                   onClick={() => setStatusFilter(tab.value)}
-                  style={{
-                    padding: "5px 12px",
-                    borderRadius: "6px",
-                    fontSize: "12px",
-                    fontWeight: 600,
-                    color: statusFilter === tab.value ? "#111827" : "#6b7280",
-                    background: statusFilter === tab.value ? "white" : "none",
-                    boxShadow:
-                      statusFilter === tab.value
-                        ? "0 1px 2px rgba(0,0,0,0.08)"
-                        : "none",
-                  }}
+                  className={cn(
+                    "tab-pill text-xs font-semibold px-3 py-1.5 border shrink-0",
+                    isActive
+                      ? "active border-slate-900"
+                      : "border-slate-200 text-slate-600",
+                  )}
                 >
                   {tab.label}
-                  {tab.value !== "all" &&
-                    stats[tab.value as keyof typeof stats] > 0 && (
-                      <span
-                        style={{
-                          marginLeft: "5px",
-                          background:
-                            statusFilter === tab.value ? "#2563eb" : "#d1d5db",
-                          color:
-                            statusFilter === tab.value ? "white" : "#6b7280",
-                          fontSize: "10px",
-                          fontWeight: 700,
-                          padding: "0px 5px",
-                          borderRadius: "20px",
-                        }}
-                      >
-                        {stats[tab.value as keyof typeof stats]}
-                      </span>
-                    )}
+                  {count !== null && count > 0 && (
+                    <span
+                      className={cn(
+                        "ml-1.5 text-[10px] font-bold px-1.5 py-0.5 rounded-full",
+                        isActive
+                          ? "bg-white/20 text-white"
+                          : "bg-slate-100 text-slate-500",
+                      )}
+                    >
+                      {count}
+                    </span>
+                  )}
                 </button>
-              ))}
-            </div>
-
-            {/* Right: selection info */}
-            <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-              {selectedJobs.length > 0 && (
-                <div
-                  style={{ display: "flex", alignItems: "center", gap: "8px" }}
-                >
-                  <span
-                    style={{
-                      background: "#eff6ff",
-                      color: "#2563eb",
-                      fontSize: "12px",
-                      fontWeight: 600,
-                      padding: "4px 10px",
-                      borderRadius: "20px",
-                      border: "1px solid #bfdbfe",
-                    }}
-                  >
-                    {selectedJobs.length} dipilih
-                  </span>
-                  <button
-                    onClick={() =>
-                      toast({
-                        title: "Aksi Massal",
-                        description: `${selectedJobs.length} pekerjaan dipilih`,
-                      })
-                    }
-                    style={{
-                      display: "flex",
-                      alignItems: "center",
-                      gap: "6px",
-                      padding: "6px 12px",
-                      borderRadius: "7px",
-                      background: "#2563eb",
-                      color: "white",
-                      border: "none",
-                      fontSize: "12px",
-                      fontWeight: 600,
-                      cursor: "pointer",
-                    }}
-                  >
-                    <Users style={{ width: "13px", height: "13px" }} />
-                    Tugaskan Massal
-                  </button>
-                </div>
-              )}
-            </div>
+              );
+            })}
           </div>
 
           {/* DataTable */}
-          <div style={{ padding: "16px" }}>
+          <div className="p-4">
             <DataTableServer
               columns={columns}
               data={jobsWithTeam}
@@ -537,62 +359,38 @@ export default function Jobs() {
 
       {/* ── Team Dialog ── */}
       <Dialog open={teamDialogOpen} onOpenChange={setTeamDialogOpen}>
-        <DialogContent className="max-w-2xl">
+        <DialogContent
+          className="max-w-2xl"
+          style={{ fontFamily: "'Plus Jakarta Sans', system-ui, sans-serif" }}
+        >
           <DialogHeader>
-            <DialogTitle style={{ fontSize: "16px", fontWeight: 700 }}>
+            <DialogTitle className="text-base font-bold text-slate-900">
               Kelola Tim Service
             </DialogTitle>
-            <DialogDescription>
+            <DialogDescription className="text-slate-500">
               {selectedJob && (
-                <span>
-                  <strong>{selectedJob.title}</strong> ·{" "}
-                  {selectedJob.invoice.invoice_number}
+                <span className="flex items-center gap-2 mt-1">
+                  <span className="font-semibold text-slate-700">
+                    {selectedJob.title}
+                  </span>
+                  <span className="text-slate-300">·</span>
+                  <span className="font-mono text-xs bg-slate-100 px-2 py-0.5 rounded">
+                    {selectedJob.invoice.invoice_number}
+                  </span>
                 </span>
               )}
             </DialogDescription>
           </DialogHeader>
 
-          <div
-            style={{
-              display: "flex",
-              flexDirection: "column",
-              gap: "16px",
-              paddingTop: "8px",
-            }}
-          >
+          <div className="flex flex-col gap-4 pt-2">
             {selectedJob?.service_address && (
-              <div
-                style={{
-                  display: "flex",
-                  alignItems: "flex-start",
-                  gap: "10px",
-                  background: "#f8fafc",
-                  borderRadius: "8px",
-                  padding: "12px",
-                  border: "1px solid #e5e7eb",
-                }}
-              >
-                <MapPin
-                  style={{
-                    width: "15px",
-                    height: "15px",
-                    color: "#6b7280",
-                    marginTop: "1px",
-                    flexShrink: 0,
-                  }}
-                />
+              <div className="flex items-start gap-3 bg-slate-50 rounded-lg p-3.5 border border-slate-200">
+                <MapPin className="h-4 w-4 text-slate-400 mt-0.5 shrink-0" />
                 <div>
-                  <p
-                    style={{
-                      fontSize: "12px",
-                      fontWeight: 600,
-                      color: "#374151",
-                      margin: "0 0 2px",
-                    }}
-                  >
+                  <p className="text-xs font-semibold text-slate-600 mb-0.5">
                     Alamat Service
                   </p>
-                  <p style={{ fontSize: "13px", color: "#6b7280", margin: 0 }}>
+                  <p className="text-sm text-slate-500">
                     {selectedJob.service_address}
                   </p>
                 </div>

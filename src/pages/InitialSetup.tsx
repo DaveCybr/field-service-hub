@@ -1,25 +1,40 @@
-import { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { z } from 'zod';
-import { useForm } from 'react-hook-form';
-import { zodResolver } from '@hookform/resolvers/zod';
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
-import { useToast } from '@/hooks/use-toast';
-import { supabase } from '@/integrations/supabase/client';
-import { Shield, Loader2 } from 'lucide-react';
+import { useState } from "react";
+import { useNavigate } from "react-router-dom";
+import { z } from "zod";
+import { useForm } from "react-hook-form";
+import { zodResolver } from "@hookform/resolvers/zod";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
+import {
+  Form,
+  FormControl,
+  FormField,
+  FormItem,
+  FormLabel,
+  FormMessage,
+} from "@/components/ui/form";
+import { useToast } from "@/hooks/use-toast";
+import { supabase } from "@/integrations/supabase/client";
+import { Shield, Loader2 } from "lucide-react";
 
-const setupSchema = z.object({
-  name: z.string().min(2, 'Nama minimal 2 karakter'),
-  email: z.string().email('Email tidak valid'),
-  password: z.string().min(8, 'Password minimal 8 karakter'),
-  confirmPassword: z.string(),
-}).refine((data) => data.password === data.confirmPassword, {
-  message: 'Password tidak cocok',
-  path: ['confirmPassword'],
-});
+const setupSchema = z
+  .object({
+    name: z.string().min(2, "Nama minimal 2 karakter"),
+    email: z.string().email("Email tidak valid"),
+    password: z.string().min(8, "Password minimal 8 karakter"),
+    confirmPassword: z.string(),
+  })
+  .refine((data) => data.password === data.confirmPassword, {
+    message: "Password tidak cocok",
+    path: ["confirmPassword"],
+  });
 
 type SetupFormData = z.infer<typeof setupSchema>;
 
@@ -31,24 +46,27 @@ export default function InitialSetup() {
   const form = useForm<SetupFormData>({
     resolver: zodResolver(setupSchema),
     defaultValues: {
-      name: '',
-      email: '',
-      password: '',
-      confirmPassword: '',
+      name: "",
+      email: "",
+      password: "",
+      confirmPassword: "",
     },
   });
 
   const onSubmit = async (data: SetupFormData) => {
     setIsLoading(true);
     try {
-      const { data: result, error } = await supabase.functions.invoke('initial-setup', {
-        method: 'POST',
-        body: {
-          email: data.email,
-          password: data.password,
-          name: data.name,
+      const { data: result, error } = await supabase.functions.invoke(
+        "initial-setup",
+        {
+          method: "POST",
+          body: {
+            email: data.email,
+            password: data.password,
+            name: data.name,
+          },
         },
-      });
+      );
 
       if (error) {
         throw new Error(error.message);
@@ -59,16 +77,21 @@ export default function InitialSetup() {
       }
 
       toast({
-        title: 'Setup Berhasil!',
-        description: 'Akun superadmin telah dibuat. Silakan login.',
+        title: "Setup Berhasil!",
+        description: "Akun superadmin telah dibuat. Silakan login.",
       });
 
-      navigate('/auth');
+      // FIX: Clear the cached setup status so useInitialSetup re-checks
+      // and no longer redirects back to /setup
+      sessionStorage.removeItem("initial_setup_needs_setup");
+
+      navigate("/auth");
     } catch (error: any) {
       toast({
-        title: 'Gagal membuat akun',
-        description: error.message || 'Terjadi kesalahan saat membuat akun superadmin',
-        variant: 'destructive',
+        title: "Gagal membuat akun",
+        description:
+          error.message || "Terjadi kesalahan saat membuat akun superadmin",
+        variant: "destructive",
       });
     } finally {
       setIsLoading(false);
@@ -84,7 +107,9 @@ export default function InitialSetup() {
               <Shield className="h-8 w-8 text-primary" />
             </div>
           </div>
-          <CardTitle className="text-2xl font-bold">Setup Awal Sistem</CardTitle>
+          <CardTitle className="text-2xl font-bold">
+            Setup Awal Sistem
+          </CardTitle>
           <CardDescription>
             Buat akun superadmin pertama untuk mengelola sistem
           </CardDescription>
@@ -112,7 +137,11 @@ export default function InitialSetup() {
                   <FormItem>
                     <FormLabel>Email</FormLabel>
                     <FormControl>
-                      <Input type="email" placeholder="admin@example.com" {...field} />
+                      <Input
+                        type="email"
+                        placeholder="admin@example.com"
+                        {...field}
+                      />
                     </FormControl>
                     <FormMessage />
                   </FormItem>
@@ -125,7 +154,11 @@ export default function InitialSetup() {
                   <FormItem>
                     <FormLabel>Password</FormLabel>
                     <FormControl>
-                      <Input type="password" placeholder="Minimal 8 karakter" {...field} />
+                      <Input
+                        type="password"
+                        placeholder="Minimal 8 karakter"
+                        {...field}
+                      />
                     </FormControl>
                     <FormMessage />
                   </FormItem>
@@ -138,7 +171,11 @@ export default function InitialSetup() {
                   <FormItem>
                     <FormLabel>Konfirmasi Password</FormLabel>
                     <FormControl>
-                      <Input type="password" placeholder="Ulangi password" {...field} />
+                      <Input
+                        type="password"
+                        placeholder="Ulangi password"
+                        {...field}
+                      />
                     </FormControl>
                     <FormMessage />
                   </FormItem>
@@ -151,7 +188,7 @@ export default function InitialSetup() {
                     Membuat Akun...
                   </>
                 ) : (
-                  'Buat Akun Superadmin'
+                  "Buat Akun Superadmin"
                 )}
               </Button>
             </form>
